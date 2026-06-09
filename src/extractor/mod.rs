@@ -1,4 +1,4 @@
-//! Extraction strategies, ported from `graph/kg_extractor/{base,simple,triplex,youtu}.py`.
+//! Extraction strategies, ported from `graph/kg_extractor/{base,simple,youtu}.py`.
 //!
 //! All strategies implement the [`Extractor`] trait (the Rust analogue of the
 //! Python `BaseExtractor`). Construction takes a backend ([`crate::backend::LlmBackend`])
@@ -10,8 +10,8 @@
 //!
 //! - **Mechanism** — *how* the model is driven:
 //!   - **Prompt → parse**: the model emits text we parse. [`SimpleExtractor`]
-//!     (delimiter format + gleaning recall), [`TriplexExtractor`] (NER model →
-//!     JSON), [`SchemaJsonExtractor`] (schema-guided JSON).
+//!     (delimiter format + gleaning recall), [`SchemaJsonExtractor`]
+//!     (schema-guided JSON).
 //!   - **Tool call → structured**: the model calls typed tools; no parsing.
 //!     [`ToolCallExtractor`]. The MCP server ([`crate::mcp`]) exposes the same
 //!     tool/graph-building core to an *external* agent.
@@ -29,12 +29,10 @@ use async_trait::async_trait;
 pub mod schema_json;
 pub mod simple;
 pub mod toolcall;
-pub mod triplex;
 
 pub use schema_json::SchemaJsonExtractor;
 pub use simple::SimpleExtractor;
 pub use toolcall::ToolCallExtractor;
-pub use triplex::TriplexExtractor;
 
 // `SchemaMode` is part of the declarative spec; it lives in `types::spec` so
 // `ExtractionSpec` can hold it without a types→extractor cycle. Re-exported here

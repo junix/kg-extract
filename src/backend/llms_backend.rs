@@ -2,9 +2,8 @@
 //!
 //! Resolves a model string through the `llms` registry and dispatches to the
 //! right provider (OpenAI-compatible, Ollama, Anthropic, …). This is the
-//! backend used by SimpleExtractor (qwen-max), TriplexExtractor (Ollama
-//! `sciphi/triplex`), SchemaJsonExtractor (open/fixed modes), and the
-//! tool-calling `ToolCallExtractor`.
+//! backend used by SimpleExtractor (qwen-max), SchemaJsonExtractor (open/fixed
+//! modes), and the tool-calling `ToolCallExtractor`.
 
 use super::{CompletionOptions, LlmBackend, Message, ToolChatResponse, ToolInvocation, ToolSpec};
 use async_trait::async_trait;

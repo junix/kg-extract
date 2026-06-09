@@ -38,6 +38,14 @@ pub struct ExtractionConfig {
     pub min_segment_size: usize,
     #[serde(default)]
     pub chunker: ChunkStrategy,
+    /// Max segments extracted concurrently. LLM calls are I/O-bound, so this is
+    /// cooperative concurrency (not CPU parallelism). `1` = sequential.
+    #[serde(default = "default_max_concurrency")]
+    pub max_concurrency: usize,
+}
+
+fn default_max_concurrency() -> usize {
+    8
 }
 
 impl Default for ExtractionConfig {
@@ -49,12 +57,13 @@ impl Default for ExtractionConfig {
             Vec::new(),
         );
         ExtractionConfig {
-            spec: ExtractionSpec { schema, mode: SchemaMode::Open, merge_duplicates: true },
+            spec: ExtractionSpec { schema, ..Default::default() },
             segment_size: 3000,
             overlap: 200,
-            model_name: "sciphi/triplex:latest".to_string(),
+            model_name: "qwen-max".to_string(),
             min_segment_size: 100,
             chunker: ChunkStrategy::default(),
+            max_concurrency: default_max_concurrency(),
         }
     }
 }
@@ -105,7 +114,7 @@ impl ExtractionRequest {
 #[derive(Debug, Clone, Default)]
 pub struct ParsedResult {
     pub raw_response: String,
-    /// Legacy `entities_and_triples` strings (Triplex JSON path).
+    /// Legacy `entities_and_triples` strings (JSON ID-marker path).
     pub entities_and_triples: Vec<String>,
     /// Parsed entities keyed by id.
     pub entities: HashMap<String, Entity>,

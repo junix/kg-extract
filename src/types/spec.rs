@@ -44,6 +44,44 @@ impl SchemaMode {
     }
 }
 
+/// How two entities (or triples) judged to be the *same* — same lowercased
+/// label — are combined when `merge_duplicates` collapses them.
+///
+/// Ordered cheapest → richest. `KeepExisting` is the historical behaviour
+/// (drop the incoming copy); the others preserve information from both.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum MergeStrategy {
+    /// Keep the entity already in the graph; discard the incoming duplicate.
+    #[default]
+    KeepExisting,
+    /// Replace with the incoming duplicate (its id is rewritten to the canonical key).
+    KeepIncoming,
+    /// Union non-empty fields: max confidence, richer description, merged
+    /// metadata, and a specific type over a generic `Other`.
+    FieldUnion,
+    /// Like `FieldUnion`, but when both descriptions are non-empty and differ,
+    /// ask the LLM to synthesise one combined description. Falls back to
+    /// `FieldUnion` when no backend is available or the call fails.
+    Llm,
+}
+
+impl MergeStrategy {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            MergeStrategy::KeepExisting => "keep-existing",
+            MergeStrategy::KeepIncoming => "keep-incoming",
+            MergeStrategy::FieldUnion => "field-union",
+            MergeStrategy::Llm => "llm",
+        }
+    }
+
+    /// Whether resolving this strategy may require LLM calls.
+    pub fn needs_backend(&self) -> bool {
+        matches!(self, MergeStrategy::Llm)
+    }
+}
+
 /// The declarative contract for an extraction: *what* graph shape is wanted,
 /// independent of *how* it is produced.
 ///
@@ -62,6 +100,9 @@ pub struct ExtractionSpec {
     /// Dedup entities (by lowercased label) and triples in the output graph.
     #[serde(default = "default_true")]
     pub merge_duplicates: bool,
+    /// How colliding duplicates are combined when `merge_duplicates` is set.
+    #[serde(default)]
+    pub merge_strategy: MergeStrategy,
 }
 
 fn default_true() -> bool {
@@ -70,7 +111,12 @@ fn default_true() -> bool {
 
 impl Default for ExtractionSpec {
     fn default() -> Self {
-        ExtractionSpec { schema: Schema::default(), mode: SchemaMode::Open, merge_duplicates: true }
+        ExtractionSpec {
+            schema: Schema::default(),
+            mode: SchemaMode::Open,
+            merge_duplicates: true,
+            merge_strategy: MergeStrategy::default(),
+        }
     }
 }
 
@@ -83,6 +129,6 @@ impl ExtractionSpec {
     /// A spec seeded with `schema`, in `mode`. (`Fixed`/`Evolving` need a
     /// non-empty schema; the extractor validates this at `extract` time.)
     pub fn new(schema: Schema, mode: SchemaMode) -> Self {
-        ExtractionSpec { schema, mode, merge_duplicates: true }
+        ExtractionSpec { schema, mode, ..Default::default() }
     }
 }

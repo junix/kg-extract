@@ -3,7 +3,7 @@ use super::*;
 #[test]
 fn file_config_parses_full_object() {
     let json = r#"{
-        "engine": "triplex",
+        "engine": "toolcall",
         "model": "gpt-4o",
         "backend": "agent",
         "agent": "glmcc",
@@ -14,7 +14,7 @@ fn file_config_parses_full_object() {
         "output": "mermaid"
     }"#;
     let cfg: FileConfig = serde_json::from_str(json).unwrap();
-    assert!(matches!(cfg.engine, Some(Engine::Triplex)));
+    assert!(matches!(cfg.engine, Some(Engine::Toolcall)));
     assert_eq!(cfg.model.as_deref(), Some("gpt-4o"));
     assert!(matches!(cfg.backend, Some(Backend::Agent)));
     assert_eq!(cfg.agent.as_deref(), Some("glmcc"));

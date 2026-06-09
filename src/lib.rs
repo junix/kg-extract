@@ -8,9 +8,6 @@
 //!
 //! - [`SimpleExtractor`](extractor::SimpleExtractor) — general LLM chat with
 //!   GraphRAG-style delimiter prompting and multi-gleaning (high recall).
-//! - [`TriplexExtractor`](extractor::TriplexExtractor) — NER + triple extraction
-//!   via a Triplex-style model (default `sciphi/triplex` on Ollama), with
-//!   segmentation for large inputs.
 //! - [`SchemaJsonExtractor`](extractor::SchemaJsonExtractor) — schema-driven JSON
 //!   extraction with three [`SchemaMode`](extractor::SchemaMode)s: open / fixed / evolving.
 //! - [`ToolCallExtractor`](extractor::ToolCallExtractor) — extraction via LLM
@@ -48,7 +45,6 @@ pub mod types;
 // Re-exports for ergonomic top-level use.
 pub use extractor::{
     Extractor, SchemaJsonExtractor, SchemaMode, SimpleExtractor, ToolCallExtractor,
-    TriplexExtractor,
 };
 pub use types::{
     ChunkStrategy, Entity, EntityType, ExtractionConfig, ExtractionResponse, ExtractionSpec,

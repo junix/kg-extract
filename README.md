@@ -10,11 +10,10 @@ four extraction strategies behind a common trait.
 | Extractor | Approach | Default model |
 |-----------|----------|---------------|
 | `SimpleExtractor` | General LLM chat with GraphRAG-style **delimiter prompting** + **multi-gleaning** (iteratively asks "what did you miss?" for high recall) | `qwen-max` |
-| `TriplexExtractor` | **NER + triple** extraction via a Triplex-style model, **segmenting** large inputs and merging per-segment graphs | `sciphi/triplex:latest` (Ollama) |
 | `SchemaJsonExtractor` | **Schema-driven** JSON extraction with three **schema modes**: open / fixed / evolving | `qwen-max` |
 | `ToolCallExtractor` | **Tool / function calling** — typed `add_entity` / `add_relation` / … tools; structured by construction, **no output parsing**; same open / fixed / evolving **schema modes** | `qwen-max` |
 
-All four implement the `Extractor` trait:
+All three implement the `Extractor` trait:
 
 ```rust
 #[async_trait]
@@ -31,7 +30,7 @@ text
   ▼
 LlmBackend.complete()   ── LlmsBackend (in-process `llms`) │ AgentCliBackend (minimaxcc/glmcc/mimocc) │ MockBackend
   ▼
-parse  ── delimiter parser (Simple) │ JSON parser (Triplex/SchemaJson)
+parse  ── delimiter parser (Simple) │ JSON parser (SchemaJson)
   ▼
 merge / dedup  ── entities by lowercased label, triples by (subj_id, predicate, obj_id)
   ▼
@@ -45,7 +44,7 @@ KnowledgeGraph { entities, triples }  ──►  JSON │ node-link │ Mermaid 
 - **Backends** are pluggable via the `LlmBackend` trait:
   - `LlmsBackend` (feature `llms-backend`) — in-process [`llms`](../llms) crate;
     resolves any model string to the right provider (OpenAI-compatible, Ollama,
-    Anthropic, …). Used for normal chat (Simple / Triplex / SchemaJson).
+    Anthropic, …). Used for normal chat (Simple / SchemaJson).
   - `AgentCliBackend` — subprocess to a Claude-Code-wrapper agent CLI
     (`minimaxcc` default, or `glmcc` / `mimocc`) in headless `-p` mode. Intended
     for SchemaJson **evolving** mode, where schema-evolving extraction is genuinely
@@ -210,9 +209,6 @@ cargo build --features llms-backend
 # Simple engine via llms, emit Mermaid
 echo "OpenAI developed GPT-4." | kg-extract -e simple -b llms -o mermaid
 
-# Triplex via Ollama (sciphi/triplex), JSON output
-kg-extract -e triplex -b llms -f doc.txt -o json
-
 # SchemaJson open mode (no schema) — the default
 kg-extract -e schema-json -b agent --agent minimaxcc -f doc.txt
 # SchemaJson evolving mode: seed a schema, let the model extend it
@@ -221,7 +217,7 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 
 | Flag | Meaning |
 |------|---------|
-| `-e, --engine` | `simple` \| `triplex` \| `schema-json` \| `toolcall` |
+| `-e, --engine` | `simple` \| `schema-json` \| `toolcall` |
 | `-b, --backend` | `llms` \| `agent` \| `mock` |
 | `--agent` | agent CLI for `-b agent`: `minimaxcc` (default) \| `glmcc` \| `mimocc` |
 | `-c, --chunker` | `recursive` (default) \| `char` \| `token` |

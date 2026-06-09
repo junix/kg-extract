@@ -1,7 +1,7 @@
 //! Parse LLM responses into entities and relationships.
 //!
-//! Ported from `graph/kg_extractor/parser.py`. Used by the Triplex and SchemaJson
-//! JSON-style extractors. The Simple extractor has its own delimiter parser.
+//! Ported from `graph/kg_extractor/parser.py`. Used by the SchemaJson
+//! JSON-style extractor. The Simple extractor has its own delimiter parser.
 
 use crate::types::{Entity, EntityType, ParsedResult, Predicate, PredicateType, Triple};
 use regex::Regex;
@@ -180,8 +180,8 @@ pub fn parse_entities_and_triples(
         }
     }
 
-    // Legacy fallback: the `entities_and_triples` list with `[N]` ID markers,
-    // emitted by Triplex-style models. One `[N]` → entity; two → relationship.
+    // Legacy fallback: the `entities_and_triples` list with `[N]` ID markers.
+    // One `[N]` → entity; two → relationship.
     if entities.is_empty() {
         if let Some(items) = json_data.get("entities_and_triples").and_then(|v| v.as_array()) {
             let id_re = Regex::new(r"\[\d+\]").unwrap();

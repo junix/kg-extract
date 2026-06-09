@@ -3,7 +3,7 @@ name = "kg-extract"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-description = "Multi-strategy knowledge-graph extraction (Simple / Triplex / Youtu), ported from the Python graph.kg_extractor"
+description = "Multi-strategy knowledge-graph extraction (Simple / SchemaJson / ToolCall), ported from the Python graph.kg_extractor"
 publish = false
 # Bins are declared explicitly below; disable auto-discovery so the sibling
 # `src/bin/*_test.rs` files (pulled in via #[path]) aren't treated as binaries.
