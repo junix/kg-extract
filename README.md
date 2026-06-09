@@ -12,6 +12,7 @@ three extraction strategies behind a common trait.
 | `SimpleExtractor` | General LLM chat with GraphRAG-style **delimiter prompting** + **multi-gleaning** (iteratively asks "what did you miss?" for high recall) | `qwen-max` |
 | `TriplexExtractor` | **NER + triple** extraction via a Triplex-style model, **segmenting** large inputs and merging per-segment graphs | `sciphi/triplex:latest` (Ollama) |
 | `YoutuExtractor` | **Schema-driven** JSON extraction with optional **agent mode** (schema evolution) and **community detection** | `qwen-max` |
+| `ToolCallExtractor` | **Tool / function calling** — typed `add_entity` / `add_relation` / … tools; structured by construction, **no output parsing** | `qwen-max` |
 
 All three implement the `Extractor` trait:
 
@@ -50,6 +51,39 @@ KnowledgeGraph { entities, triples }  ──►  JSON │ Mermaid │ stats
     for Youtu **agent** mode, where schema-evolving extraction is genuinely
     agentic.
   - `MockBackend` — deterministic canned responses for tests/offline demos.
+
+## Tool-calling mode
+
+`ToolCallExtractor` exposes typed tools and lets the model **call** them instead
+of emitting a blob we parse. Tool-call arguments are already structured JSON, so
+parsing is essentially free, and JSON-Schema `enum`s constrain entity/predicate
+types to the configured schema.
+
+| Tool | Purpose |
+|------|---------|
+| `add_entity(name, type, description, attributes)` | record an entity |
+| `add_relation(source, predicate, target, description, strength)` | record a relationship |
+| `add_attribute(entity, key, value)` | attach an attribute to an entity |
+| `propose_schema_type(kind, name, reason)` | suggest a new schema type (schema evolution) |
+| `list_entities()` | read already-recorded entities (multi-round only) |
+| `finish()` | signal completion |
+
+Execution is **single-round collection** by default (`max_rounds = 1`): one
+request, gather every tool call from that response, build the graph. Set
+`max_rounds > 1` for a bounded agentic loop where tool results (including
+`list_entities`) are fed back so the model can avoid dangling relations.
+`schema_evolution(true)` drops the enum constraints and records
+`propose_schema_type` calls into `new_schema_types` metadata.
+
+Requires a tool-capable backend (`LlmsBackend`; the agent-CLI backend does not
+expose function calling). Relations reference entity *names*, resolved at build
+time; dangling endpoints are dropped.
+
+```rust
+use kg_extract::extractor::{Extractor, ToolCallExtractor};
+let extractor = ToolCallExtractor::new(backend);          // single-round, qwen-max
+let response = extractor.extract("OpenAI built GPT-4.").await?;
+```
 
 ## Types
 
@@ -108,14 +142,23 @@ kg-extract -e youtu --youtu-agent --community -b agent --agent minimaxcc -f doc.
 
 | Flag | Meaning |
 |------|---------|
-| `-e, --engine` | `simple` \| `triplex` \| `youtu` |
+| `-e, --engine` | `simple` \| `triplex` \| `youtu` \| `toolcall` |
 | `-b, --backend` | `llms` \| `agent` \| `mock` |
 | `--agent` | agent CLI for `-b agent`: `minimaxcc` (default) \| `glmcc` \| `mimocc` |
 | `-c, --chunker` | `recursive` (default) \| `char` \| `token` |
 | `-m, --model` | override the engine's default model |
 | `--youtu-agent` | Youtu schema-evolution mode |
 | `--community` | enable community detection (Youtu) |
+| `--toolcall-agent` | tool-call schema-evolution mode |
+| `--max-rounds` | tool-call rounds (1 = single-round, default) |
 | `-o, --output` | `json` (default) \| `mermaid` \| `stats` |
+
+```bash
+# Tool-calling engine via llms (requires --features llms-backend)
+kg-extract -e toolcall -b llms -f doc.txt -o json
+# Agentic multi-round with schema evolution
+kg-extract -e toolcall -b llms --toolcall-agent --max-rounds 4 -f doc.txt
+```
 
 ## Parity notes
 

@@ -13,6 +13,9 @@
 //!   segmentation for large inputs.
 //! - [`YoutuExtractor`](extractor::YoutuExtractor) — schema-driven extraction
 //!   with optional agent mode (schema evolution) and community detection.
+//! - [`ToolCallExtractor`](extractor::ToolCallExtractor) — extraction via LLM
+//!   tool/function calling (typed `add_entity` / `add_relation` / … tools);
+//!   structured by construction, so no output parsing.
 //!
 //! Text segmentation is delegated to the [`chonkie`] crate (see [`chunking`]);
 //! the default strategy is recursive chunking. Completions come from either the
@@ -41,7 +44,9 @@ pub mod parser;
 pub mod types;
 
 // Re-exports for ergonomic top-level use.
-pub use extractor::{Extractor, SimpleExtractor, TriplexExtractor, YoutuExtractor, YoutuMode};
+pub use extractor::{
+    Extractor, SimpleExtractor, ToolCallExtractor, TriplexExtractor, YoutuExtractor, YoutuMode,
+};
 pub use types::{
     ChunkStrategy, Entity, EntityType, ExtractionConfig, ExtractionResponse, KnowledgeGraph,
     Predicate, PredicateType, Schema, Triple,

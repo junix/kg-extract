@@ -8,10 +8,12 @@ use crate::types::ExtractionResponse;
 use async_trait::async_trait;
 
 pub mod simple;
+pub mod toolcall;
 pub mod triplex;
 pub mod youtu;
 
 pub use simple::SimpleExtractor;
+pub use toolcall::ToolCallExtractor;
 pub use triplex::TriplexExtractor;
 pub use youtu::{YoutuExtractor, YoutuMode};
 
