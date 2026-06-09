@@ -51,11 +51,11 @@ struct AddEntityParams {
 struct AddRelationParams {
     /// Output key: the graph is stored at <output>/<path>.json
     path: String,
-    /// Source entity name (auto-created as a stub if not yet added)
+    /// Source entity name (must already exist — call add_entity first)
     source: String,
     /// Relationship type, e.g. works_at, located_in, uses, part_of
     predicate: String,
-    /// Target entity name (auto-created as a stub if not yet added)
+    /// Target entity name (must already exist — call add_entity first)
     target: String,
     /// Optional free-text description of the relationship
     #[serde(default)]
@@ -191,10 +191,10 @@ impl ServerHandler for KgExtractMcp {
                 "Incremental knowledge-graph builder. Every tool takes a `path` arg; \
                  results are merged into <output>/<path>.json. Workflow: for each chunk of \
                  text, call add_entity for every entity, then add_relation between them \
-                 then add_relation between them (both endpoints must already exist), and \
-                 add_attribute for extra facts. Use query_graph (view=entities/relations/\
-                 neighbors) to see what is already recorded before extending. The server \
-                 stores and deduplicates; it does not call an LLM itself.",
+                 (both endpoints must already exist), and add_attribute for extra facts. \
+                 Use query_graph (view=entities/relations/neighbors) to see what is already \
+                 recorded before extending. The server stores and deduplicates; it does not \
+                 call an LLM itself.",
             )
     }
 }

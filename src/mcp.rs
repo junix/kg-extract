@@ -150,8 +150,9 @@ impl KgStore {
         Ok(report(&path, &kg, format!("entity '{name}' stored")))
     }
 
-    /// Record a relationship; endpoints are auto-created as stub entities if
-    /// absent, so a relation is never silently dropped. Deduplicated by
+    /// Record a relationship between two **existing** entities. Both endpoints
+    /// must already be present — a missing one is an actionable error (naming it
+    /// and listing known entities), never a silent stub. Deduplicated by
     /// `(subject, predicate, object)`.
     pub fn add_relation(
         &self,
