@@ -64,14 +64,7 @@ impl LlmBackend for AgentCliBackend {
     ) -> anyhow::Result<String> {
         // Flatten the message list into a single prompt: system blocks first,
         // then the conversation. Agent CLIs take one prompt on stdin.
-        let mut prompt = String::new();
-        for m in messages {
-            match m.role.as_str() {
-                "system" => prompt.push_str(&format!("{}\n\n", m.content)),
-                "assistant" => prompt.push_str(&format!("[assistant]\n{}\n\n", m.content)),
-                _ => prompt.push_str(&format!("{}\n\n", m.content)),
-            }
-        }
+        let prompt = super::flatten_prompt(messages);
 
         let mut cmd = Command::new(self.cli.binary());
         cmd.args(&self.extra_args);

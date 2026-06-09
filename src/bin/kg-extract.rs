@@ -15,7 +15,7 @@ use clap::parser::ValueSource;
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser, ValueEnum};
 use serde::Deserialize;
 
-use kg_extract::backend::{AgentCli, AgentCliBackend, LlmBackend, MockBackend};
+use kg_extract::backend::{AgentCli, AgentCliBackend, LlmBackend, MockBackend, PiAgentBackend};
 use kg_extract::extractor::{
     Extractor, SimpleExtractor, ToolCallExtractor, TriplexExtractor, YoutuExtractor, YoutuMode,
 };
@@ -35,7 +35,7 @@ enum Engine {
 enum Backend {
     /// In-process `llms` crate (requires the `llms-backend` feature).
     Llms,
-    /// Subprocess agent CLI: minimaxcc / glmcc / mimocc.
+    /// Subprocess agent CLI: minimaxcc / glmcc / mimocc / pi-agent.
     Agent,
     /// Deterministic mock (reads a canned response from --mock-response).
     Mock,

@@ -115,7 +115,22 @@ impl KnowledgeGraph {
                 if !self.entities.contains_key(&triple.object.id) {
                     self.add_entity(triple.object.clone());
                 }
-                self.triples.push(triple);
+                // Bind the triple to the canonical (merged) entity snapshots so a
+                // triple endpoint can never disagree with the entity table — the
+                // entity-merge above may have kept a richer/higher-confidence copy
+                // than the one embedded in this triple.
+                let subject = self
+                    .entities
+                    .get(&triple.subject.id)
+                    .cloned()
+                    .unwrap_or_else(|| triple.subject.clone());
+                let object = self
+                    .entities
+                    .get(&triple.object.id)
+                    .cloned()
+                    .unwrap_or_else(|| triple.object.clone());
+                let Triple { predicate, confidence, metadata, .. } = triple;
+                self.triples.push(Triple { subject, object, predicate, confidence, metadata });
             }
         }
         self
@@ -230,6 +245,13 @@ mod tests {
             x.description.as_deref(),
             Some("rich"),
             "rich entity must not be clobbered by a stale triple endpoint"
+        );
+        // The merged triple's endpoint must also reflect the canonical entity,
+        // not the poor snapshot that came embedded in `other`'s triple.
+        assert_eq!(
+            g.triples[0].subject.description.as_deref(),
+            Some("rich"),
+            "triple endpoint must be normalized to the canonical merged entity"
         );
     }
 }

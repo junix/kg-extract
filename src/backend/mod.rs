@@ -2,7 +2,8 @@
 //!
 //! Extractors are written against the [`LlmBackend`] trait so they don't care
 //! whether the text comes from the in-process `llms` crate, a subprocess agent
-//! CLI (glmcc / minimaxcc / mimocc), or a test mock.
+//! CLI (glmcc / minimaxcc / mimocc via [`AgentCliBackend`], or pi-rs's
+//! `pi-agent` via [`PiAgentBackend`]), or a test mock.
 //!
 //! Backends optionally support **tool / function calling** via
 //! [`LlmBackend::complete_with_tools`] (used by the `ToolCallExtractor`); the
@@ -14,11 +15,31 @@ pub mod agent_cli;
 #[cfg(feature = "llms-backend")]
 pub mod llms_backend;
 pub mod mock;
+pub mod pi_agent;
 
 pub use agent_cli::{AgentCli, AgentCliBackend};
 #[cfg(feature = "llms-backend")]
 pub use llms_backend::LlmsBackend;
 pub use mock::MockBackend;
+pub use pi_agent::PiAgentBackend;
+
+/// Flatten a message list into a single prompt string for subprocess agent CLIs
+/// that take one prompt on stdin (`AgentCliBackend`, `PiAgentBackend`).
+///
+/// System blocks come first, then the conversation; assistant turns are tagged
+/// so the agent can tell them apart from user input. Both subprocess backends
+/// share this so their prompt formatting can't silently diverge.
+pub(crate) fn flatten_prompt(messages: &[Message]) -> String {
+    let mut prompt = String::new();
+    for m in messages {
+        match m.role.as_str() {
+            "system" => prompt.push_str(&format!("{}\n\n", m.content)),
+            "assistant" => prompt.push_str(&format!("[assistant]\n{}\n\n", m.content)),
+            _ => prompt.push_str(&format!("{}\n\n", m.content)),
+        }
+    }
+    prompt
+}
 
 /// Options for a single completion call.
 #[derive(Debug, Clone)]
