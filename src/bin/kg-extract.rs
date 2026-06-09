@@ -84,6 +84,9 @@ impl From<SchemaModeArg> for SchemaMode {
 #[serde(rename_all = "lowercase")]
 enum OutFmt {
     Json,
+    #[serde(rename = "node-link")]
+    #[value(name = "node-link", alias = "nodelink")]
+    NodeLink,
     Mermaid,
     Stats,
 }
@@ -373,6 +376,9 @@ async fn main() -> anyhow::Result<()> {
     match cfg.output {
         OutFmt::Json => {
             println!("{}", serde_json::to_string_pretty(&response.knowledge_graph.to_dict())?)
+        }
+        OutFmt::NodeLink => {
+            println!("{}", serde_json::to_string_pretty(&response.knowledge_graph.to_node_link())?)
         }
         OutFmt::Mermaid => println!("{}", response.get_mermaid_code()),
         OutFmt::Stats => println!("{}", serde_json::to_string_pretty(&response.get_stats())?),

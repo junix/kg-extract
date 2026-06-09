@@ -35,7 +35,7 @@ parse  ── delimiter parser (Simple) │ JSON parser (Triplex/SchemaJson)
   ▼
 merge / dedup  ── entities by lowercased label, triples by (subj_id, predicate, obj_id)
   ▼
-KnowledgeGraph { entities, triples }  ──►  JSON │ Mermaid │ stats
+KnowledgeGraph { entities, triples }  ──►  JSON │ node-link │ Mermaid │ stats
 ```
 
 - **Chunking** is delegated to the [`chonkie`](../chonkie) crate. The default
@@ -229,7 +229,7 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 | `--schema-mode` | schema-json/toolcall: `open` (default) \| `fixed` \| `evolving` |
 | `--schema` | schema-json/toolcall schema JSON file (required for `fixed`/`evolving`) |
 | `--max-rounds` | tool-call rounds (1 = single-round, default) |
-| `-o, --output` | `json` (default) \| `mermaid` \| `stats` |
+| `-o, --output` | `json` (default) \| `node-link` \| `mermaid` \| `stats` |
 
 ```bash
 # Tool-calling engine via llms (requires --features llms-backend); open by default

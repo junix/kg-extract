@@ -149,6 +149,43 @@ impl KnowledgeGraph {
         })
     }
 
+    /// Node-link JSON (the D3 / NetworkX `node_link_data` interchange shape): a
+    /// `nodes` array plus a `links` array whose entries reference node `id`s via
+    /// `source`/`target`. Understood by D3 force layouts, NetworkX, and most
+    /// graph-viz tools.
+    ///
+    /// This differs from [`to_dict`], which keeps the RDF-style
+    /// `{entities, triples: [{subject, predicate, object}]}` shape. Here each
+    /// triple becomes a link whose `subject.id` → `source` and
+    /// `object.id` → `target`.
+    ///
+    /// [`to_dict`]: KnowledgeGraph::to_dict
+    pub fn to_node_link(&self) -> serde_json::Value {
+        let nodes: Vec<serde_json::Value> =
+            self.entities.iter().map(|(_, e)| e.to_dict()).collect();
+        let links: Vec<serde_json::Value> = self
+            .triples
+            .iter()
+            .map(|t| {
+                serde_json::json!({
+                    "source": t.subject.id,
+                    "target": t.object.id,
+                    "type": t.predicate.predicate_type.value(),
+                    "label": t.predicate.label,
+                    "confidence": t.confidence,
+                    "metadata": t.metadata,
+                })
+            })
+            .collect();
+        serde_json::json!({
+            "directed": true,
+            "multigraph": false,
+            "graph": self.metadata,
+            "nodes": nodes,
+            "links": links,
+        })
+    }
+
     /// Mermaid `graph LR` diagram (ported from `to_mermaid`).
     pub fn to_mermaid(&self) -> String {
         let clean = |s: &str| s.replace(['[', ']'], "");
@@ -201,6 +238,32 @@ mod tests {
     }
     fn tri(s: &Entity, p: PredicateType, o: &Entity) -> Triple {
         Triple::new(s.clone(), Predicate::new(p), o.clone())
+    }
+
+    #[test]
+    fn to_node_link_uses_source_target_referencing_node_ids() {
+        let a = ent("e1", "A", Some(0.8));
+        let b = ent("e2", "B", None);
+        let mut g = KnowledgeGraph::new();
+        g.add_triple(tri(&a, PredicateType::Uses, &b));
+
+        let v = g.to_node_link();
+        assert_eq!(v["directed"], serde_json::json!(true));
+
+        let nodes = v["nodes"].as_array().expect("nodes array");
+        assert_eq!(nodes.len(), 2);
+        // Nodes carry their id (the source/target join key).
+        assert_eq!(nodes[0]["id"], "e1");
+        assert_eq!(nodes[0]["label"], "A");
+
+        let links = v["links"].as_array().expect("links array");
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0]["source"], "e1");
+        assert_eq!(links[0]["target"], "e2");
+        assert_eq!(links[0]["type"], PredicateType::Uses.value());
+        // No RDF-style keys leak into the node-link shape.
+        assert!(links[0].get("subject").is_none());
+        assert!(links[0].get("object").is_none());
     }
 
     #[test]
