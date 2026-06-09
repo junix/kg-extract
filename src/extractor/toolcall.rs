@@ -85,6 +85,35 @@ impl ToolCallExtractor {
         &self.config
     }
 
+    /// System prompt = the engine's role + the seed schema. The schema is small
+    /// (a handful of type names in practice), so it is pushed here once as
+    /// configuration rather than repeated in the user turn or pulled via a tool.
+    /// Mode shapes the wording: Fixed = closed list, Evolving = seed + propose,
+    /// Open/empty = no schema block.
+    fn system_prompt(&self) -> String {
+        if self.config.spec.schema.is_empty() {
+            return SYSTEM_PROMPT.to_string();
+        }
+        let entities = self.config.entity_types_list().join(", ");
+        let relations = self.config.predicates_list().join(", ");
+        let attributes = self.config.attributes_list().join(", ");
+        let block = match self.config.spec.mode {
+            SchemaMode::Fixed => format!(
+                "\n\nSCHEMA (closed — use ONLY these types; anything else is discarded):\n\
+                 entity types: {entities}\nrelation types: {relations}\nattributes: {attributes}"
+            ),
+            SchemaMode::Evolving => format!(
+                "\n\nSCHEMA (seed — prefer these; call propose_schema_type for a genuinely new type):\n\
+                 entity types: {entities}\nrelation types: {relations}\nattributes: {attributes}"
+            ),
+            SchemaMode::Open => format!(
+                "\n\nSCHEMA (hints — name types freely):\n\
+                 entity types: {entities}\nrelation types: {relations}\nattributes: {attributes}"
+            ),
+        };
+        format!("{SYSTEM_PROMPT}{block}")
+    }
+
     /// JSON-Schema tool definitions. Only `Fixed` mode enum-constrains the entity
     /// type / predicate args to the seeded schema; `Open`/`Evolving` leave them
     /// free-form so the model can name (or propose) new types.
@@ -351,14 +380,9 @@ impl Extractor for ToolCallExtractor {
             temperature: 0.3,
             max_tokens: 4000,
         };
-        let user = format!(
-            "Extract a knowledge graph from the text below using the tools.\n\nSchema:\nentities: {}\nrelations: {}\nattributes: {}\n\nText:\n{}",
-            self.config.entity_types_list().join(", "),
-            self.config.predicates_list().join(", "),
-            self.config.attributes_list().join(", "),
-            text
-        );
-        let mut messages = vec![Message::system(SYSTEM_PROMPT), Message::user(user)];
+        // Schema lives in the system prompt; the user turn carries only the text.
+        let user = format!("Extract a knowledge graph from the text below using the tools.\n\nText:\n{text}");
+        let mut messages = vec![Message::system(self.system_prompt()), Message::user(user)];
 
         let mut acc = Accumulator::default();
         for _ in 0..self.max_rounds {

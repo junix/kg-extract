@@ -3,7 +3,7 @@
 //! (seed schema the model may extend). Ported from `graph/kg_extractor/youtu.py`.
 
 use super::{validate_input, Extractor, SchemaMode};
-use crate::backend::{CompletionOptions, LlmBackend};
+use crate::backend::{CompletionOptions, LlmBackend, Message};
 use crate::graph_build::GraphBuilder;
 use crate::parser::extract_json_from_response;
 use crate::types::{
@@ -73,15 +73,11 @@ impl SchemaJsonExtractor {
         &self.config
     }
 
-    fn build_prompt(&self, text: &str) -> String {
-        // A rich template (preset), when attached, drives the prompt directly —
-        // its guideline + output fields replace the bare type-vocabulary, and the
-        // output contract stays the same JSON shape `build_graph` parses.
-        if let Some(tpl) = &self.config.spec.template {
-            let lang = tpl.resolve_lang(self.config.spec.language.as_deref());
-            return crate::template::render_prompt(tpl, &lang, text);
-        }
-
+    /// System prompt for the schema-driven (non-template) path: the extraction
+    /// instructions + the seed schema. The schema is small, so it is pushed here
+    /// once as configuration; the user turn carries only the document text. Mode
+    /// shapes the wording (Open infers, Fixed closes, Evolving may extend).
+    fn build_system_prompt(&self) -> String {
         let schema = serde_json::json!({
             "nodes": self.config.entity_types_list(),
             "relations": self.config.predicates_list(),
@@ -90,20 +86,16 @@ impl SchemaJsonExtractor {
         let schema_json = serde_json::to_string(&schema).unwrap_or_default();
 
         match self.config.spec.mode {
-            SchemaMode::Open => format!(
-                "Extract entities and relationships from the following text.\n\
+            SchemaMode::Open => "Extract entities and relationships from the user's text.\n\
 No predefined schema is given — infer suitable entity types and relation types from the content.\n\n\
-Text:\n{text}\n\n\
 Output JSON with:\n\
-1. \"entities\": {{\"entity_name\": {{\"type\": \"EntityType\", \"attributes\": {{\"attr\": \"value\"}}}}}}\n\
+1. \"entities\": {\"entity_name\": {\"type\": \"EntityType\", \"attributes\": {\"attr\": \"value\"}}}\n\
 2. \"relationships\": [[\"subject\", \"predicate\", \"object\"]]\n\
-3. \"entity_types\": {{\"entity_name\": \"type\"}} (map entities to their types)\n\n\
-Ensure valid JSON output."
-            ),
+3. \"entity_types\": {\"entity_name\": \"type\"} (map entities to their types)\n\n\
+Ensure valid JSON output.".to_string(),
             SchemaMode::Fixed => format!(
-                "Extract entities and relationships from the following text using the provided schema.\n\n\
+                "Extract entities and relationships from the user's text using the provided schema.\n\n\
 Schema:\n{schema_json}\n\n\
-Text:\n{text}\n\n\
 Output JSON with:\n\
 1. \"entities\": {{\"entity_name\": {{\"type\": \"EntityType\", \"attributes\": {{\"attr\": \"value\"}}}}}}\n\
 2. \"relationships\": [[\"subject\", \"predicate\", \"object\"]]\n\
@@ -112,10 +104,9 @@ Use only the entity types and relations from the schema.\n\
 Ensure valid JSON output."
             ),
             SchemaMode::Evolving => format!(
-                "Extract entities and relationships from the following text using the provided schema as guidance.\n\
+                "Extract entities and relationships from the user's text using the provided schema as guidance.\n\
 You may suggest new entity types, relations, or attributes if they better represent the content.\n\n\
 Schema:\n{schema_json}\n\n\
-Text:\n{text}\n\n\
 Output JSON with:\n\
 1. \"entities\": {{\"entity_name\": {{\"type\": \"EntityType\", \"attributes\": {{\"attr\": \"value\"}}}}}}\n\
 2. \"relationships\": [[\"subject\", \"predicate\", \"object\"]]\n\
@@ -308,13 +299,23 @@ impl Extractor for SchemaJsonExtractor {
             );
         }
 
-        let prompt = self.build_prompt(text);
         let opts = CompletionOptions {
             model: self.config.model_name.clone(),
             temperature: 0.3,
             max_tokens: 4000,
         };
-        let response = match self.backend.complete_prompt(&prompt, &opts).await {
+        // Schema path: instructions + schema in the system turn, text in the user
+        // turn. Template path: the preset renders one self-contained prompt.
+        let call = if let Some(tpl) = &self.config.spec.template {
+            let lang = tpl.resolve_lang(self.config.spec.language.as_deref());
+            let prompt = crate::template::render_prompt(tpl, &lang, text);
+            self.backend.complete_prompt(&prompt, &opts).await
+        } else {
+            let messages =
+                [Message::system(self.build_system_prompt()), Message::user(format!("Text:\n{text}"))];
+            self.backend.complete(&messages, &opts).await
+        };
+        let response = match call {
             Ok(r) => r,
             Err(e) => {
                 if !self.quiet {
