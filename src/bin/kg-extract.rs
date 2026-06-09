@@ -25,6 +25,8 @@ use kg_extract::types::{ChunkStrategy, Schema};
 #[serde(rename_all = "kebab-case")]
 enum Engine {
     Simple,
+    /// Legacy — hidden from help but still accepted for backward compatibility.
+    #[value(hide = true)]
     Triplex,
     SchemaJson,
     Toolcall,
@@ -327,6 +329,7 @@ async fn main() -> anyhow::Result<()> {
             SimpleExtractor::with_config(backend, c).extract(&text).await?
         }
         Engine::Triplex => {
+            eprintln!("warning: triplex engine is legacy and may be removed in a future release");
             let mut c = TriplexExtractor::default_config();
             c.chunker = cfg.chunker.into();
             if let Some(m) = &cfg.model {

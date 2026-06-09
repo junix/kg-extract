@@ -13,6 +13,13 @@ impl TmpStore {
         let store = KgStore::new(dir.clone());
         TmpStore { dir, store }
     }
+
+    fn with_policy(policy: SchemaPolicy) -> Self {
+        let dir = std::env::temp_dir().join(format!("kg-mcp-test-{}", nanoid::nanoid!()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = KgStore::with_policy(dir.clone(), policy);
+        TmpStore { dir, store }
+    }
 }
 
 impl Drop for TmpStore {
@@ -33,15 +40,24 @@ fn resolve_appends_json_and_rejects_escape() {
     // Caller-supplied .json is not doubled.
     assert_eq!(s.resolve("foo.json").unwrap(), t.dir.join("foo.json"));
     // Nested paths create subdirs.
-    assert_eq!(s.resolve("a/b/c").unwrap(), t.dir.join("a").join("b").join("c.json"));
+    assert_eq!(
+        s.resolve("a/b/c").unwrap(),
+        t.dir.join("a").join("b").join("c.json")
+    );
     // Traversal and empties are rejected.
     assert!(s.resolve("../escape").is_err());
     assert!(s.resolve("a/../../b").is_err());
     assert!(s.resolve("").is_err());
     assert!(s.resolve("/").is_err());
     // Absolute paths are rejected (per the doc), not silently made relative.
-    assert!(s.resolve("/etc/graph").is_err(), "absolute unix path must be rejected");
-    assert!(s.resolve("\\abs\\path").is_err(), "absolute windows-style path must be rejected");
+    assert!(
+        s.resolve("/etc/graph").is_err(),
+        "absolute unix path must be rejected"
+    );
+    assert!(
+        s.resolve("\\abs\\path").is_err(),
+        "absolute windows-style path must be rejected"
+    );
 }
 
 #[test]
@@ -49,7 +65,13 @@ fn add_entity_persists_and_reloads() {
     let t = TmpStore::new();
     let r = t
         .store
-        .add_entity("g", "Alice", "person", Some("An engineer".into()), HashMap::new())
+        .add_entity(
+            "g",
+            "Alice",
+            "person",
+            Some("An engineer".into()),
+            HashMap::new(),
+        )
         .unwrap();
     assert_eq!(n(&r, "num_entities"), 1);
 
@@ -66,14 +88,20 @@ fn add_entity_persists_and_reloads() {
 #[test]
 fn add_entity_same_name_merges_not_duplicates() {
     let t = TmpStore::new();
-    t.store.add_entity("g", "Alice", "person", None, HashMap::new()).unwrap();
+    t.store
+        .add_entity("g", "Alice", "person", None, HashMap::new())
+        .unwrap();
     let mut attrs = HashMap::new();
     attrs.insert("role".to_string(), serde_json::json!("VP"));
     let r = t
         .store
         .add_entity("g", "Alice", "person", Some("Updated".into()), attrs)
         .unwrap();
-    assert_eq!(n(&r, "num_entities"), 1, "same name must merge, not duplicate");
+    assert_eq!(
+        n(&r, "num_entities"),
+        1,
+        "same name must merge, not duplicate"
+    );
 
     let kg = t.store.load("g").unwrap();
     let e = kg.get_entity(&entity_id("Alice")).unwrap();
@@ -84,9 +112,14 @@ fn add_entity_same_name_merges_not_duplicates() {
 #[test]
 fn add_relation_errors_on_missing_endpoint_with_guidance() {
     let t = TmpStore::new();
-    t.store.add_entity("g", "Alice", "person", None, HashMap::new()).unwrap();
+    t.store
+        .add_entity("g", "Alice", "person", None, HashMap::new())
+        .unwrap();
     // Target 'Acme' doesn't exist → strict error, naming it + listing knowns.
-    let err = t.store.add_relation("g", "Alice", "works_at", "Acme", None, None).unwrap_err();
+    let err = t
+        .store
+        .add_relation("g", "Alice", "works_at", "Acme", None, None)
+        .unwrap_err();
     let msg = err.to_string();
     assert!(msg.contains("'Acme'"), "names the missing endpoint: {msg}");
     assert!(msg.contains("add_entity"), "prescribes the fix: {msg}");
@@ -100,14 +133,24 @@ fn add_relation_errors_on_missing_endpoint_with_guidance() {
 #[test]
 fn add_relation_succeeds_after_endpoints_added_and_dedups() {
     let t = TmpStore::new();
-    t.store.add_entity("g", "Alice", "person", None, HashMap::new()).unwrap();
-    t.store.add_entity("g", "Acme", "organization", None, HashMap::new()).unwrap();
-    let r = t.store.add_relation("g", "Alice", "works_at", "Acme", None, Some(0.9)).unwrap();
+    t.store
+        .add_entity("g", "Alice", "person", None, HashMap::new())
+        .unwrap();
+    t.store
+        .add_entity("g", "Acme", "organization", None, HashMap::new())
+        .unwrap();
+    let r = t
+        .store
+        .add_relation("g", "Alice", "works_at", "Acme", None, Some(0.9))
+        .unwrap();
     assert_eq!(n(&r, "num_entities"), 2);
     assert_eq!(n(&r, "num_triples"), 1);
 
     // Identical relation again must not duplicate the triple.
-    let r2 = t.store.add_relation("g", "Alice", "works_at", "Acme", None, None).unwrap();
+    let r2 = t
+        .store
+        .add_relation("g", "Alice", "works_at", "Acme", None, None)
+        .unwrap();
     assert_eq!(n(&r2, "num_triples"), 1, "identical relation must dedup");
     assert!(r2["message"].as_str().unwrap().contains("already present"));
 }
@@ -116,10 +159,20 @@ fn add_relation_succeeds_after_endpoints_added_and_dedups() {
 fn add_relation_after_add_entity_keeps_rich_entity() {
     let t = TmpStore::new();
     t.store
-        .add_entity("g", "Alice", "person", Some("An engineer".into()), HashMap::new())
+        .add_entity(
+            "g",
+            "Alice",
+            "person",
+            Some("An engineer".into()),
+            HashMap::new(),
+        )
         .unwrap();
-    t.store.add_entity("g", "Acme", "organization", None, HashMap::new()).unwrap();
-    t.store.add_relation("g", "Alice", "works_at", "Acme", None, None).unwrap();
+    t.store
+        .add_entity("g", "Acme", "organization", None, HashMap::new())
+        .unwrap();
+    t.store
+        .add_relation("g", "Alice", "works_at", "Acme", None, None)
+        .unwrap();
 
     let kg = t.store.load("g").unwrap();
     // add_triple re-inserts endpoints; the enriched Alice must survive.
@@ -131,35 +184,69 @@ fn add_relation_after_add_entity_keeps_rich_entity() {
 #[test]
 fn add_relation_clamps_strength_to_unit_interval() {
     let t = TmpStore::new();
-    t.store.add_entity("g", "Alice", "person", None, HashMap::new()).unwrap();
-    t.store.add_entity("g", "Acme", "organization", None, HashMap::new()).unwrap();
-    t.store.add_relation("g", "Alice", "works_at", "Acme", None, Some(2.0)).unwrap();
+    t.store
+        .add_entity("g", "Alice", "person", None, HashMap::new())
+        .unwrap();
+    t.store
+        .add_entity("g", "Acme", "organization", None, HashMap::new())
+        .unwrap();
+    t.store
+        .add_relation("g", "Alice", "works_at", "Acme", None, Some(2.0))
+        .unwrap();
     let kg = t.store.load("g").unwrap();
-    assert_eq!(kg.triples[0].confidence, Some(1.0), "out-of-range strength must clamp to 1.0");
+    assert_eq!(
+        kg.triples[0].confidence,
+        Some(1.0),
+        "out-of-range strength must clamp to 1.0"
+    );
 }
 
 #[test]
 fn add_attribute_requires_existing_entity() {
     let t = TmpStore::new();
-    t.store.add_entity("g", "Alice", "person", None, HashMap::new()).unwrap();
-    let err = t.store.add_attribute("g", "Ghost", "k", serde_json::json!("v")).unwrap_err();
+    t.store
+        .add_entity("g", "Alice", "person", None, HashMap::new())
+        .unwrap();
+    let err = t
+        .store
+        .add_attribute("g", "Ghost", "k", serde_json::json!("v"))
+        .unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("'Ghost'") && msg.contains("add_entity"), "actionable error: {msg}");
+    assert!(
+        msg.contains("'Ghost'") && msg.contains("add_entity"),
+        "actionable error: {msg}"
+    );
     assert!(msg.contains("Alice"), "lists known entities: {msg}");
 
-    t.store.add_attribute("g", "Alice", "team", serde_json::json!("platform")).unwrap();
+    t.store
+        .add_attribute("g", "Alice", "team", serde_json::json!("platform"))
+        .unwrap();
     let kg = t.store.load("g").unwrap();
     let e = kg.get_entity(&entity_id("Alice")).unwrap();
-    assert_eq!(e.metadata.get("team").unwrap(), &serde_json::json!("platform"));
+    assert_eq!(
+        e.metadata.get("team").unwrap(),
+        &serde_json::json!("platform")
+    );
 }
 
 /// Build a small graph: Alice —works_at→ Acme, Alice —knows→ Bob.
 fn seed_graph(s: &KgStore) {
-    s.add_entity("g", "Alice", "person", Some("An engineer".into()), HashMap::new()).unwrap();
-    s.add_entity("g", "Acme", "organization", None, HashMap::new()).unwrap();
-    s.add_entity("g", "Bob", "person", None, HashMap::new()).unwrap();
-    s.add_relation("g", "Alice", "works_at", "Acme", None, None).unwrap();
-    s.add_relation("g", "Alice", "knows", "Bob", None, None).unwrap();
+    s.add_entity(
+        "g",
+        "Alice",
+        "person",
+        Some("An engineer".into()),
+        HashMap::new(),
+    )
+    .unwrap();
+    s.add_entity("g", "Acme", "organization", None, HashMap::new())
+        .unwrap();
+    s.add_entity("g", "Bob", "person", None, HashMap::new())
+        .unwrap();
+    s.add_relation("g", "Alice", "works_at", "Acme", None, None)
+        .unwrap();
+    s.add_relation("g", "Alice", "knows", "Bob", None, None)
+        .unwrap();
 }
 
 #[test]
@@ -179,29 +266,52 @@ fn query_entities_only_and_relations_only() {
     seed_graph(&t.store);
 
     let e = t.store.query_graph("g", "entities", None, 200).unwrap();
-    let labels: Vec<&str> =
-        e["entities"].as_array().unwrap().iter().map(|x| x["label"].as_str().unwrap()).collect();
+    let labels: Vec<&str> = e["entities"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["label"].as_str().unwrap())
+        .collect();
     assert!(labels.contains(&"Alice") && labels.contains(&"Acme") && labels.contains(&"Bob"));
-    assert!(e.get("relations").is_none(), "entities view has no relations");
+    assert!(
+        e.get("relations").is_none(),
+        "entities view has no relations"
+    );
 
     let r = t.store.query_graph("g", "relations", None, 200).unwrap();
     assert_eq!(r["relations"].as_array().unwrap().len(), 2);
-    assert!(r.get("entities").is_none(), "relations view has no entities");
+    assert!(
+        r.get("entities").is_none(),
+        "relations view has no entities"
+    );
 }
 
 #[test]
 fn query_neighbors_returns_focal_entity_and_its_edges() {
     let t = TmpStore::new();
     seed_graph(&t.store);
-    let r = t.store.query_graph("g", "neighbors", Some("Alice"), 200).unwrap();
+    let r = t
+        .store
+        .query_graph("g", "neighbors", Some("Alice"), 200)
+        .unwrap();
     assert_eq!(r["entity"]["label"], "Alice");
     assert_eq!(r["entity"]["description"], "An engineer");
-    let out: Vec<&str> =
-        r["outgoing"].as_array().unwrap().iter().map(|x| x["target"].as_str().unwrap()).collect();
-    assert!(out.contains(&"Acme") && out.contains(&"Bob"), "Alice's two edges: {out:?}");
+    let out: Vec<&str> = r["outgoing"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|x| x["target"].as_str().unwrap())
+        .collect();
+    assert!(
+        out.contains(&"Acme") && out.contains(&"Bob"),
+        "Alice's two edges: {out:?}"
+    );
 
     // Acme only has an incoming edge from Alice.
-    let a = t.store.query_graph("g", "neighbors", Some("Acme"), 200).unwrap();
+    let a = t
+        .store
+        .query_graph("g", "neighbors", Some("Acme"), 200)
+        .unwrap();
     assert_eq!(a["incoming"].as_array().unwrap().len(), 1);
     assert_eq!(a["outgoing"].as_array().unwrap().len(), 0);
     assert_eq!(a["incoming"][0]["source"], "Alice");
@@ -211,9 +321,15 @@ fn query_neighbors_returns_focal_entity_and_its_edges() {
 fn query_neighbors_missing_entity_errors_with_known() {
     let t = TmpStore::new();
     seed_graph(&t.store);
-    let err = t.store.query_graph("g", "neighbors", Some("Ghost"), 200).unwrap_err();
+    let err = t
+        .store
+        .query_graph("g", "neighbors", Some("Ghost"), 200)
+        .unwrap_err();
     let msg = err.to_string();
-    assert!(msg.contains("'Ghost'") && msg.contains("Alice"), "actionable: {msg}");
+    assert!(
+        msg.contains("'Ghost'") && msg.contains("Alice"),
+        "actionable: {msg}"
+    );
 }
 
 #[test]
@@ -229,8 +345,18 @@ fn query_limit_truncates_and_flags() {
 fn query_unknown_view_and_absent_graph_error() {
     let t = TmpStore::new();
     seed_graph(&t.store);
-    assert!(t.store.query_graph("g", "bogus", None, 200).unwrap_err().to_string().contains("unknown view"));
-    assert!(t.store.query_graph("nope", "summary", None, 200).unwrap_err().to_string().contains("no graph found"));
+    assert!(t
+        .store
+        .query_graph("g", "bogus", None, 200)
+        .unwrap_err()
+        .to_string()
+        .contains("unknown view"));
+    assert!(t
+        .store
+        .query_graph("nope", "summary", None, 200)
+        .unwrap_err()
+        .to_string()
+        .contains("no graph found"));
 }
 
 #[test]
@@ -243,7 +369,8 @@ fn concurrent_writes_to_same_path_dont_lose_updates() {
         .map(|i| {
             let s = Arc::clone(&store);
             std::thread::spawn(move || {
-                s.add_entity("race", &format!("E{i}"), "other", None, HashMap::new()).unwrap();
+                s.add_entity("race", &format!("E{i}"), "other", None, HashMap::new())
+                    .unwrap();
             })
         })
         .collect();
@@ -257,10 +384,157 @@ fn concurrent_writes_to_same_path_dont_lose_updates() {
 #[test]
 fn separate_paths_are_independent_graphs() {
     let t = TmpStore::new();
-    t.store.add_entity("doc/one", "Alice", "person", None, HashMap::new()).unwrap();
-    t.store.add_entity("doc/two", "Bob", "person", None, HashMap::new()).unwrap();
+    t.store
+        .add_entity("doc/one", "Alice", "person", None, HashMap::new())
+        .unwrap();
+    t.store
+        .add_entity("doc/two", "Bob", "person", None, HashMap::new())
+        .unwrap();
     assert_eq!(t.store.load("doc/one").unwrap().entities.len(), 1);
     assert_eq!(t.store.load("doc/two").unwrap().entities.len(), 1);
     assert!(t.store.resolve("doc/one").unwrap().exists());
     assert!(t.store.resolve("doc/two").unwrap().exists());
+}
+
+fn seed_schema() -> Schema {
+    Schema::new(
+        vec!["PERSON".into(), "ORGANIZATION".into()],
+        vec!["WORKS_AT".into()],
+        vec!["team".into()],
+    )
+}
+
+#[test]
+fn fixed_schema_rejects_values_outside_seed_schema() {
+    let policy = SchemaPolicy::new(SchemaMode::Fixed, seed_schema()).unwrap();
+    let t = TmpStore::with_policy(policy);
+
+    t.store
+        .add_entity("g", "Alice", "person", None, HashMap::new())
+        .unwrap();
+    let err = t
+        .store
+        .add_entity("g", "Paris", "location", None, HashMap::new())
+        .unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("fixed schema") && msg.contains("PERSON"),
+        "actionable error: {msg}"
+    );
+
+    t.store
+        .add_entity("g", "Acme", "organization", None, HashMap::new())
+        .unwrap();
+    let err = t
+        .store
+        .add_relation("g", "Alice", "knows", "Acme", None, None)
+        .unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("relation type") && msg.contains("WORKS_AT"),
+        "relation error: {msg}"
+    );
+
+    t.store
+        .add_attribute("g", "Alice", "team", serde_json::json!("platform"))
+        .unwrap();
+    let err = t
+        .store
+        .add_attribute("g", "Alice", "role", serde_json::json!("lead"))
+        .unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("attribute key") && msg.contains("team"),
+        "attribute error: {msg}"
+    );
+}
+
+#[test]
+fn fixed_and_evolving_require_non_empty_schema() {
+    assert!(SchemaPolicy::new(SchemaMode::Fixed, Schema::default()).is_err());
+    assert!(SchemaPolicy::new(SchemaMode::Evolving, Schema::default()).is_err());
+    assert!(SchemaPolicy::new(SchemaMode::Open, Schema::default()).is_ok());
+}
+
+#[test]
+fn evolving_schema_accepts_seed_values_and_requires_proposal_for_new_values() {
+    let policy = SchemaPolicy::new(SchemaMode::Evolving, seed_schema()).unwrap();
+    let t = TmpStore::with_policy(policy);
+
+    t.store
+        .add_entity("g", "Alice", "person", None, HashMap::new())
+        .unwrap();
+    let err = t
+        .store
+        .add_entity("g", "Dune", "WORK_OF_ART", None, HashMap::new())
+        .unwrap_err();
+    let msg = err.to_string();
+    assert!(
+        msg.contains("propose_schema_type") && msg.contains("WORK_OF_ART"),
+        "{msg}"
+    );
+
+    t.store
+        .propose_schema_type(
+            "g",
+            "node",
+            "WORK_OF_ART",
+            Some("Document discusses films".into()),
+        )
+        .unwrap();
+    t.store
+        .add_entity("g", "Dune", "WORK_OF_ART", None, HashMap::new())
+        .unwrap();
+
+    t.store
+        .propose_schema_type(
+            "g",
+            "relation",
+            "INSPIRED_BY",
+            Some("Needed by text".into()),
+        )
+        .unwrap();
+    t.store
+        .add_relation("g", "Dune", "INSPIRED_BY", "Alice", None, None)
+        .unwrap();
+
+    let kg = t.store.load("g").unwrap();
+    assert_eq!(kg.metadata["schema_mode"], serde_json::json!("evolving"));
+    assert_eq!(
+        kg.metadata["new_schema_types"]["nodes"][0],
+        serde_json::json!("WORK_OF_ART")
+    );
+    assert_eq!(
+        kg.metadata["new_schema_types"]["relations"][0],
+        serde_json::json!("INSPIRED_BY")
+    );
+    assert!(kg.metadata.contains_key("schema_used"));
+    assert_eq!(kg.triples.len(), 1);
+}
+
+#[test]
+fn propose_schema_type_is_only_available_in_evolving_mode() {
+    let t = TmpStore::new();
+    let err = t
+        .store
+        .propose_schema_type("g", "node", "MOVIE", None)
+        .unwrap_err();
+    assert!(err.to_string().contains("evolving schema mode"));
+}
+
+#[test]
+fn query_schema_reports_policy_and_path_proposals() {
+    let policy = SchemaPolicy::new(SchemaMode::Evolving, seed_schema()).unwrap();
+    let t = TmpStore::with_policy(policy);
+    t.store
+        .propose_schema_type("g", "attribute", "box_office", None)
+        .unwrap();
+
+    let r = t.store.query_schema("g").unwrap();
+    assert_eq!(r["schema_mode"], serde_json::json!("evolving"));
+    assert_eq!(r["schema"]["nodes"][0], serde_json::json!("PERSON"));
+    assert_eq!(
+        r["new_schema_types"]["attributes"][0],
+        serde_json::json!("box_office")
+    );
 }

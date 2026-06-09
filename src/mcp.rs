@@ -18,7 +18,51 @@ use anyhow::{Context, Result};
 use serde_json::Value;
 
 use crate::graph_build::{build_predicate, entity_id, parse_entity_type};
-use crate::types::{Entity, KnowledgeGraph, Triple};
+use crate::types::{Entity, KnowledgeGraph, Schema, SchemaMode, Triple};
+
+/// Schema contract enforced by the MCP store.
+///
+/// `Open` accepts any caller-supplied type names. `Fixed` accepts only the seed
+/// schema. `Evolving` starts from a seed schema and accepts new types after the
+/// client explicitly proposes them for the graph path.
+#[derive(Debug, Clone)]
+pub struct SchemaPolicy {
+    mode: SchemaMode,
+    schema: Schema,
+}
+
+impl Default for SchemaPolicy {
+    fn default() -> Self {
+        Self {
+            mode: SchemaMode::Open,
+            schema: Schema::default(),
+        }
+    }
+}
+
+impl SchemaPolicy {
+    pub fn open() -> Self {
+        Self::default()
+    }
+
+    pub fn new(mode: SchemaMode, schema: Schema) -> Result<Self> {
+        if mode.needs_schema() && schema.is_empty() {
+            anyhow::bail!(
+                "schema mode {:?} requires a non-empty schema, or use schema mode open",
+                mode
+            );
+        }
+        Ok(Self { mode, schema })
+    }
+
+    pub fn mode(&self) -> SchemaMode {
+        self.mode
+    }
+
+    pub fn schema(&self) -> &Schema {
+        &self.schema
+    }
+}
 
 /// A directory-backed collection of knowledge graphs, one JSON file per `path`.
 ///
@@ -29,15 +73,28 @@ use crate::types::{Entity, KnowledgeGraph, Triple};
 pub struct KgStore {
     output: PathBuf,
     lock: std::sync::Mutex<()>,
+    policy: SchemaPolicy,
 }
 
 impl KgStore {
     pub fn new(output: impl Into<PathBuf>) -> Self {
-        Self { output: output.into(), lock: std::sync::Mutex::new(()) }
+        Self::with_policy(output, SchemaPolicy::open())
+    }
+
+    pub fn with_policy(output: impl Into<PathBuf>, policy: SchemaPolicy) -> Self {
+        Self {
+            output: output.into(),
+            lock: std::sync::Mutex::new(()),
+            policy,
+        }
     }
 
     pub fn output_dir(&self) -> &Path {
         &self.output
+    }
+
+    pub fn schema_policy(&self) -> &SchemaPolicy {
+        &self.policy
     }
 
     /// Map a caller-supplied `path` to `<output>/<path>.json`, rejecting absolute
@@ -78,7 +135,8 @@ impl KgStore {
         if !p.exists() {
             return Ok(KnowledgeGraph::new());
         }
-        let body = std::fs::read_to_string(&p).with_context(|| format!("reading {}", p.display()))?;
+        let body =
+            std::fs::read_to_string(&p).with_context(|| format!("reading {}", p.display()))?;
         if body.trim().is_empty() {
             return Ok(KnowledgeGraph::new());
         }
@@ -113,6 +171,7 @@ impl KgStore {
         }
         let _guard = self.lock.lock().unwrap();
         let mut kg = self.load(rel)?;
+        self.validate_entity_type(&kg, type_str)?;
         let id = entity_id(name);
         let etype = parse_entity_type(type_str);
         if let Some(existing) = kg.entities.get_mut(&id) {
@@ -129,6 +188,7 @@ impl KgStore {
             e.metadata = attributes;
             kg.add_entity(e);
         }
+        self.apply_schema_metadata(&mut kg);
         let path = self.save(rel, &kg)?;
         Ok(report(&path, &kg, format!("entity '{name}' stored")))
     }
@@ -152,6 +212,7 @@ impl KgStore {
         }
         let _guard = self.lock.lock().unwrap();
         let mut kg = self.load(rel_path)?;
+        self.validate_relation_type(&kg, predicate)?;
         let sid = entity_id(source);
         let tid = entity_id(target);
         // Strict: both endpoints must already exist. The error names the missing
@@ -165,8 +226,11 @@ impl KgStore {
             missing.push(target);
         }
         if !missing.is_empty() {
-            let which =
-                missing.iter().map(|m| format!("'{m}'")).collect::<Vec<_>>().join(" and ");
+            let which = missing
+                .iter()
+                .map(|m| format!("'{m}'"))
+                .collect::<Vec<_>>()
+                .join(" and ");
             anyhow::bail!(
                 "entity {which} not found in graph '{rel_path}'. Call add_entity for {which} \
                  first (same path='{rel_path}'), then retry add_relation. Known entities: {}",
@@ -181,13 +245,16 @@ impl KgStore {
         // passes e.g. 2.0 or -1.0 can't store an out-of-range value.
         triple.confidence = Some(strength.unwrap_or(0.8).clamp(0.0, 1.0));
         if let Some(d) = description {
-            triple.metadata.insert("description".into(), serde_json::json!(d));
+            triple
+                .metadata
+                .insert("description".into(), serde_json::json!(d));
         }
         let key = triple.to_tuple();
         let added = !kg.triples.iter().any(|t| t.to_tuple() == key);
         if added {
             kg.add_triple(triple);
         }
+        self.apply_schema_metadata(&mut kg);
         let path = self.save(rel_path, &kg)?;
         let msg = if added {
             format!("relation '{source}' -{predicate}-> '{target}' stored")
@@ -205,6 +272,7 @@ impl KgStore {
         }
         let _guard = self.lock.lock().unwrap();
         let mut kg = self.load(rel)?;
+        self.validate_attribute_key(&kg, key)?;
         let id = entity_id(entity);
         match kg.entities.get_mut(&id) {
             Some(e) => {
@@ -216,8 +284,73 @@ impl KgStore {
                 known_labels(&kg)
             ),
         }
+        self.apply_schema_metadata(&mut kg);
         let path = self.save(rel, &kg)?;
-        Ok(report(&path, &kg, format!("attribute '{key}' set on '{entity}'")))
+        Ok(report(
+            &path,
+            &kg,
+            format!("attribute '{key}' set on '{entity}'"),
+        ))
+    }
+
+    /// Propose a schema type for one graph path. Only valid in `Evolving` mode.
+    /// The proposal is persisted under graph metadata and then allowed by later
+    /// mutating calls for the same graph file.
+    pub fn propose_schema_type(
+        &self,
+        rel: &str,
+        kind: &str,
+        name: &str,
+        reason: Option<String>,
+    ) -> Result<Value> {
+        let (kind, name) = (kind.trim(), name.trim());
+        if kind.is_empty() || name.is_empty() {
+            anyhow::bail!("kind and name are required");
+        }
+        if self.policy.mode != SchemaMode::Evolving {
+            anyhow::bail!(
+                "propose_schema_type is only available in evolving schema mode; current mode is {}",
+                self.policy.mode.as_str()
+            );
+        }
+        let field = proposal_field(kind).ok_or_else(|| {
+            anyhow::anyhow!("unknown schema kind '{kind}'. Valid kinds: node, relation, attribute.")
+        })?;
+
+        let _guard = self.lock.lock().unwrap();
+        let mut kg = self.load(rel)?;
+        add_metadata_list_value(&mut kg.metadata, "new_schema_types", field, name);
+        if let Some(reason) = reason.filter(|s| !s.trim().is_empty()) {
+            let entry = serde_json::json!({ "kind": kind, "name": name, "reason": reason });
+            metadata_array(&mut kg.metadata, "schema_type_proposals").push(entry);
+        }
+        self.apply_schema_metadata(&mut kg);
+        let path = self.save(rel, &kg)?;
+        Ok(report(
+            &path,
+            &kg,
+            format!("schema {kind} type '{name}' proposed"),
+        ))
+    }
+
+    pub fn query_schema(&self, rel: &str) -> Result<Value> {
+        let _guard = self.lock.lock().unwrap();
+        let path = self.resolve(rel)?;
+        let proposals = if path.exists() {
+            self.load(rel)?
+                .metadata
+                .get("new_schema_types")
+                .cloned()
+                .unwrap_or_else(empty_new_schema_types)
+        } else {
+            empty_new_schema_types()
+        };
+        Ok(serde_json::json!({
+            "path": path.display().to_string(),
+            "schema_mode": self.policy.mode.as_str(),
+            "schema": self.policy.schema,
+            "new_schema_types": proposals,
+        }))
     }
 
     /// Query the graph at `path`. `view` selects what to return:
@@ -329,6 +462,90 @@ impl KgStore {
     }
 }
 
+impl KgStore {
+    fn validate_entity_type(&self, kg: &KnowledgeGraph, type_str: &str) -> Result<()> {
+        self.validate_schema_value(
+            kg,
+            "entity type",
+            type_str,
+            "node",
+            &self.policy.schema.nodes,
+        )
+    }
+
+    fn validate_relation_type(&self, kg: &KnowledgeGraph, predicate: &str) -> Result<()> {
+        self.validate_schema_value(
+            kg,
+            "relation type",
+            predicate,
+            "relation",
+            &self.policy.schema.relations,
+        )
+    }
+
+    fn validate_attribute_key(&self, kg: &KnowledgeGraph, key: &str) -> Result<()> {
+        if self.policy.schema.attributes.is_empty() {
+            return Ok(());
+        }
+        self.validate_schema_value(
+            kg,
+            "attribute key",
+            key,
+            "attribute",
+            &self.policy.schema.attributes,
+        )
+    }
+
+    fn validate_schema_value(
+        &self,
+        kg: &KnowledgeGraph,
+        label: &str,
+        value: &str,
+        kind: &str,
+        allowed_seed: &[String],
+    ) -> Result<()> {
+        match self.policy.mode {
+            SchemaMode::Open => Ok(()),
+            SchemaMode::Fixed => {
+                if contains_schema_value(allowed_seed, value) {
+                    Ok(())
+                } else {
+                    anyhow::bail!(
+                        "{label} '{value}' is not allowed in fixed schema. Allowed {label}s: {}",
+                        allowed_list(allowed_seed)
+                    );
+                }
+            }
+            SchemaMode::Evolving => {
+                if contains_schema_value(allowed_seed, value)
+                    || contains_proposed_schema_value(kg, kind, value)
+                {
+                    Ok(())
+                } else {
+                    anyhow::bail!(
+                        "{label} '{value}' is not in the seed schema for evolving mode. \
+                         Call propose_schema_type(path=..., kind='{kind}', name='{value}') first, \
+                         then retry. Seed {label}s: {}",
+                        allowed_list(allowed_seed)
+                    );
+                }
+            }
+        }
+    }
+
+    fn apply_schema_metadata(&self, kg: &mut KnowledgeGraph) {
+        kg.metadata.insert(
+            "schema_mode".into(),
+            serde_json::json!(self.policy.mode.as_str()),
+        );
+        if self.policy.mode.needs_schema() {
+            kg.metadata
+                .insert("schema_used".into(), serde_json::json!(self.policy.schema));
+        }
+        ensure_new_schema_types(&mut kg.metadata);
+    }
+}
+
 /// Up to `limit` entities as `{id,label,type}`; bool = whether more were dropped.
 fn take_entities(kg: &KnowledgeGraph, limit: usize) -> (Vec<Value>, bool) {
     let items = kg
@@ -365,7 +582,12 @@ fn known_labels(kg: &KnowledgeGraph) -> String {
     if labels.is_empty() {
         return "(none yet)".into();
     }
-    let mut s = labels.iter().take(MAX).copied().collect::<Vec<_>>().join(", ");
+    let mut s = labels
+        .iter()
+        .take(MAX)
+        .copied()
+        .collect::<Vec<_>>()
+        .join(", ");
     if labels.len() > MAX {
         s.push_str(&format!(", … (+{} more)", labels.len() - MAX));
     }
@@ -379,6 +601,102 @@ fn report(path: &Path, kg: &KnowledgeGraph, message: String) -> Value {
         "path": path.display().to_string(),
         "stats": kg.stats(),
     })
+}
+
+fn schema_key(s: &str) -> String {
+    s.trim().replace(['-', ' '], "_").to_lowercase()
+}
+
+fn contains_schema_value(values: &[String], needle: &str) -> bool {
+    let needle = schema_key(needle);
+    values.iter().any(|v| schema_key(v) == needle)
+}
+
+fn allowed_list(values: &[String]) -> String {
+    if values.is_empty() {
+        "(none)".into()
+    } else {
+        values.join(", ")
+    }
+}
+
+fn proposal_field(kind: &str) -> Option<&'static str> {
+    match schema_key(kind).as_str() {
+        "node" | "nodes" | "entity" | "entities" => Some("nodes"),
+        "relation" | "relations" | "predicate" | "predicates" => Some("relations"),
+        "attribute" | "attributes" => Some("attributes"),
+        _ => None,
+    }
+}
+
+fn proposal_field_for_validation(kind: &str) -> &'static str {
+    proposal_field(kind).expect("validation kind is fixed")
+}
+
+fn empty_new_schema_types() -> Value {
+    serde_json::json!({
+        "nodes": [],
+        "relations": [],
+        "attributes": [],
+    })
+}
+
+fn ensure_new_schema_types(metadata: &mut HashMap<String, Value>) {
+    metadata
+        .entry("new_schema_types".into())
+        .or_insert_with(empty_new_schema_types);
+}
+
+fn metadata_array<'a>(metadata: &'a mut HashMap<String, Value>, key: &str) -> &'a mut Vec<Value> {
+    let value = metadata
+        .entry(key.to_string())
+        .or_insert_with(|| Value::Array(Vec::new()));
+    if !value.is_array() {
+        *value = Value::Array(Vec::new());
+    }
+    value.as_array_mut().expect("array ensured")
+}
+
+fn add_metadata_list_value(
+    metadata: &mut HashMap<String, Value>,
+    object_key: &str,
+    field: &str,
+    name: &str,
+) {
+    let object = metadata
+        .entry(object_key.to_string())
+        .or_insert_with(empty_new_schema_types);
+    if !object.is_object() {
+        *object = empty_new_schema_types();
+    }
+    let map = object.as_object_mut().expect("object ensured");
+    let values = map
+        .entry(field.to_string())
+        .or_insert_with(|| Value::Array(Vec::new()));
+    if !values.is_array() {
+        *values = Value::Array(Vec::new());
+    }
+    let arr = values.as_array_mut().expect("array ensured");
+    if !arr
+        .iter()
+        .any(|v| v.as_str().map(schema_key) == Some(schema_key(name)))
+    {
+        arr.push(Value::String(name.to_string()));
+    }
+}
+
+fn contains_proposed_schema_value(kg: &KnowledgeGraph, kind: &str, value: &str) -> bool {
+    let field = proposal_field_for_validation(kind);
+    kg.metadata
+        .get("new_schema_types")
+        .and_then(|v| v.get(field))
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .any(|v| schema_key(v) == schema_key(value))
+        })
+        .unwrap_or(false)
 }
 
 #[cfg(test)]

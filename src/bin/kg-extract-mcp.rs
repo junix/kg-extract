@@ -17,7 +17,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use anyhow::Context;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{Implementation, ServerCapabilities, ServerInfo};
@@ -26,7 +26,8 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
 
-use kg_extract::mcp::KgStore;
+use kg_extract::mcp::{KgStore, SchemaPolicy};
+use kg_extract::types::{Schema, SchemaMode};
 
 // ── Tool parameter types ─────────────────────────────────────────────────────
 
@@ -92,6 +93,25 @@ struct QueryGraphParams {
     limit: Option<usize>,
 }
 
+#[derive(Debug, Deserialize, JsonSchema)]
+struct ProposeSchemaTypeParams {
+    /// Output key: the graph is stored at <output>/<path>.json
+    path: String,
+    /// Type category: "node", "relation", or "attribute"
+    kind: String,
+    /// Proposed type name
+    name: String,
+    /// Optional explanation for why this schema type is needed
+    #[serde(default)]
+    reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+struct QuerySchemaParams {
+    /// Output key whose graph-specific proposals should be included
+    path: String,
+}
+
 // ── MCP server ───────────────────────────────────────────────────────────────
 
 #[derive(Clone)]
@@ -105,7 +125,10 @@ struct KgExtractMcp {
 
 impl KgExtractMcp {
     fn new(store: KgStore) -> Self {
-        Self { store: std::sync::Arc::new(store), tool_router: Self::tool_router() }
+        Self {
+            store: std::sync::Arc::new(store),
+            tool_router: Self::tool_router(),
+        }
     }
 
     async fn serve_stdio(self) -> anyhow::Result<()> {
@@ -146,7 +169,14 @@ impl KgExtractMcp {
     ) -> Result<String, String> {
         let r = self
             .store
-            .add_relation(&p.path, &p.source, &p.predicate, &p.target, p.description, p.strength)
+            .add_relation(
+                &p.path,
+                &p.source,
+                &p.predicate,
+                &p.target,
+                p.description,
+                p.strength,
+            )
             .map_err(|e| e.to_string())?;
         json_string(r)
     }
@@ -180,26 +210,77 @@ impl KgExtractMcp {
             .map_err(|e| e.to_string())?;
         json_string(r)
     }
+
+    #[tool(
+        description = "In evolving schema mode, propose a new schema type for this graph path before using it. `kind` must be 'node', 'relation', or 'attribute'. The proposal is persisted under graph metadata and later add_entity/add_relation/add_attribute calls may use it. Returns an error outside evolving mode."
+    )]
+    async fn propose_schema_type(
+        &self,
+        Parameters(p): Parameters<ProposeSchemaTypeParams>,
+    ) -> Result<String, String> {
+        let r = self
+            .store
+            .propose_schema_type(&p.path, &p.kind, &p.name, p.reason)
+            .map_err(|e| e.to_string())?;
+        json_string(r)
+    }
+
+    #[tool(
+        description = "Return the server schema policy, seed schema, and graph-specific proposed schema types for a path. Use this before writing when the server runs in fixed or evolving schema mode."
+    )]
+    async fn query_schema(
+        &self,
+        Parameters(p): Parameters<QuerySchemaParams>,
+    ) -> Result<String, String> {
+        let r = self
+            .store
+            .query_schema(&p.path)
+            .map_err(|e| e.to_string())?;
+        json_string(r)
+    }
 }
 
 #[tool_handler]
 impl ServerHandler for KgExtractMcp {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
-            .with_server_info(Implementation::new("kg-extract-mcp", env!("CARGO_PKG_VERSION")))
+            .with_server_info(Implementation::new(
+                "kg-extract-mcp",
+                env!("CARGO_PKG_VERSION"),
+            ))
             .with_instructions(
                 "Incremental knowledge-graph builder. Every tool takes a `path` arg; \
                  results are merged into <output>/<path>.json. Workflow: for each chunk of \
                  text, call add_entity for every entity, then add_relation between them \
                  (both endpoints must already exist), and add_attribute for extra facts. \
                  Use query_graph (view=entities/relations/neighbors) to see what is already \
-                 recorded before extending. The server stores and deduplicates; it does not \
-                 call an LLM itself.",
+                 recorded before extending. Use query_schema to inspect fixed/evolving schema \
+                 constraints; in evolving mode call propose_schema_type before using a new \
+                 entity, relation, or attribute type. The server stores and deduplicates; it \
+                 does not call an LLM itself.",
             )
     }
 }
 
 // ── CLI ──────────────────────────────────────────────────────────────────────
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+#[value(rename_all = "lowercase")]
+enum SchemaModeArg {
+    Open,
+    Fixed,
+    Evolving,
+}
+
+impl From<SchemaModeArg> for SchemaMode {
+    fn from(m: SchemaModeArg) -> Self {
+        match m {
+            SchemaModeArg::Open => SchemaMode::Open,
+            SchemaModeArg::Fixed => SchemaMode::Fixed,
+            SchemaModeArg::Evolving => SchemaMode::Evolving,
+        }
+    }
+}
 
 /// stdio MCP server for incremental knowledge-graph building.
 #[derive(Parser, Debug)]
@@ -214,6 +295,15 @@ struct Args {
     /// Output directory. Each tool call writes <output>/<path>.json.
     #[arg(short = 'o', long)]
     output: String,
+
+    /// Schema mode: open accepts any type; fixed accepts only --schema; evolving
+    /// starts from --schema and allows explicit propose_schema_type additions.
+    #[arg(long, value_enum, default_value_t = SchemaModeArg::Open)]
+    schema_mode: SchemaModeArg,
+
+    /// Schema JSON file. Required for --schema-mode fixed|evolving.
+    #[arg(long)]
+    schema: Option<String>,
 
     /// Verbose diagnostics to stderr.
     #[arg(short = 'v', long)]
@@ -254,17 +344,37 @@ fn validate_config(arg: Option<&str>) -> anyhow::Result<()> {
     Ok(())
 }
 
+fn load_schema_policy(
+    mode_arg: SchemaModeArg,
+    schema_arg: Option<&str>,
+) -> anyhow::Result<SchemaPolicy> {
+    let mode: SchemaMode = mode_arg.into();
+    let schema = match schema_arg {
+        Some(path) => Schema::from_json_file(expand_tilde(path))
+            .with_context(|| format!("loading --schema {path}"))?,
+        None => Schema::default(),
+    };
+    SchemaPolicy::new(mode, schema)
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
     validate_config(args.config.as_deref())?;
+    let policy = load_schema_policy(args.schema_mode, args.schema.as_deref())?;
 
     let output = expand_tilde(&args.output);
     std::fs::create_dir_all(&output)
         .with_context(|| format!("creating output dir {}", output.display()))?;
     if args.verbose {
-        eprintln!("kg-extract-mcp: serving stdio MCP; output dir = {}", output.display());
+        eprintln!(
+            "kg-extract-mcp: serving stdio MCP; output dir = {}; schema mode = {:?}",
+            output.display(),
+            args.schema_mode
+        );
     }
 
-    KgExtractMcp::new(KgStore::new(output)).serve_stdio().await
+    KgExtractMcp::new(KgStore::with_policy(output, policy))
+        .serve_stdio()
+        .await
 }
