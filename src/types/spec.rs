@@ -94,6 +94,16 @@ pub struct ExtractionSpec {
     /// How colliding duplicates are combined when `merge_duplicates` is set.
     #[serde(default)]
     pub merge_strategy: MergeStrategy,
+    /// An optional rich extraction *template* (preset). When set, schema-driven
+    /// extractors render their prompt from the template's guideline and output
+    /// fields (see [`crate::template`]) instead of the bare type-vocabulary,
+    /// overriding [`mode`](Self::mode)'s prompt shaping.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub template: Option<crate::template::TemplateCfg>,
+    /// Language to render a [`template`](Self::template) in. `None` uses the
+    /// template's first declared language. Ignored without a template.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<String>,
 }
 
 fn default_true() -> bool {
@@ -107,6 +117,8 @@ impl Default for ExtractionSpec {
             mode: SchemaMode::Open,
             merge_duplicates: true,
             merge_strategy: MergeStrategy::default(),
+            template: None,
+            language: None,
         }
     }
 }
@@ -121,5 +133,12 @@ impl ExtractionSpec {
     /// non-empty schema; the extractor validates this at `extract` time.)
     pub fn new(schema: Schema, mode: SchemaMode) -> Self {
         ExtractionSpec { schema, mode, ..Default::default() }
+    }
+
+    /// A spec driven by a rich [`template`](crate::template::TemplateCfg)
+    /// (preset), rendered in `lang` (`None` = the template's first declared
+    /// language). The template guides extraction regardless of [`mode`](Self::mode).
+    pub fn from_template(template: crate::template::TemplateCfg, lang: Option<String>) -> Self {
+        ExtractionSpec { template: Some(template), language: lang, ..Default::default() }
     }
 }

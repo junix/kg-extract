@@ -7,8 +7,8 @@ use crate::backend::{CompletionOptions, LlmBackend};
 use crate::graph_build::GraphBuilder;
 use crate::parser::extract_json_from_response;
 use crate::types::{
-    EntityType, ExtractionConfig, ExtractionResponse, ExtractionSpec, KnowledgeGraph, Predicate,
-    PredicateType, Schema,
+    EntityType, ExtractionConfig, ExtractionResponse, ExtractionSpec, KnowledgeGraph, MergeStrategy,
+    Predicate, PredicateType, Schema,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -59,6 +59,14 @@ impl SchemaJsonExtractor {
     }
 
     fn build_prompt(&self, text: &str) -> String {
+        // A rich template (preset), when attached, drives the prompt directly —
+        // its guideline + output fields replace the bare type-vocabulary, and the
+        // output contract stays the same JSON shape `build_graph` parses.
+        if let Some(tpl) = &self.config.spec.template {
+            let lang = tpl.resolve_lang(self.config.spec.language.as_deref());
+            return crate::template::render_prompt(tpl, &lang, text);
+        }
+
         let schema = serde_json::json!({
             "nodes": self.config.entity_types_list(),
             "relations": self.config.predicates_list(),
@@ -105,7 +113,14 @@ Ensure valid JSON output."
 
     fn build_graph(&self, data: &serde_json::Value) -> KnowledgeGraph {
         let entity_types = data.get("entity_types").and_then(|v| v.as_object());
-        let mut gb = GraphBuilder::new();
+        // Honour the configured merge strategy on same-name collisions within the
+        // response. When dedup is disabled, keep the historical first-wins.
+        let strategy = if self.config.spec.merge_duplicates {
+            self.config.spec.merge_strategy
+        } else {
+            MergeStrategy::KeepExisting
+        };
+        let mut gb = GraphBuilder::new().merge_strategy(strategy);
 
         if let Some(obj) = data.get("entities").and_then(|v| v.as_object()) {
             for (name, info) in obj {
@@ -183,7 +198,13 @@ impl Extractor for SchemaJsonExtractor {
 
         // Fixed/Evolving extract against a seed schema; constraining to (or
         // evolving from) an empty schema is the degenerate cell of the grid.
-        if self.config.spec.mode.needs_schema() && self.config.spec.schema.is_empty() {
+        // A template (preset) renders the prompt from its own guideline + fields
+        // and ignores the schema entirely, so the schema requirement doesn't
+        // apply when one is attached (`--preset X --schema-mode fixed` is valid).
+        if self.config.spec.template.is_none()
+            && self.config.spec.mode.needs_schema()
+            && self.config.spec.schema.is_empty()
+        {
             anyhow::bail!(
                 "schema mode {:?} requires a non-empty schema (seed one via \
                  ExtractionConfig::from_schema; CLI: --schema <file>), or use SchemaMode::Open",
@@ -248,6 +269,59 @@ mod tests {
         let out = ex.extract("OpenAI developed GPT-4.").await.unwrap();
         assert_eq!(out.num_entities(), 2);
         assert_eq!(out.num_triples(), 1);
+    }
+
+    #[tokio::test]
+    async fn within_response_duplicates_honor_merge_strategy() {
+        // The model emits the same entity twice (different casing) with different
+        // descriptions. The configured merge_strategy must govern how they fold —
+        // not a hardcoded first-wins.
+        let json = r#"{"entities": {
+            "OpenAI": {"type": "ORGANIZATION", "attributes": {"description": "first"}},
+            "openai": {"type": "ORGANIZATION", "attributes": {"description": "second"}}
+        }, "relationships": []}"#;
+        let desc_of = |r: &ExtractionResponse| {
+            r.knowledge_graph.entities.values().next().unwrap().description.clone()
+        };
+
+        // Default KeepExisting: first occurrence wins (historical behaviour).
+        let keep = SchemaJsonExtractor::new(Arc::new(MockBackend::single(json)))
+            .extract("OpenAI")
+            .await
+            .unwrap();
+        assert_eq!(keep.num_entities(), 1);
+        assert_eq!(desc_of(&keep).as_deref(), Some("first"));
+
+        // KeepIncoming: the later duplicate's data must replace it — proving the
+        // strategy is actually applied in the schema-json path.
+        let spec = ExtractionSpec { merge_strategy: MergeStrategy::KeepIncoming, ..Default::default() };
+        let inc = SchemaJsonExtractor::with_spec(Arc::new(MockBackend::single(json)), spec)
+            .extract("OpenAI")
+            .await
+            .unwrap();
+        assert_eq!(inc.num_entities(), 1);
+        assert_eq!(
+            desc_of(&inc).as_deref(),
+            Some("second"),
+            "merge_strategy must take effect on within-response duplicates"
+        );
+    }
+
+    #[tokio::test]
+    async fn template_extracts_under_fixed_mode_without_a_schema() {
+        // A preset drives the prompt itself, so `--schema-mode fixed` (which
+        // otherwise demands a non-empty schema) must NOT reject a template-only
+        // spec with an empty schema — the template path ignores the schema.
+        use crate::template::gallery;
+        let tpl = gallery::get("general/concept_graph").expect("concept_graph preset");
+        let spec = ExtractionSpec::from_template(tpl, Some("en".into()));
+        let json = r#"{"entities": {"Photosynthesis": {"type": "PROCESS"}}, "relationships": []}"#;
+        let out = SchemaJsonExtractor::with_spec(Arc::new(MockBackend::single(json)), spec)
+            .schema_mode(SchemaMode::Fixed)
+            .extract("Photosynthesis is a process.")
+            .await
+            .expect("template-driven extraction must succeed despite Fixed mode + empty schema");
+        assert_eq!(out.num_entities(), 1);
     }
 
     #[tokio::test]

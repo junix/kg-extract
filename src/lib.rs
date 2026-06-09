@@ -40,12 +40,14 @@ pub(crate) mod graph_build;
 pub mod mcp;
 pub mod merger;
 pub mod parser;
+pub mod template;
 pub mod types;
 
 // Re-exports for ergonomic top-level use.
 pub use extractor::{
     Extractor, SchemaJsonExtractor, SchemaMode, SimpleExtractor, ToolCallExtractor,
 };
+pub use template::{render_prompt, TemplateCfg};
 pub use types::{
     ChunkStrategy, Entity, EntityType, ExtractionConfig, ExtractionResponse, ExtractionSpec,
     KnowledgeGraph, Predicate, PredicateType, Schema, Triple,

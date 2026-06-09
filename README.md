@@ -135,6 +135,44 @@ let via_json = SchemaJsonExtractor::with_spec(sj_backend, spec.clone());
 let via_tools = ToolCallExtractor::with_spec(tool_backend, spec);  // same contract, different mechanism
 ```
 
+## Presets (rich templates)
+
+A flat `Schema` is only a type-vocabulary. A **preset** (template) is the richer
+alternative: a multilingual (`zh`/`en`) description of the extraction target —
+output field structure, a `guideline` (target persona + extraction rules), plus
+identifier/display conventions. The crate ships a gallery of 37 presets across
+six domains (`general` / `finance` / `legal` / `medicine` / `industry` / `tcm`),
+**embedded into the binary** from `presets/**/*.yaml` (`include_dir`), so they
+load by name with no external files. You can also bring your own template file in
+the same YAML format.
+
+When a preset is attached, the schema-driven prompt is rendered from the
+template's guideline and fields (the [`template`](src/template) module), while
+the output stays the same JSON contract the graph builder already parses — so the
+template steers *what* is extracted, not the wire format.
+
+```bash
+# List the bundled presets (key  [type]  description)
+kg-extract --list-presets
+
+# Extract with a bundled preset (routes through the schema-json engine).
+# Key is {domain}/{name}; a bare name resolves under general/.
+kg-extract --preset general/concept_graph --lang en -b agent --agent minimaxcc -f doc.txt
+kg-extract --preset graph -f doc.txt                      # == general/graph
+
+# Bring your own template YAML (takes precedence over --preset)
+kg-extract --preset-file my_template.yaml --lang zh -f doc.txt
+```
+
+```rust
+use kg_extract::template::{gallery, TemplateCfg};
+use kg_extract::{ExtractionSpec, SchemaJsonExtractor};
+
+let tpl = gallery::get("general/concept_graph").unwrap();         // or TemplateCfg::from_yaml_file(path)
+let spec = ExtractionSpec::from_template(tpl, Some("en".into())); // None = template's first language
+let extractor = SchemaJsonExtractor::with_spec(backend, spec);
+```
+
 ## Tool-calling mode
 
 `ToolCallExtractor` exposes typed tools and lets the model **call** them instead
@@ -224,6 +262,10 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 | `-m, --model` | override the engine's default model |
 | `--schema-mode` | schema-json/toolcall: `open` (default) \| `fixed` \| `evolving` |
 | `--schema` | schema-json/toolcall schema JSON file (required for `fixed`/`evolving`) |
+| `--preset` | bundled preset by key (`general/concept_graph`, or bare `graph`); routes through schema-json |
+| `--preset-file` | your own template YAML (takes precedence over `--preset`) |
+| `--lang` | language to render the preset/template (`zh` \| `en` \| …; default = template's first) |
+| `--list-presets` | print the bundled presets and exit |
 | `--max-rounds` | tool-call rounds (1 = single-round, default) |
 | `-o, --output` | `json` (default) \| `node-link` \| `mermaid` \| `stats` |
 

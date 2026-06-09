@@ -6,6 +6,7 @@
 use crate::types::{Entity, EntityType, ParsedResult, Predicate, PredicateType, Triple};
 use regex::Regex;
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 /// Parse an LLM response into a [`ParsedResult`] (entities + relationship tuples).
 pub fn parse_llm_response(response_text: &str) -> ParsedResult {
@@ -71,13 +72,19 @@ pub struct EntityInfo {
 /// Try to pull a JSON object out of an LLM response: ```json fence, ``` fence,
 /// then the whole string.
 pub fn extract_json_from_response(text: &str) -> Option<serde_json::Value> {
-    let json_fence = Regex::new(r"(?s)```json\s*(.*?)```").unwrap();
+    // These regexes are compiled once and reused: `extract_json_from_response`
+    // runs on every LLM response (and concurrently across chunks), so building
+    // them per call is wasted work in the hot path.
+    static JSON_FENCE: OnceLock<Regex> = OnceLock::new();
+    static ANY_FENCE: OnceLock<Regex> = OnceLock::new();
+
+    let json_fence = JSON_FENCE.get_or_init(|| Regex::new(r"(?s)```json\s*(.*?)```").unwrap());
     if let Some(c) = json_fence.captures(text) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(c[1].trim()) {
             return Some(v);
         }
     }
-    let any_fence = Regex::new(r"(?s)```\s*(.*?)```").unwrap();
+    let any_fence = ANY_FENCE.get_or_init(|| Regex::new(r"(?s)```\s*(.*?)```").unwrap());
     if let Some(c) = any_fence.captures(text) {
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(c[1].trim()) {
             return Some(v);

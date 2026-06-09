@@ -23,7 +23,9 @@ use crate::backend::{
 };
 use crate::graph_build::{build_predicate, parse_entity_type, GraphBuilder};
 use crate::merger::dedup_graph;
-use crate::types::{ExtractionConfig, ExtractionResponse, ExtractionSpec, KnowledgeGraph, Schema};
+use crate::types::{
+    ExtractionConfig, ExtractionResponse, ExtractionSpec, KnowledgeGraph, MergeStrategy, Schema,
+};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -286,9 +288,16 @@ impl ToolCallExtractor {
     }
 
     fn build_graph(&self, acc: &Accumulator) -> KnowledgeGraph {
-        let mut gb = GraphBuilder::new();
+        // Honour the configured merge strategy on same-name collisions; the
+        // post-build `dedup_graph` only matters for the LLM (async) path.
+        let strategy = if self.config.spec.merge_duplicates {
+            self.config.spec.merge_strategy
+        } else {
+            MergeStrategy::KeepExisting
+        };
+        let mut gb = GraphBuilder::new().merge_strategy(strategy);
 
-        // Entities: deduped by lowercased name (first occurrence wins).
+        // Entities: deduped by lowercased name, combined per the strategy above.
         for draft in &acc.entities {
             gb.add_entity(
                 &draft.name,

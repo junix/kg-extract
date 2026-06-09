@@ -19,6 +19,7 @@ use kg_extract::backend::{AgentCli, AgentCliBackend, LlmBackend, MockBackend, Pi
 use kg_extract::extractor::{
     Extractor, SchemaMode, SimpleExtractor, ToolCallExtractor, SchemaJsonExtractor,
 };
+use kg_extract::template::{gallery, TemplateCfg};
 use kg_extract::types::{ChunkStrategy, MergeStrategy, Schema};
 
 #[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
@@ -123,6 +124,9 @@ struct FileConfig {
     chunker: Option<Chunker>,
     schema_mode: Option<SchemaModeArg>,
     schema: Option<String>,
+    preset: Option<String>,
+    preset_file: Option<String>,
+    lang: Option<String>,
     max_rounds: Option<usize>,
     merge_strategy: Option<MergeStrategyArg>,
     max_concurrency: Option<usize>,
@@ -174,6 +178,27 @@ struct Args {
     #[arg(long)]
     schema: Option<String>,
 
+    /// Built-in extraction preset (rich template) by name, e.g.
+    /// `general/concept_graph`, `finance/event_timeline`, or a bare `graph`
+    /// (resolved under `general/`). Routes through the schema-json engine and
+    /// drives the prompt from the preset's guideline + fields. See --list-presets.
+    #[arg(long)]
+    preset: Option<String>,
+
+    /// Path to your own template YAML (same format as the built-in presets).
+    /// Takes precedence over --preset.
+    #[arg(long)]
+    preset_file: Option<String>,
+
+    /// Language to render the preset/template in (e.g. `zh`, `en`). Defaults to
+    /// the template's first declared language.
+    #[arg(long)]
+    lang: Option<String>,
+
+    /// List the bundled presets (key + description) and exit.
+    #[arg(long)]
+    list_presets: bool,
+
     /// Tool-call engine: max tool-calling rounds (1 = single-round collection).
     #[arg(long, default_value_t = 1)]
     max_rounds: usize,
@@ -205,6 +230,9 @@ struct Resolved {
     chunker: Chunker,
     schema_mode: SchemaModeArg,
     schema: Option<String>,
+    preset: Option<String>,
+    preset_file: Option<String>,
+    lang: Option<String>,
     max_rounds: usize,
     merge_strategy: MergeStrategyArg,
     max_concurrency: usize,
@@ -283,6 +311,22 @@ fn resolve(m: &ArgMatches, args: &Args, cfg: FileConfig) -> Resolved {
         } else {
             cfg.schema.clone().or_else(|| args.schema.clone())
         },
+        // preset / preset_file / lang have no built-in default: CLI > config > None.
+        preset: if m.value_source("preset") == Some(ValueSource::CommandLine) {
+            args.preset.clone()
+        } else {
+            cfg.preset.clone().or_else(|| args.preset.clone())
+        },
+        preset_file: if m.value_source("preset_file") == Some(ValueSource::CommandLine) {
+            args.preset_file.clone()
+        } else {
+            cfg.preset_file.clone().or_else(|| args.preset_file.clone())
+        },
+        lang: if m.value_source("lang") == Some(ValueSource::CommandLine) {
+            args.lang.clone()
+        } else {
+            cfg.lang.clone().or_else(|| args.lang.clone())
+        },
         max_rounds: pick(m, "max_rounds", args.max_rounds, cfg.max_rounds),
         merge_strategy: pick(m, "merge_strategy", args.merge_strategy, cfg.merge_strategy),
         max_concurrency: pick(m, "max_concurrency", args.max_concurrency, cfg.max_concurrency),
@@ -341,13 +385,58 @@ fn make_backend(
     }
 }
 
+/// Resolve a rich template from `--preset-file` (a user YAML, takes precedence)
+/// or `--preset` (a bundled preset key). Returns `None` when neither is set.
+fn load_template(cfg: &Resolved) -> anyhow::Result<Option<TemplateCfg>> {
+    if let Some(path) = &cfg.preset_file {
+        let tpl = TemplateCfg::from_yaml_file(expand_tilde(path))?;
+        return Ok(Some(tpl));
+    }
+    if let Some(name) = &cfg.preset {
+        let tpl = gallery::get(name).ok_or_else(|| {
+            anyhow::anyhow!(
+                "unknown preset '{name}'. Run with --list-presets to see the {} available.",
+                gallery::list().len()
+            )
+        })?;
+        return Ok(Some(tpl));
+    }
+    Ok(None)
+}
+
+/// Print the bundled presets (`key  [type]  description`) to stdout.
+fn print_presets() {
+    for p in gallery::list() {
+        let lang = p.template.language.first();
+        println!(
+            "{:<34} [{}]  {}",
+            p.key,
+            p.template.autotype.as_str(),
+            p.template.describe(&lang)
+        );
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let matches = Args::command().get_matches();
     let args = Args::from_arg_matches(&matches)?;
 
+    if args.list_presets {
+        print_presets();
+        return Ok(());
+    }
+
     let file_cfg = load_config(args.config.as_deref())?;
-    let cfg = resolve(&matches, &args, file_cfg);
+    let mut cfg = resolve(&matches, &args, file_cfg);
+
+    // A preset/template (rich, prompt-driving) is only honoured by the schema-json
+    // engine, which emits the JSON contract it produces. Load it and route there.
+    let template = load_template(&cfg)?;
+    if template.is_some() && !matches!(cfg.engine, Engine::SchemaJson) {
+        eprintln!("note: --preset/--preset-file routes through the schema-json engine");
+        cfg.engine = Engine::SchemaJson;
+    }
 
     let text = read_input(&args.file)?;
     if text.trim().is_empty() {
@@ -376,6 +465,10 @@ async fn main() -> anyhow::Result<()> {
             if let Some(path) = &cfg.schema {
                 c.spec.schema = Schema::from_json_file(expand_tilde(path))
                     .with_context(|| format!("loading --schema {path}"))?;
+            }
+            if let Some(tpl) = template {
+                c.spec.language = cfg.lang.clone();
+                c.spec.template = Some(tpl);
             }
             SchemaJsonExtractor::with_config(backend, c)
                 .schema_mode(cfg.schema_mode.into())

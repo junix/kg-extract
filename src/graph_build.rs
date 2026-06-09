@@ -12,7 +12,10 @@
 //!   keeps its own fallback semantics (SchemaJson's strict `PhysicalObject`/`RelatedTo`
 //!   fallback differs from `from_loose`).
 
-use crate::types::{Entity, EntityType, KnowledgeGraph, Predicate, PredicateType, Triple};
+use crate::merger::combine_entities;
+use crate::types::{
+    Entity, EntityType, KnowledgeGraph, MergeStrategy, Predicate, PredicateType, Triple,
+};
 use std::collections::HashMap;
 
 /// Deterministic id for an entity name: `entity_<md5(name)[..8]>`.
@@ -51,7 +54,9 @@ pub(crate) fn build_predicate(s: &str) -> Predicate {
 /// Accumulates entities and resolves relationships by name into a
 /// [`KnowledgeGraph`].
 ///
-/// Entities are deduped by lowercased name (first occurrence wins); relationship
+/// Entities are deduped by lowercased name; how a same-name collision combines
+/// the two is governed by [`merge_strategy`](Self::merge_strategy) (default
+/// [`MergeStrategy::KeepExisting`] — first occurrence wins). Relationship
 /// endpoints are resolved case-insensitively and dropped if either side is
 /// unknown. The caller supplies already-parsed [`EntityType`]/[`Predicate`]
 /// values, so each extractor controls its own type-fallback behaviour.
@@ -59,6 +64,7 @@ pub(crate) fn build_predicate(s: &str) -> Predicate {
 pub(crate) struct GraphBuilder {
     kg: KnowledgeGraph,
     by_name: HashMap<String, String>, // lowercased name -> entity id
+    strategy: MergeStrategy,
 }
 
 impl GraphBuilder {
@@ -66,8 +72,18 @@ impl GraphBuilder {
         Self::default()
     }
 
-    /// Add an entity, deduped by lowercased name (first occurrence wins).
-    /// Returns the entity's id (existing or freshly minted).
+    /// How a same-name (lowercased) collision is combined. `KeepExisting` (the
+    /// default) keeps the first occurrence; `KeepIncoming`/`FieldUnion` fold in
+    /// the later one. `Llm` behaves as `FieldUnion` here (the synchronous build
+    /// path makes no LLM calls; cross-segment LLM synthesis lives in the merger).
+    pub(crate) fn merge_strategy(mut self, strategy: MergeStrategy) -> Self {
+        self.strategy = strategy;
+        self
+    }
+
+    /// Add an entity, deduped by lowercased name. On a collision the existing
+    /// entity is combined with the incoming one per [`Self::merge_strategy`]
+    /// (keeping the existing id stable). Returns the entity's id.
     pub(crate) fn add_entity(
         &mut self,
         name: &str,
@@ -76,8 +92,19 @@ impl GraphBuilder {
         attributes: HashMap<String, serde_json::Value>,
     ) -> String {
         let key = name.to_lowercase();
-        if let Some(id) = self.by_name.get(&key) {
-            return id.clone();
+        if let Some(id) = self.by_name.get(&key).cloned() {
+            // Same entity seen again: combine per strategy. `KeepExisting` is a
+            // pure no-op (the historical first-wins behaviour), so skip the work.
+            if self.strategy != MergeStrategy::KeepExisting {
+                if let Some(existing) = self.kg.entities.get(&id).cloned() {
+                    let mut incoming = Entity::new(id.clone(), name, entity_type);
+                    incoming.description = description;
+                    incoming.metadata = attributes;
+                    let merged = combine_entities(self.strategy, &existing, &incoming, None);
+                    self.kg.entities.insert(id.clone(), merged);
+                }
+            }
+            return id;
         }
         let id = entity_id(name);
         let mut entity = Entity::new(id.clone(), name, entity_type);
