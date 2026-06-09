@@ -39,6 +39,9 @@ fn resolve_appends_json_and_rejects_escape() {
     assert!(s.resolve("a/../../b").is_err());
     assert!(s.resolve("").is_err());
     assert!(s.resolve("/").is_err());
+    // Absolute paths are rejected (per the doc), not silently made relative.
+    assert!(s.resolve("/etc/graph").is_err(), "absolute unix path must be rejected");
+    assert!(s.resolve("\\abs\\path").is_err(), "absolute windows-style path must be rejected");
 }
 
 #[test]

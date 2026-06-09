@@ -69,6 +69,11 @@ impl KgStore {
         if rel.is_empty() {
             anyhow::bail!("path must not be empty");
         }
+        // Reject absolute paths outright (the doc contract), rather than silently
+        // stripping the leading separator and treating them as relative.
+        if rel.starts_with('/') || rel.starts_with('\\') {
+            anyhow::bail!("path must be relative, not absolute: {rel}");
+        }
         let stem = rel.strip_suffix(".json").unwrap_or(rel);
         let mut out = self.output.clone();
         let mut pushed = 0usize;
