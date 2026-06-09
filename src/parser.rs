@@ -25,7 +25,7 @@ pub fn parse_llm_response(response_text: &str) -> ParsedResult {
         }
     };
 
-    let (entities, relationships) = parse_entities_and_triples(&json_data);
+    let (entity_info, relationships) = parse_entities_and_triples(&json_data);
     let mut meta = HashMap::new();
     meta.insert("raw_json".into(), json_data.clone());
 
@@ -35,22 +35,22 @@ pub fn parse_llm_response(response_text: &str) -> ParsedResult {
         .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
         .unwrap_or_default();
 
-    // Store raw parsed entity-info so create_entities_from_parsed can build Entity objects.
-    let entities_raw: HashMap<String, Entity> = HashMap::new(); // filled later by create_entities_from_parsed
-    let _ = &entities; // entities here is the raw info map, kept in metadata
+    // Build the Entity objects up front so `ParsedResult.entities` is actually
+    // populated (it was previously always empty). The raw info dict is still
+    // kept in metadata for callers that want the pre-mapping form.
+    let entities = create_entities_from_parsed(&entity_info);
 
     let mut pr = ParsedResult {
         raw_response: response_text.to_string(),
         entities_and_triples,
-        entities: entities_raw,
+        entities,
         relationships,
         triples: Vec::new(),
         metadata: meta,
     };
-    // Stash the raw entity-info dict for the downstream builder.
     pr.metadata.insert(
         "entities_info".into(),
-        serde_json::to_value(&entities).unwrap_or(serde_json::Value::Null),
+        serde_json::to_value(&entity_info).unwrap_or(serde_json::Value::Null),
     );
     pr
 }
@@ -302,6 +302,18 @@ mod tests {
         let triples = create_triples_from_parsed(&pr.relationships, &entities);
         assert_eq!(triples.len(), 1);
         assert_eq!(triples[0].predicate.predicate_type, PredicateType::Uses);
+    }
+
+    #[test]
+    fn parse_llm_response_populates_entities() {
+        // `ParsedResult.entities` must contain built Entity objects, not be empty.
+        let resp = r#"```json
+        {"entities": {"e1": {"label": "GPT-4", "type": "technology"}}, "relationships": []}
+        ```"#;
+        let pr = parse_llm_response(resp);
+        assert!(!pr.entities.is_empty(), "entities must be populated");
+        assert_eq!(pr.entities["e1"].label, "GPT-4");
+        assert_eq!(pr.entities["e1"].entity_type, EntityType::Technology);
     }
 
     #[test]
