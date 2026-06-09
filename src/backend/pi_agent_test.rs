@@ -86,6 +86,35 @@ fn empty_output_is_an_error() {
 }
 
 #[test]
+fn empty_assistant_message_does_not_mask_a_provider_error() {
+    // Real pi-agent shape on an HTTP 404: error, then an EMPTY assistant_message,
+    // then agent_end ok:true. The empty answer must not swallow the 404.
+    let stdout = concat!(
+        r#"{"cwd":"/x","model":"MiniMax-M3-highspeed","type":"agent_start"}"#,
+        "\n",
+        r#"{"message":"http 404 Not Found: model `MiniMax-M3-highspeed` does not exist","type":"error"}"#,
+        "\n",
+        r#"{"text":"","type":"assistant_message"}"#,
+        "\n",
+        r#"{"ok":true,"type":"agent_end"}"#,
+        "\n",
+    );
+    let err = extract_assistant_text(stdout).unwrap_err().to_string();
+    assert!(err.contains("404"), "{err}");
+}
+
+#[test]
+fn explicit_empty_message_without_error_is_ok_empty() {
+    let stdout = concat!(
+        r#"{"type":"assistant_message","text":""}"#,
+        "\n",
+        r#"{"type":"agent_end","ok":true}"#,
+        "\n",
+    );
+    assert_eq!(extract_assistant_text(stdout).unwrap(), "");
+}
+
+#[test]
 fn final_message_wins_over_earlier_error() {
     // A run that recovered: an error record appeared but a final answer followed.
     let stdout = concat!(

@@ -130,7 +130,7 @@ Ensure valid JSON output."
 
         if let Some(obj) = entity_data {
             for (name, info) in obj {
-                let id = format!("entity_{}", nanoid::nanoid!(8));
+                let id = entity_id(name);
                 let (type_str, attributes) = if let Some(io) = info.as_object() {
                     let t = io
                         .get("type")
@@ -259,6 +259,13 @@ impl Extractor for YoutuExtractor {
     }
 }
 
+/// Stable id for an entity name, matching simple.rs / toolcall.rs / mcp.rs so
+/// Youtu output is deterministic and interoperable (id == `entity_<md5(name)[..8]>`).
+fn entity_id(name: &str) -> String {
+    let digest = format!("{:x}", md5::compute(name.as_bytes()));
+    format!("entity_{}", &digest[..8])
+}
+
 /// Assign `community_id` to each entity via label propagation on the undirected
 /// projection of the graph (dependency-free analogue of networkx greedy
 /// modularity communities).
@@ -335,6 +342,27 @@ mod tests {
         for e in out.knowledge_graph.entities.values() {
             assert!(e.metadata.contains_key("community_id"));
         }
+    }
+
+    #[tokio::test]
+    async fn entity_ids_are_deterministic_md5() {
+        let json = r#"{"entities": {"OpenAI": {"type": "ORGANIZATION"}}, "relationships": []}"#;
+        let a = YoutuExtractor::new(Arc::new(MockBackend::single(json)))
+            .extract("text")
+            .await
+            .unwrap();
+        let b = YoutuExtractor::new(Arc::new(MockBackend::single(json)))
+            .extract("text")
+            .await
+            .unwrap();
+        let ka: Vec<&String> = a.knowledge_graph.entities.keys().collect();
+        let kb: Vec<&String> = b.knowledge_graph.entities.keys().collect();
+        assert_eq!(ka, kb, "Youtu entity ids must be deterministic across runs");
+        let expected = entity_id("OpenAI");
+        assert!(
+            a.knowledge_graph.entities.contains_key(&expected),
+            "id must follow the shared md5(name) scheme"
+        );
     }
 
     #[tokio::test]

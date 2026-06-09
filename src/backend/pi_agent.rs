@@ -134,10 +134,15 @@ impl LlmBackend for PiAgentBackend {
 /// final assistant answer.
 ///
 /// Priority:
-///   1. the last `{"type":"assistant_message","text":…}` record;
-///   2. otherwise the concatenation of `{"type":"assistant_text_delta","delta":…}`;
-///   3. an `{"type":"error","message":…}` (or `agent_end` with `ok:false`) record
-///      is surfaced as an error when no answer text was produced.
+///   1. a **non-empty** `{"type":"assistant_message","text":…}` record (covers
+///      error-then-recovery within one run);
+///   2. an `{"type":"error","message":…}` (or `agent_end` with `ok:false`)
+///      record — surfaced as an error. This must outrank an *empty*
+///      assistant_message: when a provider call fails mid-stream (e.g. an HTTP
+///      404), pi-agent still emits `{"text":"","type":"assistant_message"}` then
+///      `agent_end ok:true`, so an empty answer must not mask the real error;
+///   3. otherwise the concatenation of `{"type":"assistant_text_delta","delta":…}`;
+///   4. an explicit but empty assistant_message with no error → `Ok("")`.
 ///
 /// Lines that aren't JSON are ignored — pi-agent writes diagnostics to stderr,
 /// but be lenient about stray stdout noise.
@@ -181,14 +186,24 @@ fn extract_assistant_text(stdout: &str) -> anyhow::Result<String> {
         }
     }
 
-    if let Some(text) = final_text {
-        return Ok(text);
+    // A non-empty final answer wins outright (covers error-then-recovery).
+    if let Some(text) = final_text.as_deref() {
+        if !text.is_empty() {
+            return Ok(text.to_string());
+        }
     }
+    // No usable answer text: surface any error rather than let an empty
+    // assistant_message (emitted after a failed provider call) mask it.
     if let Some(message) = error {
         anyhow::bail!("pi-agent error: {message}");
     }
+    // Streaming-only output with no final message.
     if !deltas.is_empty() {
         return Ok(deltas);
+    }
+    // The agent ran and explicitly produced empty output (no error reported).
+    if final_text.is_some() {
+        return Ok(String::new());
     }
     anyhow::bail!("pi-agent produced no assistant_message in its --stream-json output")
 }
