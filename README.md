@@ -115,6 +115,27 @@ kg-extract -e youtu    --schema-mode fixed    --schema schema.json -f doc.txt
 kg-extract -e toolcall --schema-mode evolving --schema schema.json -f doc.txt
 ```
 
+### Spec vs execution
+
+The schema, mode and dedup policy together form an `ExtractionSpec` — the
+declarative *what*, separate from *execution* (model, chunking, segmentation).
+`ExtractionConfig` embeds one (`config.spec`), so the two layers are explicit in
+the types. The spec is serializable and reusable: **define it once and run it
+through either engine** via `with_spec`:
+
+```rust
+use kg_extract::ExtractionSpec;
+use kg_extract::extractor::{SchemaMode, ToolCallExtractor, YoutuExtractor};
+use kg_extract::types::Schema;
+
+let spec = ExtractionSpec::new(
+    Schema::new(vec!["PERSON".into()], vec!["WORKS_AT".into()], vec![]),
+    SchemaMode::Fixed,
+);
+let via_youtu = YoutuExtractor::with_spec(youtu_backend, spec.clone());
+let via_tools = ToolCallExtractor::with_spec(tool_backend, spec);  // same contract, different mechanism
+```
+
 ## Tool-calling mode
 
 `ToolCallExtractor` exposes typed tools and lets the model **call** them instead

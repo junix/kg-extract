@@ -341,7 +341,7 @@ async fn main() -> anyhow::Result<()> {
                 c.model_name = m.clone();
             }
             if let Some(path) = &cfg.schema {
-                c.extraction_schema = Schema::from_json_file(expand_tilde(path))
+                c.spec.schema = Schema::from_json_file(expand_tilde(path))
                     .with_context(|| format!("loading --schema {path}"))?;
             }
             YoutuExtractor::with_config(backend, c)
@@ -356,7 +356,7 @@ async fn main() -> anyhow::Result<()> {
                 c.model_name = m.clone();
             }
             if let Some(path) = &cfg.schema {
-                c.extraction_schema = Schema::from_json_file(expand_tilde(path))
+                c.spec.schema = Schema::from_json_file(expand_tilde(path))
                     .with_context(|| format!("loading --schema {path}"))?;
             }
             ToolCallExtractor::with_config(backend, c)

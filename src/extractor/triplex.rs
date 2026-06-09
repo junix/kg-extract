@@ -149,7 +149,7 @@ impl Extractor for TriplexExtractor {
         // label dedup could run. merge_with_deduplication instead mints a fresh
         // id on an id-collision-with-different-label and remaps that segment's
         // triples onto it, so no entity is lost and relations stay attributed.
-        let merged = if self.config.merge_duplicates {
+        let merged = if self.config.spec.merge_duplicates {
             graphs
                 .into_iter()
                 .fold(KnowledgeGraph::new(), |acc, g| merge_knowledge_graphs(acc, g, true))

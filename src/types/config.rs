@@ -5,6 +5,7 @@ use super::entity::{default_entity_types, Entity};
 use super::graph::{KnowledgeGraph, Triple};
 use super::predicate::default_predicates;
 use super::schema::Schema;
+use super::spec::{ExtractionSpec, SchemaMode};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -22,17 +23,19 @@ pub enum ChunkStrategy {
 }
 
 /// Configuration for knowledge graph extraction.
+///
+/// Two layers: the declarative [`ExtractionSpec`] (the *what* — schema, mode,
+/// dedup policy) and the execution params (the *how* — model, chunking,
+/// segmentation).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtractionConfig {
-    #[serde(rename = "schema", default)]
-    pub extraction_schema: Schema,
+    /// The declarative extraction contract (schema / mode / dedup).
+    #[serde(default)]
+    pub spec: ExtractionSpec,
     pub segment_size: usize,
     pub overlap: usize,
     pub model_name: String,
     pub min_segment_size: usize,
-    pub merge_duplicates: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub confidence_threshold: Option<f64>,
     #[serde(default)]
     pub chunker: ChunkStrategy,
 }
@@ -46,13 +49,11 @@ impl Default for ExtractionConfig {
             Vec::new(),
         );
         ExtractionConfig {
-            extraction_schema: schema,
+            spec: ExtractionSpec { schema, mode: SchemaMode::Open, merge_duplicates: true },
             segment_size: 3000,
             overlap: 200,
             model_name: "sciphi/triplex:latest".to_string(),
             min_segment_size: 100,
-            merge_duplicates: true,
-            confidence_threshold: None,
             chunker: ChunkStrategy::default(),
         }
     }
@@ -62,7 +63,7 @@ impl ExtractionConfig {
     /// Build from an explicit schema (the empty schema is left as-is rather than
     /// seeded with defaults — mirrors `ExtractionConfig.from_schema`).
     pub fn from_schema(schema: Schema) -> Self {
-        ExtractionConfig { extraction_schema: schema, ..Default::default() }
+        ExtractionConfig { spec: ExtractionSpec { schema, ..Default::default() }, ..Default::default() }
     }
 
     /// Build from legacy entity/predicate string lists (`from_legacy`).
@@ -70,14 +71,19 @@ impl ExtractionConfig {
         ExtractionConfig::from_schema(Schema::new(entity_types, predicates, Vec::new()))
     }
 
+    /// Build with the given declarative spec and default execution params.
+    pub fn from_spec(spec: ExtractionSpec) -> Self {
+        ExtractionConfig { spec, ..Default::default() }
+    }
+
     pub fn entity_types_list(&self) -> &[String] {
-        &self.extraction_schema.nodes
+        &self.spec.schema.nodes
     }
     pub fn predicates_list(&self) -> &[String] {
-        &self.extraction_schema.relations
+        &self.spec.schema.relations
     }
     pub fn attributes_list(&self) -> &[String] {
-        &self.extraction_schema.attributes
+        &self.spec.schema.attributes
     }
 }
 

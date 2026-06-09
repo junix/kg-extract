@@ -50,6 +50,6 @@ pub use extractor::{
     Extractor, SchemaMode, SimpleExtractor, ToolCallExtractor, TriplexExtractor, YoutuExtractor,
 };
 pub use types::{
-    ChunkStrategy, Entity, EntityType, ExtractionConfig, ExtractionResponse, KnowledgeGraph,
-    Predicate, PredicateType, Schema, Triple,
+    ChunkStrategy, Entity, EntityType, ExtractionConfig, ExtractionResponse, ExtractionSpec,
+    KnowledgeGraph, Predicate, PredicateType, Schema, Triple,
 };

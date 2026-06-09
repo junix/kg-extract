@@ -7,8 +7,8 @@ use crate::backend::{CompletionOptions, LlmBackend};
 use crate::graph_build::GraphBuilder;
 use crate::parser::extract_json_from_response;
 use crate::types::{
-    EntityType, ExtractionConfig, ExtractionResponse, KnowledgeGraph, Predicate, PredicateType,
-    Schema,
+    EntityType, ExtractionConfig, ExtractionResponse, ExtractionSpec, KnowledgeGraph, Predicate,
+    PredicateType, Schema,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,7 +17,6 @@ use std::sync::Arc;
 pub struct YoutuExtractor {
     backend: Arc<dyn LlmBackend>,
     config: ExtractionConfig,
-    pub schema_mode: SchemaMode,
     pub quiet: bool,
 }
 
@@ -25,7 +24,7 @@ impl YoutuExtractor {
     pub fn default_config() -> ExtractionConfig {
         // Youtu base config starts from an EMPTY schema (no default seeding).
         ExtractionConfig {
-            extraction_schema: Schema::default(),
+            spec: ExtractionSpec { schema: Schema::default(), ..Default::default() },
             model_name: "qwen-max".into(),
             segment_size: 3000,
             min_segment_size: 100,
@@ -34,25 +33,24 @@ impl YoutuExtractor {
     }
 
     pub fn new(backend: Arc<dyn LlmBackend>) -> Self {
-        YoutuExtractor {
-            backend,
-            config: Self::default_config(),
-            schema_mode: SchemaMode::Open,
-            quiet: false,
-        }
+        YoutuExtractor { backend, config: Self::default_config(), quiet: false }
     }
 
     pub fn with_config(backend: Arc<dyn LlmBackend>, config: ExtractionConfig) -> Self {
-        YoutuExtractor {
-            backend,
-            config,
-            schema_mode: SchemaMode::Open,
-            quiet: false,
-        }
+        YoutuExtractor { backend, config, quiet: false }
+    }
+
+    /// Build from a declarative [`ExtractionSpec`] with Youtu's default execution
+    /// params. Run the *same* spec through [`ToolCallExtractor::with_spec`] to
+    /// compare mechanisms.
+    pub fn with_spec(backend: Arc<dyn LlmBackend>, spec: ExtractionSpec) -> Self {
+        let mut config = Self::default_config();
+        config.spec = spec;
+        Self::with_config(backend, config)
     }
 
     pub fn schema_mode(mut self, mode: SchemaMode) -> Self {
-        self.schema_mode = mode;
+        self.config.spec.mode = mode;
         self
     }
 
@@ -68,7 +66,7 @@ impl YoutuExtractor {
         });
         let schema_json = serde_json::to_string(&schema).unwrap_or_default();
 
-        match self.schema_mode {
+        match self.config.spec.mode {
             SchemaMode::Open => format!(
                 "Extract entities and relationships from the following text.\n\
 No predefined schema is given — infer suitable entity types and relation types from the content.\n\n\
@@ -185,11 +183,11 @@ impl Extractor for YoutuExtractor {
 
         // Fixed/Evolving extract against a seed schema; constraining to (or
         // evolving from) an empty schema is the degenerate cell of the grid.
-        if self.schema_mode.needs_schema() && self.config.extraction_schema.is_empty() {
+        if self.config.spec.mode.needs_schema() && self.config.spec.schema.is_empty() {
             anyhow::bail!(
                 "schema mode {:?} requires a non-empty schema (seed one via \
                  ExtractionConfig::from_schema; CLI: --schema <file>), or use SchemaMode::Open",
-                self.schema_mode
+                self.config.spec.mode
             );
         }
 
@@ -217,7 +215,7 @@ impl Extractor for YoutuExtractor {
         let mut resp = ExtractionResponse::new(kg);
         resp.metadata.insert("model".into(), serde_json::json!(self.config.model_name));
         resp.metadata.insert("mode".into(), serde_json::json!("youtu"));
-        resp.metadata.insert("schema_mode".into(), serde_json::json!(self.schema_mode.as_str()));
+        resp.metadata.insert("schema_mode".into(), serde_json::json!(self.config.spec.mode.as_str()));
         resp.metadata.insert(
             "schema_used".into(),
             serde_json::json!({
@@ -327,5 +325,24 @@ mod tests {
             .extract("text")
             .await;
         assert!(err.is_err(), "Fixed mode with an empty schema must error");
+    }
+
+    #[test]
+    fn one_spec_runs_through_both_engines() {
+        use crate::extractor::ToolCallExtractor;
+        // A single declarative spec configures either mechanism (with_spec) —
+        // the spec/execution split: define the contract once, pick the executor.
+        let spec = ExtractionSpec::new(
+            Schema::new(vec!["ORGANIZATION".into()], vec!["DEVELOPED_BY".into()], vec![]),
+            SchemaMode::Fixed,
+        );
+        let youtu = YoutuExtractor::with_spec(Arc::new(MockBackend::single("{}")), spec.clone());
+        let tool = ToolCallExtractor::with_spec(Arc::new(MockBackend::single("{}")), spec.clone());
+        assert_eq!(youtu.config().spec, spec, "Youtu must carry the spec verbatim");
+        assert_eq!(tool.config().spec, spec, "ToolCall must carry the same spec");
+        // Execution params stay engine-specific (both default to qwen-max here,
+        // but the segment sizes differ: 3000 vs 5000).
+        assert_eq!(youtu.config().segment_size, 3000);
+        assert_eq!(tool.config().segment_size, 5000);
     }
 }

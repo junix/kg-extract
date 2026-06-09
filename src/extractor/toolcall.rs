@@ -23,7 +23,7 @@ use crate::backend::{
 };
 use crate::graph_build::{build_predicate, parse_entity_type, GraphBuilder};
 use crate::merger::merge_knowledge_graphs;
-use crate::types::{ExtractionConfig, ExtractionResponse, KnowledgeGraph, Schema};
+use crate::types::{ExtractionConfig, ExtractionResponse, ExtractionSpec, KnowledgeGraph, Schema};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -33,10 +33,6 @@ const SYSTEM_PROMPT: &str = "You are a knowledge-graph extraction engine. Read t
 pub struct ToolCallExtractor {
     backend: Arc<dyn LlmBackend>,
     config: ExtractionConfig,
-    /// Schema constraint mode: `Open` (no enum, model names types freely) /
-    /// `Fixed` (enum-constrain tool args to the seeded schema) / `Evolving`
-    /// (no enum, but records `propose_schema_type` calls into `new_schema_types`).
-    pub schema_mode: SchemaMode,
     /// Max tool-calling rounds. 1 = single-round collection (default).
     pub max_rounds: usize,
     pub quiet: bool,
@@ -48,7 +44,7 @@ impl ToolCallExtractor {
         // default `Open` mode applies no enum constraints, and `Fixed`/`Evolving`
         // take an explicit schema.
         ExtractionConfig {
-            extraction_schema: Schema::default(),
+            spec: ExtractionSpec { schema: Schema::default(), ..Default::default() },
             model_name: "qwen-max".into(),
             segment_size: 5000,
             min_segment_size: 100,
@@ -57,27 +53,24 @@ impl ToolCallExtractor {
     }
 
     pub fn new(backend: Arc<dyn LlmBackend>) -> Self {
-        ToolCallExtractor {
-            backend,
-            config: Self::default_config(),
-            schema_mode: SchemaMode::Open,
-            max_rounds: 1,
-            quiet: false,
-        }
+        ToolCallExtractor { backend, config: Self::default_config(), max_rounds: 1, quiet: false }
     }
 
     pub fn with_config(backend: Arc<dyn LlmBackend>, config: ExtractionConfig) -> Self {
-        ToolCallExtractor {
-            backend,
-            config,
-            schema_mode: SchemaMode::Open,
-            max_rounds: 1,
-            quiet: false,
-        }
+        ToolCallExtractor { backend, config, max_rounds: 1, quiet: false }
+    }
+
+    /// Build from a declarative [`ExtractionSpec`] with ToolCall's default
+    /// execution params. The same spec also runs through
+    /// [`YoutuExtractor::with_spec`](super::YoutuExtractor::with_spec).
+    pub fn with_spec(backend: Arc<dyn LlmBackend>, spec: ExtractionSpec) -> Self {
+        let mut config = Self::default_config();
+        config.spec = spec;
+        Self::with_config(backend, config)
     }
 
     pub fn schema_mode(mut self, mode: SchemaMode) -> Self {
-        self.schema_mode = mode;
+        self.config.spec.mode = mode;
         self
     }
 
@@ -94,7 +87,7 @@ impl ToolCallExtractor {
     /// type / predicate args to the seeded schema; `Open`/`Evolving` leave them
     /// free-form so the model can name (or propose) new types.
     fn tools(&self) -> Vec<ToolSpec> {
-        let enforce = matches!(self.schema_mode, SchemaMode::Fixed);
+        let enforce = matches!(self.config.spec.mode, SchemaMode::Fixed);
         let type_schema = if enforce && !self.config.entity_types_list().is_empty() {
             serde_json::json!({"type": "string", "enum": self.config.entity_types_list()})
         } else {
@@ -323,7 +316,7 @@ impl ToolCallExtractor {
         }
 
         let mut kg = gb.into_graph();
-        if self.config.merge_duplicates {
+        if self.config.spec.merge_duplicates {
             kg = merge_knowledge_graphs(KnowledgeGraph::new(), kg, true);
         }
         kg
@@ -336,11 +329,11 @@ impl Extractor for ToolCallExtractor {
         validate_input(text, self.config.min_segment_size, self.quiet)?;
         // Fixed/Evolving constrain to (or evolve from) a seed schema; an empty
         // seed is the degenerate cell of the grid.
-        if self.schema_mode.needs_schema() && self.config.extraction_schema.is_empty() {
+        if self.config.spec.mode.needs_schema() && self.config.spec.schema.is_empty() {
             anyhow::bail!(
                 "schema mode {:?} requires a non-empty schema (seed one via \
                  ExtractionConfig::from_schema; CLI: --schema <file>), or use SchemaMode::Open",
-                self.schema_mode
+                self.config.spec.mode
             );
         }
         if !self.backend.supports_tools() {
@@ -387,7 +380,7 @@ impl Extractor for ToolCallExtractor {
         let mut response = ExtractionResponse::new(kg);
         response.config = Some(self.config.clone());
         response.metadata.insert("mode".into(), serde_json::json!("toolcall"));
-        response.metadata.insert("schema_mode".into(), serde_json::json!(self.schema_mode.as_str()));
+        response.metadata.insert("schema_mode".into(), serde_json::json!(self.config.spec.mode.as_str()));
         if !acc.new_nodes.is_empty() || !acc.new_relations.is_empty() || !acc.new_attributes.is_empty() {
             response.metadata.insert(
                 "new_schema_types".into(),

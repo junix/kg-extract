@@ -182,7 +182,7 @@ impl Extractor for SimpleExtractor {
         for t in all_triples {
             kg.add_triple(t);
         }
-        if self.config.merge_duplicates {
+        if self.config.spec.merge_duplicates {
             kg = merge_knowledge_graphs(KnowledgeGraph::new(), kg, true);
         }
 
