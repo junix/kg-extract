@@ -483,6 +483,38 @@ pub(crate) fn parse_output(output: &str, _config: &ExtractionConfig) -> ParsedRe
     }
 }
 
+/// Recover each entity record's **raw type token** (normalized name → raw type
+/// string), which [`parse_output`] discards by mapping it into the
+/// [`EntityType`] enum. Fixed-schema validation needs the literal token so a
+/// domain-specific schema type (one outside the known `EntityType` vocabulary,
+/// which `from_loose` would collapse to `Other`) can still be matched. Mirrors
+/// [`parse_entity_item`]'s field positions exactly; keyed by [`normalize_key`]
+/// so it lines up with an [`Entity`]'s lowercased label.
+pub(crate) fn entity_type_tokens(output: &str) -> HashMap<String, String> {
+    let mut out = HashMap::new();
+    for item in split_to_items(output) {
+        let mut item = item.trim().to_string();
+        if item.is_empty() {
+            continue;
+        }
+        if item.starts_with('(') && !item.ends_with(')') {
+            item.push(')');
+        }
+        let inner = strip_parens(&item);
+        let parts: Vec<&str> = inner.split(TUPLE_DELIMITER).collect();
+        if parts.len() < 3 || !parts[0].to_lowercase().contains("entity") {
+            continue;
+        }
+        let name = clean_entity_name(parts[1]);
+        if name.is_empty() {
+            continue;
+        }
+        let type_token = parts[2].trim().trim_matches(|c| "<> \"*#".contains(c)).to_string();
+        out.insert(normalize_key(&name), type_token);
+    }
+    out
+}
+
 struct RelData {
     source_id: String,
     target_id: String,
@@ -848,5 +880,19 @@ mod tests {
         assert!(labels.contains(&"Alpha"), "chunk 0 entity must be present: {labels:?}");
         assert!(labels.contains(&"Beta"), "chunk 1 entity must be present: {labels:?}");
         assert_eq!(out.num_entities(), 2);
+    }
+
+    #[test]
+    fn entity_type_tokens_recovers_raw_types() {
+        // Recovers the literal type token (keyed by lowercased name), including a
+        // custom one the EntityType enum would collapse to `Other`. Relationship
+        // records are ignored.
+        let output = "(entity<|>OpenAI<|>organization<|>An AI lab.<|>)##\
+            (entity<|>Widget X<|>GADGET<|>A custom thing.<|>)##\
+            (relationship<|>OpenAI<|>Widget X<|>builds<|>they build it<|>0.9)";
+        let tokens = entity_type_tokens(output);
+        assert_eq!(tokens.get("openai").map(String::as_str), Some("organization"));
+        assert_eq!(tokens.get("widget x").map(String::as_str), Some("GADGET"));
+        assert_eq!(tokens.len(), 2, "relationship record must not appear");
     }
 }
