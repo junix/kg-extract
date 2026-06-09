@@ -22,7 +22,7 @@ use crate::backend::{
     CompletionOptions, LlmBackend, Message, ToolInvocation, ToolSpec,
 };
 use crate::graph_build::{build_predicate, parse_entity_type, GraphBuilder};
-use crate::merger::merge_knowledge_graphs;
+use crate::merger::dedup_graph;
 use crate::types::{ExtractionConfig, ExtractionResponse, ExtractionSpec, KnowledgeGraph, Schema};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -315,11 +315,7 @@ impl ToolCallExtractor {
             gb.set_attribute(name, key.clone(), value.clone());
         }
 
-        let mut kg = gb.into_graph();
-        if self.config.spec.merge_duplicates {
-            kg = merge_knowledge_graphs(KnowledgeGraph::new(), kg, true);
-        }
-        kg
+        gb.into_graph()
     }
 }
 
@@ -376,7 +372,10 @@ impl Extractor for ToolCallExtractor {
             }
         }
 
-        let kg = self.build_graph(&acc);
+        let mut kg = self.build_graph(&acc);
+        if self.config.spec.merge_duplicates {
+            kg = dedup_graph(kg, self.config.spec.merge_strategy, &self.backend, &opts).await;
+        }
         let mut response = ExtractionResponse::new(kg);
         response.config = Some(self.config.clone());
         response.metadata.insert("mode".into(), serde_json::json!("toolcall"));

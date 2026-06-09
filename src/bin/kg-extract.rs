@@ -19,7 +19,7 @@ use kg_extract::backend::{AgentCli, AgentCliBackend, LlmBackend, MockBackend, Pi
 use kg_extract::extractor::{
     Extractor, SchemaMode, SimpleExtractor, ToolCallExtractor, SchemaJsonExtractor,
 };
-use kg_extract::types::{ChunkStrategy, Schema};
+use kg_extract::types::{ChunkStrategy, MergeStrategy, Schema};
 
 #[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -77,6 +77,27 @@ impl From<SchemaModeArg> for SchemaMode {
     }
 }
 
+/// How duplicate entities are combined (CLI mirror of [`MergeStrategy`]).
+#[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+enum MergeStrategyArg {
+    KeepExisting,
+    KeepIncoming,
+    FieldUnion,
+    Llm,
+}
+
+impl From<MergeStrategyArg> for MergeStrategy {
+    fn from(s: MergeStrategyArg) -> Self {
+        match s {
+            MergeStrategyArg::KeepExisting => MergeStrategy::KeepExisting,
+            MergeStrategyArg::KeepIncoming => MergeStrategy::KeepIncoming,
+            MergeStrategyArg::FieldUnion => MergeStrategy::FieldUnion,
+            MergeStrategyArg::Llm => MergeStrategy::Llm,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum OutFmt {
@@ -103,6 +124,8 @@ struct FileConfig {
     schema_mode: Option<SchemaModeArg>,
     schema: Option<String>,
     max_rounds: Option<usize>,
+    merge_strategy: Option<MergeStrategyArg>,
+    max_concurrency: Option<usize>,
     output: Option<OutFmt>,
 }
 
@@ -155,6 +178,15 @@ struct Args {
     #[arg(long, default_value_t = 1)]
     max_rounds: usize,
 
+    /// How duplicate entities are combined when deduping: keep-existing
+    /// (default) / keep-incoming / field-union / llm (LLM-synthesised description).
+    #[arg(long, value_enum, default_value_t = MergeStrategyArg::KeepExisting)]
+    merge_strategy: MergeStrategyArg,
+
+    /// Max segments extracted concurrently (Simple engine). 1 = sequential.
+    #[arg(long, default_value_t = 8)]
+    max_concurrency: usize,
+
     /// Canned response for --backend mock.
     #[arg(long)]
     mock_response: Option<String>,
@@ -174,6 +206,8 @@ struct Resolved {
     schema_mode: SchemaModeArg,
     schema: Option<String>,
     max_rounds: usize,
+    merge_strategy: MergeStrategyArg,
+    max_concurrency: usize,
     output: OutFmt,
 }
 
@@ -250,6 +284,8 @@ fn resolve(m: &ArgMatches, args: &Args, cfg: FileConfig) -> Resolved {
             cfg.schema.clone().or_else(|| args.schema.clone())
         },
         max_rounds: pick(m, "max_rounds", args.max_rounds, cfg.max_rounds),
+        merge_strategy: pick(m, "merge_strategy", args.merge_strategy, cfg.merge_strategy),
+        max_concurrency: pick(m, "max_concurrency", args.max_concurrency, cfg.max_concurrency),
         output: pick(m, "output", args.output, cfg.output),
     }
 }
@@ -323,6 +359,8 @@ async fn main() -> anyhow::Result<()> {
         Engine::Simple => {
             let mut c = SimpleExtractor::default_config();
             c.chunker = cfg.chunker.into();
+            c.max_concurrency = cfg.max_concurrency;
+            c.spec.merge_strategy = cfg.merge_strategy.into();
             if let Some(m) = &cfg.model {
                 c.model_name = m.clone();
             }
@@ -331,6 +369,7 @@ async fn main() -> anyhow::Result<()> {
         Engine::SchemaJson => {
             let mut c = SchemaJsonExtractor::default_config();
             c.chunker = cfg.chunker.into();
+            c.spec.merge_strategy = cfg.merge_strategy.into();
             if let Some(m) = &cfg.model {
                 c.model_name = m.clone();
             }
@@ -346,6 +385,7 @@ async fn main() -> anyhow::Result<()> {
         Engine::Toolcall => {
             let mut c = ToolCallExtractor::default_config();
             c.chunker = cfg.chunker.into();
+            c.spec.merge_strategy = cfg.merge_strategy.into();
             if let Some(m) = &cfg.model {
                 c.model_name = m.clone();
             }

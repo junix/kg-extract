@@ -67,15 +67,6 @@ pub enum MergeStrategy {
 }
 
 impl MergeStrategy {
-    pub(crate) fn as_str(&self) -> &'static str {
-        match self {
-            MergeStrategy::KeepExisting => "keep-existing",
-            MergeStrategy::KeepIncoming => "keep-incoming",
-            MergeStrategy::FieldUnion => "field-union",
-            MergeStrategy::Llm => "llm",
-        }
-    }
-
     /// Whether resolving this strategy may require LLM calls.
     pub fn needs_backend(&self) -> bool {
         matches!(self, MergeStrategy::Llm)

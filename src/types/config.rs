@@ -5,7 +5,7 @@ use super::entity::{default_entity_types, Entity};
 use super::graph::{KnowledgeGraph, Triple};
 use super::predicate::default_predicates;
 use super::schema::Schema;
-use super::spec::{ExtractionSpec, SchemaMode};
+use super::spec::ExtractionSpec;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

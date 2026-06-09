@@ -3,12 +3,14 @@
 
 use super::{validate_input, Extractor};
 use crate::backend::{CompletionOptions, LlmBackend, Message};
+use crate::chunking::segment;
 use crate::graph_build::entity_id;
-use crate::merger::merge_knowledge_graphs;
+use crate::merger::{merge_all, merge_all_dedup_llm, merge_knowledge_graphs_with};
 use crate::types::{
     Entity, EntityType, ExtractionConfig, ExtractionResponse, KnowledgeGraph, ParsedResult,
     Predicate, PredicateType, Triple,
 };
+use futures::stream::{self, StreamExt};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -103,13 +105,10 @@ impl SimpleExtractor {
     pub fn config(&self) -> &ExtractionConfig {
         &self.config
     }
-}
 
-#[async_trait::async_trait]
-impl Extractor for SimpleExtractor {
-    async fn extract(&self, text: &str) -> anyhow::Result<ExtractionResponse> {
-        validate_input(text, self.config.min_segment_size, self.quiet)?;
-
+    /// Extract one chunk via the GraphRAG prompt + multi-gleaning loop, building
+    /// that chunk's (un-deduped) graph. Multiple chunks run this concurrently.
+    async fn extract_chunk(&self, chunk: &str) -> (Vec<ParsedResult>, KnowledgeGraph) {
         let entity_types = self.config.entity_types_list().join(", ");
         let rel_types = if self.config.predicates_list().is_empty() {
             "related_to, part_of, uses".to_string()
@@ -127,7 +126,7 @@ impl Extractor for SimpleExtractor {
             .replace("{relationship_types}", &rel_types)
             .replace("{attribute_types}", &attr_types)
             .replace("{context}", &self.context)
-            .replace("{chunk}", text);
+            .replace("{chunk}", chunk);
 
         let mut history = vec![
             Message::system("You are an elite assistant for extracting structured data from text."),
@@ -182,9 +181,62 @@ impl Extractor for SimpleExtractor {
         for t in all_triples {
             kg.add_triple(t);
         }
-        if self.config.spec.merge_duplicates {
-            kg = merge_knowledge_graphs(KnowledgeGraph::new(), kg, true);
+        (parsed_results, kg)
+    }
+}
+
+#[async_trait::async_trait]
+impl Extractor for SimpleExtractor {
+    async fn extract(&self, text: &str) -> anyhow::Result<ExtractionResponse> {
+        validate_input(text, self.config.min_segment_size, self.quiet)?;
+
+        // Segment only when the text exceeds segment_size; otherwise a single
+        // chunk preserves the original single-shot + gleaning behaviour exactly.
+        let chunks: Vec<String> = if text.chars().count() > self.config.segment_size {
+            segment(text, self.config.chunker, self.config.segment_size, self.config.overlap)
+                .into_iter()
+                .enumerate()
+                .filter(|(i, s)| !(s.content.chars().count() < self.config.min_segment_size && *i > 0))
+                .map(|(_, s)| s.content)
+                .collect()
+        } else {
+            vec![text.to_string()]
+        };
+
+        // Extract chunks concurrently. LLM calls are I/O-bound, so `buffered`
+        // runs up to `max_concurrency` in flight while preserving chunk order.
+        let max_conc = self.config.max_concurrency.max(1);
+        let per_chunk: Vec<(Vec<ParsedResult>, KnowledgeGraph)> = stream::iter(chunks)
+            .map(|chunk| async move { self.extract_chunk(&chunk).await })
+            .buffered(max_conc)
+            .collect()
+            .await;
+
+        let mut parsed_results: Vec<ParsedResult> = Vec::new();
+        let mut graphs: Vec<KnowledgeGraph> = Vec::new();
+        for (prs, kg) in per_chunk {
+            parsed_results.extend(prs);
+            graphs.push(kg);
         }
+
+        // Fold the per-chunk graphs, deduplicating per the configured strategy.
+        let kg = if self.config.spec.merge_duplicates {
+            let strategy = self.config.spec.merge_strategy;
+            if strategy.needs_backend() {
+                let opts = CompletionOptions {
+                    model: self.config.model_name.clone(),
+                    temperature: 0.3,
+                    max_tokens: 1000,
+                };
+                merge_all_dedup_llm(graphs, &self.backend, &opts).await
+            } else {
+                graphs.into_iter().fold(KnowledgeGraph::new(), |acc, g| {
+                    merge_knowledge_graphs_with(acc, g, true, strategy)
+                })
+            }
+        } else {
+            merge_all(graphs)
+        };
 
         let mut resp = ExtractionResponse::new(kg);
         resp.parsed_results = parsed_results;
@@ -559,5 +611,35 @@ mod tests {
     fn entity_id_is_deterministic_md5() {
         assert_eq!(entity_id("Openai"), entity_id("Openai"));
         assert!(entity_id("X").starts_with("entity_"));
+    }
+
+    #[tokio::test]
+    async fn segments_long_text_and_merges_chunk_graphs() {
+        use crate::types::ChunkStrategy;
+        // Two Char chunks, one LLM call each (gleaning off). Each chunk's canned
+        // response carries a distinct entity; the merged graph must hold both —
+        // proving segment → concurrent per-chunk extract → merge end to end.
+        let r0 = "(entity<|>Alpha<|>organization<|>First chunk entity.<|>)##";
+        let r1 = "(entity<|>Beta<|>organization<|>Second chunk entity.<|>)##";
+        let backend = Arc::new(MockBackend::new(vec![r0.into(), r1.into()]));
+
+        let mut cfg = SimpleExtractor::default_config();
+        cfg.segment_size = 20;
+        cfg.overlap = 0;
+        cfg.min_segment_size = 1;
+        cfg.chunker = ChunkStrategy::Char;
+        cfg.max_concurrency = 2;
+        let mut ex = SimpleExtractor::with_config(backend, cfg);
+        ex.max_gleanings = 0; // one call per chunk → deterministic response mapping
+
+        // 40 chars → exactly two 20-char Char chunks.
+        let text = "a".repeat(20) + &"b".repeat(20);
+        let out = ex.extract(&text).await.unwrap();
+
+        let labels: Vec<&str> =
+            out.knowledge_graph.entities.values().map(|e| e.label.as_str()).collect();
+        assert!(labels.contains(&"Alpha"), "chunk 0 entity must be present: {labels:?}");
+        assert!(labels.contains(&"Beta"), "chunk 1 entity must be present: {labels:?}");
+        assert_eq!(out.num_entities(), 2);
     }
 }
