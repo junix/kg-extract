@@ -36,10 +36,16 @@ pub fn merge_with_deduplication(mut g1: KnowledgeGraph, g2: KnowledgeGraph) -> K
         if let Some(existing_id) = label_to_id.get(&label_lower) {
             id_mapping.insert(id.clone(), existing_id.clone());
         } else if g1.entities.contains_key(id) {
-            // ID collision with a different label → fresh id.
+            // ID collision with a different label → fresh id. The entity's own
+            // `.id` field must be rewritten to the new key, otherwise the stored
+            // entity (and every triple endpoint cloned from it below) keeps the
+            // colliding old id — leaving the table key and entity.id disagreeing
+            // and the remapped triple pointing at the *other* entity's id.
             let new_id = generate_new_id(&g1);
+            let mut entity = entity.clone();
+            entity.id = new_id.clone();
             id_mapping.insert(id.clone(), new_id.clone());
-            g1.entities.insert(new_id.clone(), entity.clone());
+            g1.entities.insert(new_id.clone(), entity);
             label_to_id.insert(label_lower, new_id);
         } else {
             g1.entities.insert(id.clone(), entity.clone());
@@ -110,4 +116,44 @@ pub fn find_similar_entities(entity: &Entity, entities: &[Entity]) -> Vec<String
         .filter(|e| e.id != entity.id && e.label.to_lowercase() == target)
         .map(|e| e.id.clone())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{EntityType, Predicate, PredicateType};
+
+    #[test]
+    fn dedup_collision_rewrites_entity_id_to_new_key() {
+        // g1 has "e1"=Alice; g2 reuses "e1" for a different entity (Bob) plus a
+        // Bob->Paris relation. Bob must land under a fresh key whose value's `.id`
+        // equals that key, and the remapped triple must carry the fresh id — not
+        // the colliding "e1" that belongs to Alice.
+        let mut g1 = KnowledgeGraph::new();
+        g1.add_entity(Entity::new("e1", "Alice", EntityType::Person));
+
+        let bob = Entity::new("e1", "Bob", EntityType::Person);
+        let paris = Entity::new("e3", "Paris", EntityType::City);
+        let mut g2 = KnowledgeGraph::new();
+        g2.add_entity(bob.clone());
+        g2.add_entity(paris.clone());
+        g2.add_triple(Triple::new(bob.clone(), Predicate::new(PredicateType::LocatedIn), paris));
+
+        let merged = merge_with_deduplication(g1, g2);
+
+        // Table key and entity.id must agree for every entity.
+        for (key, e) in merged.entities.iter() {
+            assert_eq!(&e.id, key, "entity '{}' stored under key '{}' has stale id", e.label, key);
+        }
+        let bob_key = merged
+            .entities
+            .iter()
+            .find(|(_, e)| e.label == "Bob")
+            .map(|(k, _)| k.clone())
+            .expect("Bob present");
+        assert_ne!(bob_key, "e1", "Bob must get a fresh id, not Alice's e1");
+        // The Bob->Paris triple endpoint must carry Bob's fresh id.
+        let t = merged.triples.iter().find(|t| t.subject.label == "Bob").expect("Bob relation kept");
+        assert_eq!(t.subject.id, bob_key, "triple subject id must match Bob's table key");
+    }
 }
