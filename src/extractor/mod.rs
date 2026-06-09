@@ -26,10 +26,12 @@
 use crate::types::ExtractionResponse;
 use async_trait::async_trait;
 
+pub mod agentic;
 pub mod schema_json;
 pub mod simple;
 pub mod toolcall;
 
+pub use agentic::AgenticExtractor;
 pub use schema_json::SchemaJsonExtractor;
 pub use simple::SimpleExtractor;
 pub use toolcall::ToolCallExtractor;

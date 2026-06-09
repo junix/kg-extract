@@ -313,7 +313,7 @@ impl SimpleExtractor {
 /// it does not require the entities to be re-declared in this response — the
 /// rescue round emits relationships only. Edges with an unknown endpoint are
 /// dropped (no dangling/hallucinated nodes).
-fn parse_relations_against(output: &str, known: &HashMap<String, Entity>) -> Vec<Triple> {
+pub(crate) fn parse_relations_against(output: &str, known: &HashMap<String, Entity>) -> Vec<Triple> {
     let id_map: HashMap<String, String> =
         known.values().map(|e| (normalize_key(&e.label), e.id.clone())).collect();
 
@@ -419,7 +419,7 @@ impl Extractor for SimpleExtractor {
 }
 
 /// Parse delimiter-formatted LLM output into entities + triples.
-fn parse_output(output: &str, _config: &ExtractionConfig) -> ParsedResult {
+pub(crate) fn parse_output(output: &str, _config: &ExtractionConfig) -> ParsedResult {
     let items = split_to_items(output);
     let mut entities: HashMap<String, Entity> = HashMap::new();
     let mut entity_id_map: HashMap<String, String> = HashMap::new();

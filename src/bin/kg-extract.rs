@@ -17,7 +17,7 @@ use serde::Deserialize;
 
 use kg_extract::backend::{LlmBackend, MockBackend, PiAgentBackend, SdkAgentBackend};
 use kg_extract::extractor::{
-    Extractor, SchemaMode, SimpleExtractor, ToolCallExtractor, SchemaJsonExtractor,
+    AgenticExtractor, Extractor, SchemaMode, SimpleExtractor, ToolCallExtractor, SchemaJsonExtractor,
 };
 use kg_extract::template::{gallery, TemplateCfg};
 use kg_extract::types::{ChunkStrategy, MergeStrategy, Schema};
@@ -28,6 +28,9 @@ enum Engine {
     Simple,
     SchemaJson,
     Toolcall,
+    /// Experimental: whole document through one sandboxed, multi-turn SDK
+    /// session (slices fed as turns; agent can grep/read the doc for context).
+    Agentic,
 }
 
 #[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
@@ -452,9 +455,22 @@ async fn main() -> anyhow::Result<()> {
     if text.trim().is_empty() {
         anyhow::bail!("no input text (provide --file or pipe via stdin)");
     }
-    let backend = make_backend(cfg.backend, &cfg.agent, args.mock_response.as_deref())?;
-
-    let response = match cfg.engine {
+    // The agentic engine drives the SDK client itself (cwd sandbox + one
+    // long-lived session), so it bypasses `make_backend` and its `--backend`
+    // value — the provider is chosen by `--agent`.
+    let response = if matches!(cfg.engine, Engine::Agentic) {
+        let mut c = AgenticExtractor::default_config();
+        c.chunker = cfg.chunker.into();
+        if let Some(m) = &cfg.model {
+            c.model_name = m.clone();
+        }
+        AgenticExtractor::with_config(&cfg.agent, c)
+            .relation_gleanings(cfg.relation_gleaning)
+            .extract(&text)
+            .await?
+    } else {
+        let backend = make_backend(cfg.backend, &cfg.agent, args.mock_response.as_deref())?;
+        match cfg.engine {
         Engine::Simple => {
             let mut c = SimpleExtractor::default_config();
             c.chunker = cfg.chunker.into();
@@ -504,6 +520,8 @@ async fn main() -> anyhow::Result<()> {
                 .max_rounds(cfg.max_rounds)
                 .extract(&text)
                 .await?
+        }
+            Engine::Agentic => unreachable!("agentic handled above"),
         }
     };
 

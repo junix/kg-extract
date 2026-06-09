@@ -26,45 +26,49 @@ pub struct SdkAgentBackend {
     agent: String,
 }
 
+/// Build the `ANTHROPIC_*` provider env for a known agent name (`minimaxcc` /
+/// `glmcc` / `mimocc`), mirroring the wrapper scripts so the SDK's `claude` talks
+/// to the right vendor endpoint. The auth token is read from the same
+/// environment variable each wrapper uses and must already be set. Returns the
+/// normalised (lowercased) agent name alongside the env.
+pub(crate) fn provider_env(name: &str) -> anyhow::Result<(String, BTreeMap<String, String>)> {
+    let n = name.trim().to_lowercase();
+    let (key_var, base_url, model) = match n.as_str() {
+        "minimaxcc" | "minimax" => (
+            "MINIMAX_API_KEY",
+            "https://api.minimaxi.com/anthropic",
+            "MiniMax-M3-highspeed",
+        ),
+        "glmcc" | "glm" => ("GLM_API_KEY", "https://open.bigmodel.cn/api/anthropic", "glm-5.1"),
+        "mimocc" | "mimo" => (
+            "MIMO_API_KEY",
+            "https://token-plan-cn.xiaomimimo.com/anthropic",
+            "mimo-v2.5-pro",
+        ),
+        other => {
+            anyhow::bail!("unknown sdk-agent provider: {other} (expected minimaxcc / glmcc / mimocc)")
+        }
+    };
+    let token = std::env::var(key_var)
+        .map_err(|_| anyhow::anyhow!("sdk-agent {n}: environment variable {key_var} is not set"))?;
+
+    let mut env = BTreeMap::new();
+    env.insert("ANTHROPIC_AUTH_TOKEN".into(), token);
+    env.insert("ANTHROPIC_BASE_URL".into(), base_url.into());
+    env.insert("ANTHROPIC_MODEL".into(), model.into());
+    env.insert("ANTHROPIC_SMALL_FAST_MODEL".into(), model.into());
+    env.insert("API_TIMEOUT_MS".into(), "3000000".into());
+    env.insert("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".into(), "1".into());
+
+    Ok((n, env))
+}
+
 impl SdkAgentBackend {
-    /// Build the provider env for a known agent name (`minimaxcc` / `glmcc` /
-    /// `mimocc`), mirroring the wrapper scripts. The auth token is read from the
-    /// same environment variable each wrapper uses and must already be set.
+    /// Build the backend for a known agent name (`minimaxcc` / `glmcc` /
+    /// `mimocc`). See [`provider_env`].
     pub fn for_agent(name: &str) -> anyhow::Result<Self> {
-        let n = name.trim().to_lowercase();
-        let (key_var, base_url, model) = match n.as_str() {
-            "minimaxcc" | "minimax" => (
-                "MINIMAX_API_KEY",
-                "https://api.minimaxi.com/anthropic",
-                "MiniMax-M3-highspeed",
-            ),
-            "glmcc" | "glm" => (
-                "GLM_API_KEY",
-                "https://open.bigmodel.cn/api/anthropic",
-                "glm-5.1",
-            ),
-            "mimocc" | "mimo" => (
-                "MIMO_API_KEY",
-                "https://token-plan-cn.xiaomimimo.com/anthropic",
-                "mimo-v2.5-pro",
-            ),
-            other => anyhow::bail!(
-                "unknown sdk-agent provider: {other} (expected minimaxcc / glmcc / mimocc)"
-            ),
-        };
-        let token = std::env::var(key_var).map_err(|_| {
-            anyhow::anyhow!("sdk-agent {n}: environment variable {key_var} is not set")
-        })?;
-
-        let mut env = BTreeMap::new();
-        env.insert("ANTHROPIC_AUTH_TOKEN".into(), token);
-        env.insert("ANTHROPIC_BASE_URL".into(), base_url.into());
-        env.insert("ANTHROPIC_MODEL".into(), model.into());
-        env.insert("ANTHROPIC_SMALL_FAST_MODEL".into(), model.into());
-        env.insert("API_TIMEOUT_MS".into(), "3000000".into());
-        env.insert("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".into(), "1".into());
-
-        Ok(SdkAgentBackend { provider_env: env, agent: n })
+        let (agent, provider_env) = provider_env(name)?;
+        Ok(SdkAgentBackend { provider_env, agent })
     }
 }
 
