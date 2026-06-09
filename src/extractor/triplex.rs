@@ -5,7 +5,7 @@
 use super::{validate_input, Extractor};
 use crate::backend::{CompletionOptions, LlmBackend};
 use crate::chunking::{segment, Segment};
-use crate::merger::merge_all;
+use crate::merger::{merge_all, merge_knowledge_graphs};
 use crate::parser::{
     create_entities_from_parsed, create_triples_from_parsed, extract_json_from_response,
     parse_entities_and_triples,
@@ -141,7 +141,13 @@ impl Extractor for TriplexExtractor {
             }
         }
 
-        let merged = if graphs.is_empty() { KnowledgeGraph::new() } else { merge_all(graphs) };
+        let mut merged = if graphs.is_empty() { KnowledgeGraph::new() } else { merge_all(graphs) };
+        // Honor merge_duplicates like SimpleExtractor: collapse entities that
+        // share a (case-insensitive) label across segments. merge_all only
+        // dedups by id, so cross-segment label variants would otherwise persist.
+        if self.config.merge_duplicates {
+            merged = merge_knowledge_graphs(KnowledgeGraph::new(), merged, true);
+        }
         let mut resp = ExtractionResponse::new(merged);
         resp.parsed_results = parsed_results;
         resp.config = Some(self.config.clone());
@@ -169,5 +175,17 @@ mod tests {
         assert_eq!(out.num_triples(), 1);
         assert_eq!(out.knowledge_graph.entities["e1"].entity_type, EntityType::Organization);
         assert_eq!(out.knowledge_graph.triples[0].predicate.predicate_type, PredicateType::DevelopedBy);
+    }
+
+    #[tokio::test]
+    async fn merge_duplicates_dedups_same_label_entities() {
+        // Two entities with distinct ids but the same (case-insensitive) label.
+        // With merge_duplicates (default) they must collapse to one.
+        let json = r#"{"entities": {"e1": {"label": "OpenAI", "type": "organization"},
+                                     "e2": {"label": "openai", "type": "organization"}},
+                       "relationships": []}"#;
+        let backend = Arc::new(MockBackend::single(json));
+        let out = TriplexExtractor::new(backend).extract("OpenAI is OpenAI.").await.unwrap();
+        assert_eq!(out.num_entities(), 1, "same-label entities must dedup when merge_duplicates");
     }
 }
