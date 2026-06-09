@@ -163,6 +163,11 @@ impl PredicateType {
     /// then substring match either direction, else `RELATED_TO`.
     pub fn from_loose(raw: &str) -> PredicateType {
         let normalized = raw.trim().to_uppercase().replace([' ', '-'], "_");
+        // A blank predicate must not fuzzy-match: `value.contains("")` is always
+        // true, so the substring loop below would return the first variant.
+        if normalized.is_empty() {
+            return PredicateType::RelatedTo;
+        }
         if let Ok(p) = normalized.parse::<PredicateType>() {
             return p;
         }
@@ -252,6 +257,15 @@ mod tests {
         assert_eq!(PredicateType::from_loose("uses"), PredicateType::Uses);
         assert_eq!(PredicateType::from_loose("is used by"), PredicateType::IsUsedBy);
         assert_eq!(PredicateType::from_loose("no such thing"), PredicateType::RelatedTo);
+    }
+
+    #[test]
+    fn loose_empty_relation_is_related_to() {
+        // An empty / whitespace-only relation must not fuzzy-match the first
+        // variant: `"POPULATION".contains("")` is always true, which previously
+        // returned `Population` for any blank predicate.
+        assert_eq!(PredicateType::from_loose(""), PredicateType::RelatedTo);
+        assert_eq!(PredicateType::from_loose("   "), PredicateType::RelatedTo);
     }
 
     #[test]
