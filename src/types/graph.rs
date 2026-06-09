@@ -1,0 +1,287 @@
+//! Core graph data structures (ported from `graph/_types/graph.py`).
+
+use super::entity::Entity;
+use super::predicate::{Predicate, PredicateType};
+use indexmap_lite::OrderedMap;
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+
+/// A knowledge graph triple (subject-predicate-object).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Triple {
+    pub subject: Entity,
+    pub predicate: Predicate,
+    pub object: Entity,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confidence: Option<f64>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl Triple {
+    pub fn new(subject: Entity, predicate: Predicate, object: Entity) -> Self {
+        Triple { subject, predicate, object, confidence: None, metadata: HashMap::new() }
+    }
+
+    /// `(subject_id, predicate_type_value, object_id)` — the dedup key.
+    pub fn to_tuple(&self) -> (String, String, String) {
+        (
+            self.subject.id.clone(),
+            self.predicate.predicate_type.value(),
+            self.object.id.clone(),
+        )
+    }
+
+    pub fn to_dict(&self) -> serde_json::Value {
+        serde_json::json!({
+            "subject": self.subject.to_dict(),
+            "predicate": {
+                "type": self.predicate.predicate_type.value(),
+                "label": self.predicate.label,
+                "confidence": self.predicate.confidence,
+                "metadata": self.predicate.metadata,
+            },
+            "object": self.object.to_dict(),
+            "confidence": self.confidence,
+            "metadata": self.metadata,
+        })
+    }
+}
+
+/// A complete knowledge graph: entities keyed by id (insertion-ordered) + triples.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct KnowledgeGraph {
+    pub entities: OrderedMap<String, Entity>,
+    pub triples: Vec<Triple>,
+    #[serde(default)]
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+impl KnowledgeGraph {
+    pub fn new() -> Self {
+        KnowledgeGraph::default()
+    }
+
+    pub fn add_entity(&mut self, entity: Entity) {
+        self.entities.insert(entity.id.clone(), entity);
+    }
+
+    pub fn add_triple(&mut self, triple: Triple) {
+        self.add_entity(triple.subject.clone());
+        self.add_entity(triple.object.clone());
+        self.triples.push(triple);
+    }
+
+    pub fn get_entity(&self, id: &str) -> Option<&Entity> {
+        self.entities.get(id)
+    }
+
+    pub fn get_triples_by_predicate(&self, pt: PredicateType) -> Vec<&Triple> {
+        self.triples.iter().filter(|t| t.predicate.predicate_type == pt).collect()
+    }
+
+    /// Merge another graph into `self` (mirrors `KnowledgeGraph.merge`):
+    /// entities added if absent (or replaced when higher confidence), triples
+    /// deduplicated by `to_tuple`.
+    pub fn merge(&mut self, other: KnowledgeGraph) -> &mut Self {
+        for (_, entity) in other.entities.iter() {
+            match self.entities.get(&entity.id) {
+                None => self.add_entity(entity.clone()),
+                Some(existing) => {
+                    let replace = match (entity.confidence, existing.confidence) {
+                        (Some(new_c), Some(old_c)) => new_c > old_c,
+                        (Some(_), None) => true,
+                        _ => false,
+                    };
+                    if replace {
+                        self.entities.insert(entity.id.clone(), entity.clone());
+                    }
+                }
+            }
+        }
+        let existing: HashSet<(String, String, String)> =
+            self.triples.iter().map(|t| t.to_tuple()).collect();
+        for triple in other.triples {
+            if !existing.contains(&triple.to_tuple()) {
+                self.add_triple(triple);
+            }
+        }
+        self
+    }
+
+    pub fn to_dict(&self) -> serde_json::Value {
+        let entities: serde_json::Map<String, serde_json::Value> = self
+            .entities
+            .iter()
+            .map(|(k, v)| (k.clone(), v.to_dict()))
+            .collect();
+        serde_json::json!({
+            "entities": entities,
+            "triples": self.triples.iter().map(|t| t.to_dict()).collect::<Vec<_>>(),
+            "metadata": self.metadata,
+        })
+    }
+
+    /// Mermaid `graph LR` diagram (ported from `to_mermaid`).
+    pub fn to_mermaid(&self) -> String {
+        let clean = |s: &str| s.replace(['[', ']'], "");
+        let mut lines = vec!["graph LR".to_string()];
+        for (id, entity) in self.entities.iter() {
+            lines.push(format!("    {}[{}]", clean(id), entity.label));
+        }
+        for t in &self.triples {
+            lines.push(format!(
+                "    {} -->| {} | {}",
+                clean(&t.subject.id),
+                t.predicate.display_label(),
+                clean(&t.object.id)
+            ));
+        }
+        lines.push(String::new());
+        lines.push("    %% Styling".to_string());
+        lines.push("    classDef default fill:none,stroke:#ffffff,color:#ffffff".to_string());
+        lines.push("    linkStyle default stroke:#EAEDED,stroke-width:2px".to_string());
+        lines.join("\n")
+    }
+
+    pub fn stats(&self) -> serde_json::Value {
+        let mut entity_types: HashMap<String, usize> = HashMap::new();
+        for (_, e) in self.entities.iter() {
+            *entity_types.entry(e.entity_type.value()).or_insert(0) += 1;
+        }
+        let mut predicate_types: HashMap<String, usize> = HashMap::new();
+        for t in &self.triples {
+            *predicate_types.entry(t.predicate.predicate_type.value()).or_insert(0) += 1;
+        }
+        serde_json::json!({
+            "num_entities": self.entities.len(),
+            "num_triples": self.triples.len(),
+            "entity_types": entity_types,
+            "predicate_types": predicate_types,
+        })
+    }
+}
+
+/// Minimal insertion-ordered map (we avoid an `indexmap` dependency; entity
+/// order matters for stable mermaid / merge output).
+pub mod indexmap_lite {
+    use serde::de::{Deserializer, MapAccess, Visitor};
+    use serde::ser::{SerializeMap, Serializer};
+    use serde::{Deserialize, Serialize};
+    use std::collections::HashMap;
+    use std::hash::Hash;
+    use std::marker::PhantomData;
+
+    #[derive(Debug, Clone)]
+    pub struct OrderedMap<K: Eq + Hash + Clone, V> {
+        order: Vec<K>,
+        map: HashMap<K, V>,
+    }
+
+    impl<K: Eq + Hash + Clone, V> Default for OrderedMap<K, V> {
+        fn default() -> Self {
+            OrderedMap { order: Vec::new(), map: HashMap::new() }
+        }
+    }
+
+    impl<K: Eq + Hash + Clone, V> OrderedMap<K, V> {
+        pub fn new() -> Self {
+            Self::default()
+        }
+        pub fn insert(&mut self, k: K, v: V) {
+            if !self.map.contains_key(&k) {
+                self.order.push(k.clone());
+            }
+            self.map.insert(k, v);
+        }
+        pub fn get<Q>(&self, k: &Q) -> Option<&V>
+        where
+            K: std::borrow::Borrow<Q>,
+            Q: Eq + Hash + ?Sized,
+        {
+            self.map.get(k)
+        }
+        pub fn get_mut<Q>(&mut self, k: &Q) -> Option<&mut V>
+        where
+            K: std::borrow::Borrow<Q>,
+            Q: Eq + Hash + ?Sized,
+        {
+            self.map.get_mut(k)
+        }
+        pub fn contains_key<Q>(&self, k: &Q) -> bool
+        where
+            K: std::borrow::Borrow<Q>,
+            Q: Eq + Hash + ?Sized,
+        {
+            self.map.contains_key(k)
+        }
+        pub fn len(&self) -> usize {
+            self.order.len()
+        }
+        pub fn is_empty(&self) -> bool {
+            self.order.is_empty()
+        }
+        pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
+            self.order.iter().map(move |k| (k, self.map.get(k).unwrap()))
+        }
+        pub fn values(&self) -> impl Iterator<Item = &V> {
+            self.order.iter().map(move |k| self.map.get(k).unwrap())
+        }
+        pub fn keys(&self) -> impl Iterator<Item = &K> {
+            self.order.iter()
+        }
+    }
+
+    impl<K, Q, V> std::ops::Index<&Q> for OrderedMap<K, V>
+    where
+        K: Eq + Hash + Clone + std::borrow::Borrow<Q>,
+        Q: Eq + Hash + ?Sized,
+    {
+        type Output = V;
+        fn index(&self, k: &Q) -> &V {
+            self.map.get(k).expect("no entry found for key")
+        }
+    }
+
+    impl<K, V> Serialize for OrderedMap<K, V>
+    where
+        K: Eq + Hash + Clone + Serialize,
+        V: Serialize,
+    {
+        fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+            let mut m = s.serialize_map(Some(self.order.len()))?;
+            for k in &self.order {
+                m.serialize_entry(k, self.map.get(k).unwrap())?;
+            }
+            m.end()
+        }
+    }
+
+    impl<'de, K, V> Deserialize<'de> for OrderedMap<K, V>
+    where
+        K: Eq + Hash + Clone + Deserialize<'de>,
+        V: Deserialize<'de>,
+    {
+        fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+            struct V2<K, V>(PhantomData<(K, V)>);
+            impl<'de, K, V> Visitor<'de> for V2<K, V>
+            where
+                K: Eq + Hash + Clone + Deserialize<'de>,
+                V: Deserialize<'de>,
+            {
+                type Value = OrderedMap<K, V>;
+                fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                    f.write_str("a map")
+                }
+                fn visit_map<A: MapAccess<'de>>(self, mut a: A) -> Result<Self::Value, A::Error> {
+                    let mut om = OrderedMap::new();
+                    while let Some((k, v)) = a.next_entry::<K, V>()? {
+                        om.insert(k, v);
+                    }
+                    Ok(om)
+                }
+            }
+            d.deserialize_map(V2(PhantomData))
+        }
+    }
+}

@@ -259,7 +259,11 @@ mod tests {
 
     #[test]
     fn loose_parse_fallbacks() {
-        assert_eq!(EntityType::from_loose("model"), EntityType::Technology);
+        // Exact match wins (MODEL is a real variant), mirroring Python EntityType("MODEL").
+        assert_eq!(EntityType::from_loose("model"), EntityType::Model);
+        // Alias path only fires when there is no exact variant (METHOD is not one).
+        assert_eq!(EntityType::from_loose("method"), EntityType::Technology);
+        assert_eq!(EntityType::from_loose("research group"), EntityType::Organization);
         assert_eq!(EntityType::from_loose("totally unknown"), EntityType::Other);
         assert_eq!(EntityType::from_loose("Person"), EntityType::Person);
     }
