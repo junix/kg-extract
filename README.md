@@ -262,9 +262,9 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 
 | Flag | Meaning |
 |------|---------|
-| `-e, --engine` | `simple` \| `schema-json` \| `toolcall` |
-| `-b, --backend` | `llms` \| `agent` \| `mock` |
-| `--agent` | agent CLI for `-b agent`: `minimaxcc` (default) \| `glmcc` \| `mimocc` |
+| `-e, --engine` | `simple` \| `schema-json` \| `toolcall` \| `agentic` |
+| `-b, --backend` | `llms` \| `agent` \| `mock` (ignored by `-e agentic`, which always drives the SDK) |
+| `--agent` | agent CLI for `-b agent` / `-e agentic`: `minimaxcc` (default) \| `glmcc` \| `mimocc` |
 | `-c, --chunker` | `recursive` (default) \| `char` \| `token` |
 | `-m, --model` | override the engine's default model |
 | `--schema-mode` | schema-json/toolcall: `open` (default) \| `fixed` \| `evolving` |
@@ -274,7 +274,39 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 | `--lang` | language to render the preset/template (`zh` \| `en` \| …; default = template's first) |
 | `--list-presets` | print the bundled presets and exit |
 | `--max-rounds` | tool-call rounds (1 = single-round, default) |
+| `--relation-gleaning` | simple/agentic: targeted rounds that re-question orphan entities to recover edges (0 = off) |
 | `-o, --output` | `json` (default) \| `node-link` \| `mermaid` \| `stats` |
+
+### Agentic engine (`-e agentic`)
+
+An alternative to `simple` for **coherence-critical, small-to-medium** documents.
+Instead of extracting each chunk in its own session and merging, it drives the
+**whole document through one continuous multi-turn SDK session**: the full text is
+written to `document.md` in an isolated temp dir, the agent runs there in a
+**read-only tool sandbox** (Read/Grep/Glob; no Write/Edit/Bash), and slices are
+fed as turns. Because one conversation carries the context, the model **reuses
+entity names across slices** (coreference at extraction time), and the final
+[relation-gleaning](#relation-gleaning) pass connects orphans **across** slices,
+not just within a chunk.
+
+```bash
+kg-extract -e agentic --agent minimaxcc --relation-gleaning 2 -f doc.txt -o mermaid
+```
+
+Trade-offs vs `simple` (measured on a 62 KB manual):
+
+| | `simple` (per-chunk, concurrent) | `agentic` (one session, serial) |
+|---|---|---|
+| entities | 516 (heavily fragmented — `在线课堂` split into ~7 nodes) | 136 (consolidated — one node) |
+| orphan rate | ~1 % | ~0 % |
+| speed | fast (chunks run concurrently) | slower (strictly sequential) |
+| recall | higher (more granular, more redundant) | slightly lower (a few minor entities merged away) |
+
+So `agentic` is a **consolidation / coreference** strategy, not a recall one — its
+extraction-time deduplication is *not* reproducible by a post-hoc merge pass
+(`--merge-strategy llm` only trims ~20 % of the fragments). The self-serve `grep`
+context the sandbox enables is rarely used in practice (in-order slices already
+carry context in the conversation); it matters mainly for cross-section lookups.
 
 ```bash
 # Tool-calling engine via llms (requires --features llms-backend); open by default
