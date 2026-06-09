@@ -4,9 +4,8 @@
 //!
 //! `pi-agent` is the CLI shipped by the `pi-rs` crate: a one-shot agent driver
 //! built on the `@earendil-works/pi-agent-core` contract. Unlike the
-//! Claude-Code wrappers behind [`AgentCliBackend`](super::AgentCliBackend), it
-//! speaks a different invocation contract, so it gets its own backend rather
-//! than another [`AgentCli`](super::AgentCli) variant:
+//! Claude-Code wrappers behind [`SdkAgentBackend`](super::SdkAgentBackend), it
+//! speaks a different invocation contract, so it gets its own backend:
 //!
 //! - the prompt is read from stdin only when invoked as `-p -` (a bare `-p`
 //!   would consume the next token as the prompt);
@@ -69,7 +68,7 @@ impl PiAgentBackend {
 
     /// Whether `name` selects the pi-agent backend (case-insensitive). Used by
     /// the CLI to route `--backend agent --agent pi-agent` here instead of to
-    /// [`AgentCliBackend`](super::AgentCliBackend).
+    /// [`SdkAgentBackend`](super::SdkAgentBackend).
     pub fn accepts(name: &str) -> bool {
         matches!(name.trim().to_lowercase().as_str(), "pi-agent" | "pi_agent" | "piagent" | "pi")
     }

@@ -2,7 +2,7 @@
 //! prompting and multi-gleaning (ported from `graph/kg_extractor/simple.py`).
 
 use super::{validate_input, Extractor};
-use crate::backend::{CompletionOptions, LlmBackend, Message};
+use crate::backend::{ChatSession, CompletionOptions, LlmBackend, ReplaySession};
 use crate::chunking::segment;
 use crate::graph_build::entity_id;
 use crate::merger::{merge_all, merge_all_dedup_llm, merge_knowledge_graphs_with};
@@ -12,7 +12,7 @@ use crate::types::{
 };
 use futures::stream::{self, StreamExt};
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 pub const MAX_GLEANINGS: usize = 2;
@@ -68,12 +68,49 @@ Output:
 
 const CONTINUE_PROMPT: &str = "Seem MANY entities/relations were missed in the extraction. If there are no more entities/relations that need to be added, just answer NO. Otherwise, add them below using the same format:\n";
 
+/// System prompt shared by every turn of a chunk's extraction session.
+const SYSTEM_PROMPT: &str = "You are an elite assistant for extracting structured data from text.";
+
+/// Targeted *relation* gleaning. Plain entity gleaning (`CONTINUE_PROMPT`) asks
+/// "what did you miss?" and the model tends to answer with more *nouns*, leaving
+/// freshly-named entities dangling. This prompt does the opposite: it names the
+/// entities that ended up with **no** relationship and asks specifically *why* —
+/// connect each to the graph, or explicitly leave it alone. Endpoints are
+/// resolved against the already-extracted entities, so the round only adds edges
+/// (optionally pulling in a new neighbour the model names to anchor one).
+///
+/// Sent as a follow-up *within the same session*, so the source text is already
+/// in context (native multi-turn) or replayed in the history (`ReplaySession`) —
+/// the chunk is intentionally not re-embedded here.
+const RELATION_GLEANING_PROMPT: &str = r#"
+Looking back at the text you just analysed: the entities below were extracted but
+have NO relationship linking them to anything. For EACH one:
+- if it is clearly related to another entity (one from this list, or any other
+  entity in the text), emit that relationship;
+- if it genuinely stands alone in this text, skip it — do NOT invent a link.
+
+Orphan entities:
+{orphans}
+
+Relationship Types to prefer: {relationship_types}
+
+Output ONLY relationships, `##`-separated, each in EXACTLY this format:
+(relationship<|>source_entity<|>target_entity<|>relationship_type<|>why they are related<|>strength_0_to_1)
+
+If none of these entities has any relationship in the text, answer just: NO
+Output:
+"#;
+
 /// Knowledge graph extractor using a general LLM chat interface.
 pub struct SimpleExtractor {
     backend: Arc<dyn LlmBackend>,
     config: ExtractionConfig,
     pub quiet: bool,
     pub max_gleanings: usize,
+    /// Targeted relation-gleaning rounds run *after* entity gleaning: each round
+    /// re-questions the chunk's orphan entities (no incident edge) to recover
+    /// their relationships. `0` (default) preserves the Python port's behaviour.
+    pub max_relation_gleanings: usize,
     pub context: String,
 }
 
@@ -94,12 +131,26 @@ impl SimpleExtractor {
             config: Self::default_config(),
             quiet: false,
             max_gleanings: MAX_GLEANINGS,
+            max_relation_gleanings: 0,
             context: String::new(),
         }
     }
 
     pub fn with_config(backend: Arc<dyn LlmBackend>, config: ExtractionConfig) -> Self {
-        SimpleExtractor { backend, config, quiet: false, max_gleanings: MAX_GLEANINGS, context: String::new() }
+        SimpleExtractor {
+            backend,
+            config,
+            quiet: false,
+            max_gleanings: MAX_GLEANINGS,
+            max_relation_gleanings: 0,
+            context: String::new(),
+        }
+    }
+
+    /// Enable targeted relation-gleaning with `n` rescue rounds (builder style).
+    pub fn relation_gleanings(mut self, n: usize) -> Self {
+        self.max_relation_gleanings = n;
+        self
     }
 
     pub fn config(&self) -> &ExtractionConfig {
@@ -121,29 +172,47 @@ impl SimpleExtractor {
             self.config.attributes_list().join(", ")
         };
 
-        let prompt = EXTRACTION_PROMPT
+        let extraction_prompt = EXTRACTION_PROMPT
             .replace("{entity_types}", &entity_types)
             .replace("{relationship_types}", &rel_types)
             .replace("{attribute_types}", &attr_types)
             .replace("{context}", &self.context)
             .replace("{chunk}", chunk);
 
-        let mut history = vec![
-            Message::system("You are an elite assistant for extracting structured data from text."),
-            Message::user(prompt),
-        ];
         let opts = CompletionOptions {
             model: self.config.model_name.clone(),
             temperature: 0.3,
             max_tokens: 6500,
         };
 
+        // Drive the whole chunk through ONE multi-turn session: native for
+        // backends with a real conversation protocol (the SDK retains context
+        // across turns), or a history-replaying fallback for the rest. Both
+        // expose the same `send` contract, so the gleaning logic below is
+        // transport-agnostic.
+        let system = SYSTEM_PROMPT.to_string();
+        let mut session: Box<dyn ChatSession> =
+            match self.backend.open_session(Some(system.clone()), &opts).await {
+                Ok(Some(s)) => s,
+                Ok(None) => {
+                    Box::new(ReplaySession::new(self.backend.clone(), Some(system), opts.clone()))
+                }
+                Err(e) => {
+                    if !self.quiet {
+                        eprintln!("Session open error: {e}");
+                    }
+                    return (Vec::new(), KnowledgeGraph::new());
+                }
+            };
+
         let mut all_entities: HashMap<String, Entity> = HashMap::new();
         let mut all_triples: Vec<Triple> = Vec::new();
         let mut parsed_results: Vec<ParsedResult> = Vec::new();
 
+        // Entity gleaning: the extraction turn, then "what did you miss?" turns.
         for i in 0..=self.max_gleanings {
-            let output = match self.backend.complete(&history, &opts).await {
+            let prompt: &str = if i == 0 { &extraction_prompt } else { CONTINUE_PROMPT };
+            let output = match session.send(prompt).await {
                 Ok(o) => o.trim().to_string(),
                 Err(e) => {
                     if !self.quiet {
@@ -169,9 +238,63 @@ impl SimpleExtractor {
             if i > 0 && new_entities == 0 && new_triples == 0 {
                 break;
             }
+        }
 
-            history.push(Message::assistant(output));
-            history.push(Message::user(CONTINUE_PROMPT));
+        // Relation gleaning: name the entities that ended up with no edge and ask
+        // the model — in the SAME session, so the source text is still in context
+        // — to connect them. Each round only adds edges between already-known
+        // entities, so it shrinks the orphan set without inventing dangling nouns.
+        let rescue_rel_types = if self.config.predicates_list().is_empty() {
+            "related_to, part_of, uses, produces, has_property".to_string()
+        } else {
+            self.config.predicates_list().join(", ")
+        };
+        for _ in 0..self.max_relation_gleanings {
+            let linked: HashSet<&str> = all_triples
+                .iter()
+                .flat_map(|t| [t.subject.id.as_str(), t.object.id.as_str()])
+                .collect();
+            let orphans: Vec<&Entity> =
+                all_entities.values().filter(|e| !linked.contains(e.id.as_str())).collect();
+            if orphans.is_empty() {
+                break;
+            }
+            let orphan_list =
+                orphans.iter().map(|e| format!("- {}", e.label)).collect::<Vec<_>>().join("\n");
+            let prompt = RELATION_GLEANING_PROMPT
+                .replace("{orphans}", &orphan_list)
+                .replace("{relationship_types}", &rescue_rel_types);
+
+            let output = match session.send(&prompt).await {
+                Ok(o) => o.trim().to_string(),
+                Err(e) => {
+                    if !self.quiet {
+                        eprintln!("Relation-gleaning error: {e}");
+                    }
+                    break;
+                }
+            };
+            if output.is_empty() || output.eq_ignore_ascii_case("no") {
+                break;
+            }
+
+            // Keep only edges that resolve to known entities and are genuinely new.
+            let mut seen: HashSet<(String, String, String)> =
+                all_triples.iter().map(|t| t.to_tuple()).collect();
+            let rescued: Vec<Triple> = parse_relations_against(&output, &all_entities)
+                .into_iter()
+                .filter(|t| seen.insert(t.to_tuple()))
+                .collect();
+            if rescued.is_empty() {
+                break;
+            }
+            all_triples.extend(rescued);
+        }
+
+        if let Err(e) = session.finish().await {
+            if !self.quiet {
+                eprintln!("Session finish error: {e}");
+            }
         }
 
         let mut kg = KnowledgeGraph::new();
@@ -183,6 +306,56 @@ impl SimpleExtractor {
         }
         (parsed_results, kg)
     }
+}
+
+/// Parse a relation-only LLM response into triples, resolving each endpoint
+/// against an existing entity table (by normalised label). Unlike [`parse_output`],
+/// it does not require the entities to be re-declared in this response — the
+/// rescue round emits relationships only. Edges with an unknown endpoint are
+/// dropped (no dangling/hallucinated nodes).
+fn parse_relations_against(output: &str, known: &HashMap<String, Entity>) -> Vec<Triple> {
+    let id_map: HashMap<String, String> =
+        known.values().map(|e| (normalize_key(&e.label), e.id.clone())).collect();
+
+    let mut triples = Vec::new();
+    for item in split_to_items(output) {
+        let mut item = item.trim().to_string();
+        if item.is_empty() {
+            continue;
+        }
+        if item.starts_with('(') && !item.ends_with(')') {
+            item.push(')');
+        }
+        let head = item
+            .trim_start_matches('(')
+            .split(TUPLE_DELIMITER)
+            .next()
+            .unwrap_or("")
+            .to_lowercase();
+        if !(head.contains("relationship") && item.contains(TUPLE_DELIMITER)) {
+            continue;
+        }
+        let Some(rel) = parse_relationship_item(&item, &id_map) else {
+            continue;
+        };
+        // Both endpoints must be entities we already know about.
+        let (Some(s), Some(o)) = (known.get(&rel.source_id), known.get(&rel.target_id)) else {
+            continue;
+        };
+        // Mirror `parse_output`'s triple construction exactly (incl. the
+        // field-shift quirk: `rel.description` carries the relationship-type token).
+        let predicate_type = infer_predicate_type(&rel.description);
+        let label: String = rel.description.chars().take(50).collect();
+        let predicate = Predicate::with_label(predicate_type, label);
+        let mut t = Triple::new(s.clone(), predicate, o.clone());
+        t.confidence = Some(rel.strength);
+        t.metadata.insert("description".into(), serde_json::json!(rel.description));
+        t.metadata.insert("source_name".into(), serde_json::json!(rel.source_name));
+        t.metadata.insert("target_name".into(), serde_json::json!(rel.target_name));
+        t.metadata.insert("relation_gleaned".into(), serde_json::json!(true));
+        triples.push(t);
+    }
+    triples
 }
 
 #[async_trait::async_trait]
@@ -579,6 +752,40 @@ mod tests {
         assert_eq!(out.num_entities(), 2);
         assert_eq!(out.num_triples(), 1);
         assert_eq!(out.knowledge_graph.triples[0].predicate.predicate_type, PredicateType::Uses);
+    }
+
+    #[tokio::test]
+    async fn relation_gleaning_rescues_orphan_entities() {
+        // First call extracts two entities but NO relationship -> both orphan.
+        let extract = "(entity<|>OpenAI<|>organization<|>An AI research lab.<|>)##\
+            (entity<|>GPT-4<|>technology<|>A large language model.<|>)##";
+        // The rescue round emits a relationship only (no entity records). It must
+        // still resolve against the already-known entities and become a triple.
+        let rescue = "(relationship<|>OpenAI<|>GPT-4<|>uses<|>OpenAI develops GPT-4.<|>0.9)##";
+        let backend = Arc::new(MockBackend::new(vec![extract.into(), rescue.into()]));
+        let mut ex = SimpleExtractor::new(backend);
+        ex.max_gleanings = 0; // exactly one extraction call, then one rescue round
+        ex.max_relation_gleanings = 1;
+
+        let out = ex.extract("OpenAI developed GPT-4.").await.unwrap();
+        assert_eq!(out.num_entities(), 2);
+        assert_eq!(out.num_triples(), 1, "the orphan rescue round should add the edge");
+        let t = &out.knowledge_graph.triples[0];
+        assert_eq!(t.predicate.predicate_type, PredicateType::Uses);
+        assert_eq!(t.metadata.get("relation_gleaned"), Some(&serde_json::json!(true)));
+    }
+
+    #[tokio::test]
+    async fn relation_gleaning_off_by_default_keeps_orphans() {
+        let extract = "(entity<|>OpenAI<|>organization<|>An AI research lab.<|>)##\
+            (entity<|>GPT-4<|>technology<|>A large language model.<|>)##";
+        let backend = Arc::new(MockBackend::new(vec![extract.into(), String::new()]));
+        let mut ex = SimpleExtractor::new(backend);
+        ex.max_gleanings = 0;
+        // max_relation_gleanings defaults to 0 -> no rescue, orphans stay orphan.
+        let out = ex.extract("OpenAI developed GPT-4.").await.unwrap();
+        assert_eq!(out.num_entities(), 2);
+        assert_eq!(out.num_triples(), 0);
     }
 
     #[tokio::test]

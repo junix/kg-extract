@@ -17,7 +17,7 @@
 //! Text segmentation is delegated to the [`chonkie`] crate (see [`chunking`]);
 //! the default strategy is recursive chunking. Completions come from either the
 //! in-process `llms` crate ([`backend::LlmsBackend`], behind the `llms-backend`
-//! feature) or a subprocess agent CLI ([`backend::AgentCliBackend`]:
+//! feature) or an agent CLI driven over stream-json ([`backend::SdkAgentBackend`]:
 //! `minimaxcc` / `glmcc` / `mimocc`).
 //!
 //! ```no_run

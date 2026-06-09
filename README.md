@@ -28,7 +28,7 @@ pub trait Extractor {
 text
   │  chunking (chonkie)  ── Recursive (default) / Char (Python-parity) / Token
   ▼
-LlmBackend.complete()   ── LlmsBackend (in-process `llms`) │ AgentCliBackend (minimaxcc/glmcc/mimocc) │ MockBackend
+LlmBackend.complete()   ── LlmsBackend (in-process `llms`) │ SdkAgentBackend (minimaxcc/glmcc/mimocc, stream-json) │ MockBackend
   ▼
 parse  ── delimiter parser (Simple) │ JSON parser (SchemaJson)
   ▼
@@ -45,11 +45,18 @@ KnowledgeGraph { entities, triples }  ──►  JSON │ node-link │ Mermaid 
   - `LlmsBackend` (feature `llms-backend`) — in-process [`llms`](../llms) crate;
     resolves any model string to the right provider (OpenAI-compatible, Ollama,
     Anthropic, …). Used for normal chat (Simple / SchemaJson).
-  - `AgentCliBackend` — subprocess to a Claude-Code-wrapper agent CLI
-    (`minimaxcc` default, or `glmcc` / `mimocc`) in headless `-p` mode. Intended
-    for SchemaJson **evolving** mode, where schema-evolving extraction is genuinely
-    agentic.
+  - `SdkAgentBackend` — drives a Claude-Code-wrapper agent CLI (`minimaxcc`
+    default, or `glmcc` / `mimocc`) through the structured
+    [`claude-agent-sdk-rs`](../claude-agent-sdk-rs) **stream-json** protocol,
+    returning parsed messages instead of scraped stdout. Exposes a **native
+    multi-turn session** (`open_session`), which the Simple engine uses to run
+    gleaning + relation-gleaning as a real conversation. `pi-agent` (pi-rs) has a
+    different CLI contract and keeps its own `PiAgentBackend`.
   - `MockBackend` — deterministic canned responses for tests/offline demos.
+
+  Backends without a native conversation expose multi-turn through
+  `ReplaySession`, which replays the accumulated history through `complete` each
+  turn — so the Simple engine drives one transport-agnostic session loop.
 
 ## Schema modes
 

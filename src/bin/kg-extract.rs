@@ -15,7 +15,7 @@ use clap::parser::ValueSource;
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser, ValueEnum};
 use serde::Deserialize;
 
-use kg_extract::backend::{AgentCli, AgentCliBackend, LlmBackend, MockBackend, PiAgentBackend};
+use kg_extract::backend::{LlmBackend, MockBackend, PiAgentBackend, SdkAgentBackend};
 use kg_extract::extractor::{
     Extractor, SchemaMode, SimpleExtractor, ToolCallExtractor, SchemaJsonExtractor,
 };
@@ -35,7 +35,9 @@ enum Engine {
 enum Backend {
     /// In-process `llms` crate (requires the `llms-backend` feature).
     Llms,
-    /// Subprocess agent CLI: minimaxcc / glmcc / mimocc / pi-agent.
+    /// Agent CLI driven through the `claude-agent-sdk-rs` stream-json protocol
+    /// (minimaxcc / glmcc / mimocc), or pi-rs's `pi-agent`. Provider chosen by
+    /// --agent.
     Agent,
     /// Deterministic mock (reads a canned response from --mock-response).
     Mock,
@@ -130,6 +132,7 @@ struct FileConfig {
     max_rounds: Option<usize>,
     merge_strategy: Option<MergeStrategyArg>,
     max_concurrency: Option<usize>,
+    relation_gleaning: Option<usize>,
     output: Option<OutFmt>,
 }
 
@@ -212,6 +215,12 @@ struct Args {
     #[arg(long, default_value_t = 8)]
     max_concurrency: usize,
 
+    /// Simple engine: targeted relation-gleaning rounds run after entity
+    /// gleaning. Each round re-questions orphan entities (no relationship) to
+    /// recover their edges. 0 (default) keeps the original behaviour.
+    #[arg(long, default_value_t = 0)]
+    relation_gleaning: usize,
+
     /// Canned response for --backend mock.
     #[arg(long)]
     mock_response: Option<String>,
@@ -236,6 +245,7 @@ struct Resolved {
     max_rounds: usize,
     merge_strategy: MergeStrategyArg,
     max_concurrency: usize,
+    relation_gleaning: usize,
     output: OutFmt,
 }
 
@@ -330,6 +340,7 @@ fn resolve(m: &ArgMatches, args: &Args, cfg: FileConfig) -> Resolved {
         max_rounds: pick(m, "max_rounds", args.max_rounds, cfg.max_rounds),
         merge_strategy: pick(m, "merge_strategy", args.merge_strategy, cfg.merge_strategy),
         max_concurrency: pick(m, "max_concurrency", args.max_concurrency, cfg.max_concurrency),
+        relation_gleaning: pick(m, "relation_gleaning", args.relation_gleaning, cfg.relation_gleaning),
         output: pick(m, "output", args.output, cfg.output),
     }
 }
@@ -357,13 +368,12 @@ fn make_backend(
     match backend {
         Backend::Agent => {
             // pi-agent (from pi-rs) has a different CLI contract than the
-            // Claude-Code wrappers, so it gets its own backend.
+            // Claude-Code wrappers, so it gets its own backend. Everything else
+            // is driven through the structured stream-json SDK.
             if PiAgentBackend::accepts(agent) {
                 return Ok(Arc::new(PiAgentBackend::new()));
             }
-            let cli = AgentCli::parse(agent)
-                .ok_or_else(|| anyhow::anyhow!("unknown agent CLI: {}", agent))?;
-            Ok(Arc::new(AgentCliBackend::new(cli)))
+            Ok(Arc::new(SdkAgentBackend::for_agent(agent)?))
         }
         Backend::Mock => {
             let resp = mock_response.unwrap_or_default().to_string();
@@ -453,7 +463,10 @@ async fn main() -> anyhow::Result<()> {
             if let Some(m) = &cfg.model {
                 c.model_name = m.clone();
             }
-            SimpleExtractor::with_config(backend, c).extract(&text).await?
+            SimpleExtractor::with_config(backend, c)
+                .relation_gleanings(cfg.relation_gleaning)
+                .extract(&text)
+                .await?
         }
         Engine::SchemaJson => {
             let mut c = SchemaJsonExtractor::default_config();

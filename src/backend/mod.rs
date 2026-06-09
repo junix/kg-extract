@@ -1,34 +1,38 @@
 //! Pluggable completion backends.
 //!
 //! Extractors are written against the [`LlmBackend`] trait so they don't care
-//! whether the text comes from the in-process `llms` crate, a subprocess agent
-//! CLI (glmcc / minimaxcc / mimocc via [`AgentCliBackend`], or pi-rs's
-//! `pi-agent` via [`PiAgentBackend`]), or a test mock.
+//! whether the text comes from the in-process `llms` crate, an agent CLI driven
+//! through the structured stream-json protocol (glmcc / minimaxcc / mimocc via
+//! [`SdkAgentBackend`], or pi-rs's `pi-agent` via [`PiAgentBackend`]), or a test
+//! mock.
 //!
 //! Backends optionally support **tool / function calling** via
 //! [`LlmBackend::complete_with_tools`] (used by the `ToolCallExtractor`); the
 //! default implementation reports the backend has no tool support.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 
-pub mod agent_cli;
 #[cfg(feature = "llms-backend")]
 pub mod llms_backend;
 pub mod mock;
 pub mod pi_agent;
+pub mod sdk_agent;
 
-pub use agent_cli::{AgentCli, AgentCliBackend};
 #[cfg(feature = "llms-backend")]
 pub use llms_backend::LlmsBackend;
 pub use mock::MockBackend;
 pub use pi_agent::PiAgentBackend;
+pub use sdk_agent::SdkAgentBackend;
 
-/// Flatten a message list into a single prompt string for subprocess agent CLIs
-/// that take one prompt on stdin (`AgentCliBackend`, `PiAgentBackend`).
+/// Flatten a message list into a single prompt string for agent backends that
+/// take one prompt per turn (`PiAgentBackend`'s stdin, `SdkAgentBackend`'s
+/// single-shot `complete`).
 ///
 /// System blocks come first, then the conversation; assistant turns are tagged
-/// so the agent can tell them apart from user input. Both subprocess backends
-/// share this so their prompt formatting can't silently diverge.
+/// so the agent can tell them apart from user input. Sharing this keeps their
+/// prompt formatting from silently diverging.
 pub(crate) fn flatten_prompt(messages: &[Message]) -> String {
     let mut prompt = String::new();
     for m in messages {
@@ -172,5 +176,100 @@ pub trait LlmBackend: Send + Sync {
         _options: &CompletionOptions,
     ) -> anyhow::Result<ToolChatResponse> {
         anyhow::bail!("this backend does not support tool calling")
+    }
+
+    /// Open a stateful multi-turn session if the backend supports one natively.
+    ///
+    /// Returns `None` by default; callers then fall back to [`ReplaySession`],
+    /// which replays the accumulated history through [`complete`](Self::complete)
+    /// each turn. Backends with a real conversation protocol (e.g.
+    /// [`SdkAgentBackend`]) override this to retain context across turns without
+    /// re-sending it.
+    async fn open_session(
+        &self,
+        _system: Option<String>,
+        _options: &CompletionOptions,
+    ) -> anyhow::Result<Option<Box<dyn ChatSession>>> {
+        Ok(None)
+    }
+}
+
+/// A stateful multi-turn chat. Each [`send`](Self::send) issues one turn; context
+/// from prior turns is retained by the session — natively for backends that
+/// support it, or by replaying the history (see [`ReplaySession`]).
+#[async_trait]
+pub trait ChatSession: Send {
+    /// Issue one turn and return the assistant's text reply.
+    async fn send(&mut self, prompt: &str) -> anyhow::Result<String>;
+
+    /// Tear the session down (close any subprocess / connection). Default no-op.
+    async fn finish(&mut self) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
+/// Fallback [`ChatSession`] for backends without a native conversation protocol:
+/// it accumulates the dialogue and replays the whole history through
+/// [`LlmBackend::complete`] on every turn. This reproduces the historical
+/// "flatten-and-resend" gleaning behaviour exactly.
+pub struct ReplaySession {
+    backend: Arc<dyn LlmBackend>,
+    history: Vec<Message>,
+    options: CompletionOptions,
+}
+
+impl ReplaySession {
+    pub fn new(
+        backend: Arc<dyn LlmBackend>,
+        system: Option<String>,
+        options: CompletionOptions,
+    ) -> Self {
+        let mut history = Vec::new();
+        if let Some(s) = system {
+            history.push(Message::system(s));
+        }
+        ReplaySession { backend, history, options }
+    }
+}
+
+#[async_trait]
+impl ChatSession for ReplaySession {
+    async fn send(&mut self, prompt: &str) -> anyhow::Result<String> {
+        self.history.push(Message::user(prompt));
+        let out = self.backend.complete(&self.history, &self.options).await?;
+        self.history.push(Message::assistant(out.clone()));
+        Ok(out)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn backends_have_no_native_session_by_default() {
+        let backend = MockBackend::single("x");
+        let session = backend.open_session(None, &CompletionOptions::default()).await.unwrap();
+        assert!(session.is_none(), "default open_session must be None so callers replay");
+    }
+
+    #[tokio::test]
+    async fn replay_session_returns_canned_replies_in_order_and_grows_history() {
+        let backend: Arc<dyn LlmBackend> =
+            Arc::new(MockBackend::new(vec!["first".into(), "second".into()]));
+        let mut session = ReplaySession::new(
+            backend.clone(),
+            Some("sys".into()),
+            CompletionOptions::default(),
+        );
+
+        assert_eq!(session.send("turn one").await.unwrap(), "first");
+        assert_eq!(session.send("turn two").await.unwrap(), "second");
+        // After two turns the replayed history is system + (user/assistant) x2.
+        assert_eq!(session.history.len(), 5);
+        assert_eq!(session.history[0].role, "system");
+        assert_eq!(session.history[1].content, "turn one");
+        assert_eq!(session.history[2].content, "first");
+        session.finish().await.unwrap(); // default no-op
     }
 }
