@@ -27,8 +27,8 @@ fn file_config_parses_full_object() {
 
 #[test]
 fn file_config_partial_leaves_rest_none() {
-    let cfg: FileConfig = serde_json::from_str(r#"{"engine": "youtu"}"#).unwrap();
-    assert!(matches!(cfg.engine, Some(Engine::Youtu)));
+    let cfg: FileConfig = serde_json::from_str(r#"{"engine": "schema-json"}"#).unwrap();
+    assert!(matches!(cfg.engine, Some(Engine::SchemaJson)));
     assert!(cfg.model.is_none());
     assert!(cfg.backend.is_none());
     assert!(cfg.output.is_none());
@@ -94,20 +94,20 @@ fn precedence_cli_over_config_over_default() {
 
     // 1. CLI flag wins over config.
     let r = render(&["kg-extract", "--engine", "simple"], FileConfig {
-        engine: Some(Engine::Youtu),
+        engine: Some(Engine::SchemaJson),
         ..Default::default()
     });
     assert!(matches!(r.engine, Engine::Simple));
 
     // 2. Config wins when CLI flag absent.
     let r = render(&["kg-extract"], FileConfig {
-        engine: Some(Engine::Youtu),
+        engine: Some(Engine::SchemaJson),
         chunker: Some(Chunker::Token),
         max_rounds: Some(4),
         schema_mode: Some(SchemaModeArg::Evolving),
         ..Default::default()
     });
-    assert!(matches!(r.engine, Engine::Youtu));
+    assert!(matches!(r.engine, Engine::SchemaJson));
     assert!(matches!(r.chunker, Chunker::Token));
     assert_eq!(r.max_rounds, 4);
     assert!(matches!(r.schema_mode, SchemaModeArg::Evolving));

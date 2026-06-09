@@ -17,16 +17,16 @@ use serde::Deserialize;
 
 use kg_extract::backend::{AgentCli, AgentCliBackend, LlmBackend, MockBackend, PiAgentBackend};
 use kg_extract::extractor::{
-    Extractor, SchemaMode, SimpleExtractor, ToolCallExtractor, TriplexExtractor, YoutuExtractor,
+    Extractor, SchemaMode, SimpleExtractor, ToolCallExtractor, TriplexExtractor, SchemaJsonExtractor,
 };
 use kg_extract::types::{ChunkStrategy, Schema};
 
 #[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[serde(rename_all = "kebab-case")]
 enum Engine {
     Simple,
     Triplex,
-    Youtu,
+    SchemaJson,
     Toolcall,
 }
 
@@ -59,7 +59,7 @@ impl From<Chunker> for ChunkStrategy {
     }
 }
 
-/// Youtu schema mode (CLI mirror of [`SchemaMode`]).
+/// Schema mode (CLI mirror of [`SchemaMode`]).
 #[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum SchemaModeArg {
@@ -138,13 +138,13 @@ struct Args {
     #[arg(short = 'k', long, value_enum, default_value_t = Chunker::Recursive)]
     chunker: Chunker,
 
-    /// Schema mode for the schema-driven engines (youtu / toolcall): `open` (no
+    /// Schema mode for the schema-driven engines (schema-json / toolcall): `open` (no
     /// predefined types, default) / `fixed` (use only the schema) / `evolving`
     /// (seed schema, allow new types). `fixed` and `evolving` require --schema.
     #[arg(long, value_enum, default_value_t = SchemaModeArg::Open)]
     schema_mode: SchemaModeArg,
 
-    /// Schema JSON file (entity/relation/attribute types) for youtu / toolcall.
+    /// Schema JSON file (entity/relation/attribute types) for schema-json / toolcall.
     /// Required for --schema-mode fixed|evolving; ignored by --schema-mode open.
     #[arg(long)]
     schema: Option<String>,
@@ -334,8 +334,8 @@ async fn main() -> anyhow::Result<()> {
             }
             TriplexExtractor::with_config(backend, c).extract(&text).await?
         }
-        Engine::Youtu => {
-            let mut c = YoutuExtractor::default_config();
+        Engine::SchemaJson => {
+            let mut c = SchemaJsonExtractor::default_config();
             c.chunker = cfg.chunker.into();
             if let Some(m) = &cfg.model {
                 c.model_name = m.clone();
@@ -344,7 +344,7 @@ async fn main() -> anyhow::Result<()> {
                 c.spec.schema = Schema::from_json_file(expand_tilde(path))
                     .with_context(|| format!("loading --schema {path}"))?;
             }
-            YoutuExtractor::with_config(backend, c)
+            SchemaJsonExtractor::with_config(backend, c)
                 .schema_mode(cfg.schema_mode.into())
                 .extract(&text)
                 .await?

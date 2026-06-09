@@ -5,13 +5,13 @@
 //! ([`SchemaMode`]), and the output dedup policy. It is orthogonal to
 //! *execution* (model, chunking, segmentation), which lives in
 //! [`ExtractionConfig`](super::ExtractionConfig) alongside an embedded spec. The
-//! spec is reusable across executors (run the same spec through Youtu or
+//! spec is reusable across executors (run the same spec through SchemaJson or
 //! ToolCall) and serializable as a portable artifact.
 
 use super::schema::Schema;
 use serde::{Deserialize, Serialize};
 
-/// How a seed schema constrains the schema-driven extractors (Youtu, ToolCall).
+/// How a seed schema constrains the schema-driven extractors (SchemaJson, ToolCall).
 ///
 /// These are three of the four cells of the (schema present?) × (may add types?)
 /// grid; the fourth — constrain to an *empty* schema — is meaningless and is made

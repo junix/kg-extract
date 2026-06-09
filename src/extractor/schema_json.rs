@@ -1,4 +1,4 @@
-//! YoutuExtractor — schema-driven extraction with three schema modes:
+//! SchemaJsonExtractor — schema-driven extraction with three schema modes:
 //! `Open` (no predefined types), `Fixed` (closed schema), and `Evolving`
 //! (seed schema the model may extend). Ported from `graph/kg_extractor/youtu.py`.
 
@@ -14,15 +14,15 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Schema-based knowledge graph extractor.
-pub struct YoutuExtractor {
+pub struct SchemaJsonExtractor {
     backend: Arc<dyn LlmBackend>,
     config: ExtractionConfig,
     pub quiet: bool,
 }
 
-impl YoutuExtractor {
+impl SchemaJsonExtractor {
     pub fn default_config() -> ExtractionConfig {
-        // Youtu base config starts from an EMPTY schema (no default seeding).
+        // SchemaJson base config starts from an EMPTY schema (no default seeding).
         ExtractionConfig {
             spec: ExtractionSpec { schema: Schema::default(), ..Default::default() },
             model_name: "qwen-max".into(),
@@ -33,14 +33,14 @@ impl YoutuExtractor {
     }
 
     pub fn new(backend: Arc<dyn LlmBackend>) -> Self {
-        YoutuExtractor { backend, config: Self::default_config(), quiet: false }
+        SchemaJsonExtractor { backend, config: Self::default_config(), quiet: false }
     }
 
     pub fn with_config(backend: Arc<dyn LlmBackend>, config: ExtractionConfig) -> Self {
-        YoutuExtractor { backend, config, quiet: false }
+        SchemaJsonExtractor { backend, config, quiet: false }
     }
 
-    /// Build from a declarative [`ExtractionSpec`] with Youtu's default execution
+    /// Build from a declarative [`ExtractionSpec`] with SchemaJson's default execution
     /// params. Run the *same* spec through [`ToolCallExtractor::with_spec`] to
     /// compare mechanisms.
     pub fn with_spec(backend: Arc<dyn LlmBackend>, spec: ExtractionSpec) -> Self {
@@ -136,7 +136,7 @@ Ensure valid JSON output."
                     (t, HashMap::new())
                 };
 
-                // Youtu uses strict name match, fallback PHYSICAL_OBJECT (its own
+                // SchemaJson uses strict name match, fallback PHYSICAL_OBJECT (its own
                 // quirk, distinct from `from_loose`), so parsing stays here rather
                 // than in the shared GraphBuilder.
                 let entity_type = type_str
@@ -177,7 +177,7 @@ Ensure valid JSON output."
 }
 
 #[async_trait::async_trait]
-impl Extractor for YoutuExtractor {
+impl Extractor for SchemaJsonExtractor {
     async fn extract(&self, text: &str) -> anyhow::Result<ExtractionResponse> {
         validate_input(text, self.config.min_segment_size, self.quiet)?;
 
@@ -214,7 +214,7 @@ impl Extractor for YoutuExtractor {
 
         let mut resp = ExtractionResponse::new(kg);
         resp.metadata.insert("model".into(), serde_json::json!(self.config.model_name));
-        resp.metadata.insert("mode".into(), serde_json::json!("youtu"));
+        resp.metadata.insert("mode".into(), serde_json::json!("schema_json"));
         resp.metadata.insert("schema_mode".into(), serde_json::json!(self.config.spec.mode.as_str()));
         resp.metadata.insert(
             "schema_used".into(),
@@ -244,7 +244,7 @@ mod tests {
                                       "GPT-4": {"type": "TECHNOLOGY"}},
                         "relationships": [["OpenAI", "DEVELOPED_BY", "GPT-4"]]}"#;
         let backend = Arc::new(MockBackend::single(json));
-        let ex = YoutuExtractor::new(backend);
+        let ex = SchemaJsonExtractor::new(backend);
         let out = ex.extract("OpenAI developed GPT-4.").await.unwrap();
         assert_eq!(out.num_entities(), 2);
         assert_eq!(out.num_triples(), 1);
@@ -256,7 +256,7 @@ mod tests {
         // different case; the edge must still be created, not silently dropped.
         let json = r#"{"entities": {"OpenAI": {"type": "ORGANIZATION"}, "GPT-4": {"type": "TECHNOLOGY"}},
                        "relationships": [["openai", "uses", "gpt-4"]]}"#;
-        let out = YoutuExtractor::new(Arc::new(MockBackend::single(json)))
+        let out = SchemaJsonExtractor::new(Arc::new(MockBackend::single(json)))
             .extract("text")
             .await
             .unwrap();
@@ -267,17 +267,17 @@ mod tests {
     #[tokio::test]
     async fn entity_ids_are_deterministic_md5() {
         let json = r#"{"entities": {"OpenAI": {"type": "ORGANIZATION"}}, "relationships": []}"#;
-        let a = YoutuExtractor::new(Arc::new(MockBackend::single(json)))
+        let a = SchemaJsonExtractor::new(Arc::new(MockBackend::single(json)))
             .extract("text")
             .await
             .unwrap();
-        let b = YoutuExtractor::new(Arc::new(MockBackend::single(json)))
+        let b = SchemaJsonExtractor::new(Arc::new(MockBackend::single(json)))
             .extract("text")
             .await
             .unwrap();
         let ka: Vec<&String> = a.knowledge_graph.entities.keys().collect();
         let kb: Vec<&String> = b.knowledge_graph.entities.keys().collect();
-        assert_eq!(ka, kb, "Youtu entity ids must be deterministic across runs");
+        assert_eq!(ka, kb, "SchemaJson entity ids must be deterministic across runs");
         let expected = entity_id("OpenAI");
         assert!(
             a.knowledge_graph.entities.contains_key(&expected),
@@ -289,12 +289,12 @@ mod tests {
     async fn open_is_the_default_and_needs_no_schema() {
         // Default mode is Open: an empty schema is fine, model extracts freely.
         let json = r#"{"entities": {"OpenAI": {"type": "ORGANIZATION"}}, "relationships": []}"#;
-        let out = YoutuExtractor::new(Arc::new(MockBackend::single(json)))
+        let out = SchemaJsonExtractor::new(Arc::new(MockBackend::single(json)))
             .extract("text")
             .await
             .unwrap();
         assert_eq!(out.metadata["schema_mode"], serde_json::json!("open"));
-        assert_eq!(out.metadata["mode"], serde_json::json!("youtu"));
+        assert_eq!(out.metadata["mode"], serde_json::json!("schema_json"));
         assert_eq!(out.num_entities(), 1);
     }
 
@@ -309,7 +309,7 @@ mod tests {
             vec!["RELATED_TO".into()],
             vec![],
         ));
-        let ex = YoutuExtractor::with_config(Arc::new(MockBackend::single(json)), cfg)
+        let ex = SchemaJsonExtractor::with_config(Arc::new(MockBackend::single(json)), cfg)
             .schema_mode(SchemaMode::Evolving);
         let out = ex.extract("Some text about a movie.").await.unwrap();
         assert!(out.metadata.contains_key("new_schema_types"));
@@ -320,7 +320,7 @@ mod tests {
     async fn fixed_mode_without_schema_errors() {
         // Fixed on an empty schema is the degenerate combo — must error, not
         // silently tell the model to "use only types from []".
-        let err = YoutuExtractor::new(Arc::new(MockBackend::single("{}")))
+        let err = SchemaJsonExtractor::new(Arc::new(MockBackend::single("{}")))
             .schema_mode(SchemaMode::Fixed)
             .extract("text")
             .await;
@@ -336,13 +336,13 @@ mod tests {
             Schema::new(vec!["ORGANIZATION".into()], vec!["DEVELOPED_BY".into()], vec![]),
             SchemaMode::Fixed,
         );
-        let youtu = YoutuExtractor::with_spec(Arc::new(MockBackend::single("{}")), spec.clone());
+        let sj = SchemaJsonExtractor::with_spec(Arc::new(MockBackend::single("{}")), spec.clone());
         let tool = ToolCallExtractor::with_spec(Arc::new(MockBackend::single("{}")), spec.clone());
-        assert_eq!(youtu.config().spec, spec, "Youtu must carry the spec verbatim");
+        assert_eq!(sj.config().spec, spec, "SchemaJson must carry the spec verbatim");
         assert_eq!(tool.config().spec, spec, "ToolCall must carry the same spec");
         // Execution params stay engine-specific (both default to qwen-max here,
         // but the segment sizes differ: 3000 vs 5000).
-        assert_eq!(youtu.config().segment_size, 3000);
+        assert_eq!(sj.config().segment_size, 3000);
         assert_eq!(tool.config().segment_size, 5000);
     }
 }

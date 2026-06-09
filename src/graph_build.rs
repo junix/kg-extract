@@ -1,6 +1,6 @@
 //! Shared graph-construction primitives for the extractors and the MCP store.
 //!
-//! These factor out logic that was copy-pasted across `simple.rs`, `youtu.rs`,
+//! These factor out logic that was copy-pasted across `simple.rs`, `schema_json.rs`,
 //! `toolcall.rs` and `mcp.rs`:
 //! - [`entity_id`]: the deterministic `entity_<md5(name)[..8]>` id scheme, so a
 //!   graph built by any extractor (or the MCP server) is interchangeable.
@@ -9,7 +9,7 @@
 //! - [`GraphBuilder`]: accumulate entities (deduped by lowercased name) and
 //!   resolve relationships by name (case-insensitive; dangling endpoints
 //!   dropped). Type/predicate *parsing* stays at the call site so each extractor
-//!   keeps its own fallback semantics (Youtu's strict `PhysicalObject`/`RelatedTo`
+//!   keeps its own fallback semantics (SchemaJson's strict `PhysicalObject`/`RelatedTo`
 //!   fallback differs from `from_loose`).
 
 use crate::types::{Entity, EntityType, KnowledgeGraph, Predicate, PredicateType, Triple};

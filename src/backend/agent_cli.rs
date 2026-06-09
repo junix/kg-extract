@@ -1,9 +1,9 @@
 //! Completion backend that shells out to a Claude-Code-wrapper agent CLI
 //! (`glmcc` / `minimaxcc` / `mimocc`) in headless print mode.
 //!
-//! Used for YoutuExtractor *agent* mode, where schema-evolving extraction is
-//! genuinely agentic and benefits from a full agent loop rather than a single
-//! chat call. Default CLI is `minimaxcc`.
+//! Used for SchemaJsonExtractor *evolving* mode, where schema-evolving
+//! extraction is genuinely agentic and benefits from a full agent loop rather
+//! than a single chat call. Default CLI is `minimaxcc`.
 
 use super::{CompletionOptions, LlmBackend, Message};
 use async_trait::async_trait;

@@ -11,7 +11,7 @@ four extraction strategies behind a common trait.
 |-----------|----------|---------------|
 | `SimpleExtractor` | General LLM chat with GraphRAG-style **delimiter prompting** + **multi-gleaning** (iteratively asks "what did you miss?" for high recall) | `qwen-max` |
 | `TriplexExtractor` | **NER + triple** extraction via a Triplex-style model, **segmenting** large inputs and merging per-segment graphs | `sciphi/triplex:latest` (Ollama) |
-| `YoutuExtractor` | **Schema-driven** JSON extraction with three **schema modes**: open / fixed / evolving | `qwen-max` |
+| `SchemaJsonExtractor` | **Schema-driven** JSON extraction with three **schema modes**: open / fixed / evolving | `qwen-max` |
 | `ToolCallExtractor` | **Tool / function calling** — typed `add_entity` / `add_relation` / … tools; structured by construction, **no output parsing**; same open / fixed / evolving **schema modes** | `qwen-max` |
 
 All four implement the `Extractor` trait:
@@ -31,7 +31,7 @@ text
   ▼
 LlmBackend.complete()   ── LlmsBackend (in-process `llms`) │ AgentCliBackend (minimaxcc/glmcc/mimocc) │ MockBackend
   ▼
-parse  ── delimiter parser (Simple) │ JSON parser (Triplex/Youtu)
+parse  ── delimiter parser (Simple) │ JSON parser (Triplex/SchemaJson)
   ▼
 merge / dedup  ── entities by lowercased label, triples by (subj_id, predicate, obj_id)
   ▼
@@ -45,19 +45,19 @@ KnowledgeGraph { entities, triples }  ──►  JSON │ Mermaid │ stats
 - **Backends** are pluggable via the `LlmBackend` trait:
   - `LlmsBackend` (feature `llms-backend`) — in-process [`llms`](../llms) crate;
     resolves any model string to the right provider (OpenAI-compatible, Ollama,
-    Anthropic, …). Used for normal chat (Simple / Triplex / Youtu).
+    Anthropic, …). Used for normal chat (Simple / Triplex / SchemaJson).
   - `AgentCliBackend` — subprocess to a Claude-Code-wrapper agent CLI
     (`minimaxcc` default, or `glmcc` / `mimocc`) in headless `-p` mode. Intended
-    for Youtu **evolving** mode, where schema-evolving extraction is genuinely
+    for SchemaJson **evolving** mode, where schema-evolving extraction is genuinely
     agentic.
   - `MockBackend` — deterministic canned responses for tests/offline demos.
 
 ## Schema modes
 
-`YoutuExtractor` and `ToolCallExtractor` are **schema-driven**: a `SchemaMode`
+`SchemaJsonExtractor` and `ToolCallExtractor` are **schema-driven**: a `SchemaMode`
 governs how a seed schema (lists of entity types, relation types and attributes)
 constrains extraction. This axis is **orthogonal to the extraction mechanism** —
-the same three modes apply whether the model emits JSON (Youtu) or calls tools
+the same three modes apply whether the model emits JSON (SchemaJson) or calls tools
 (ToolCall).
 
 | Mode | Seed schema | The model may… | Use when |
@@ -68,7 +68,7 @@ the same three modes apply whether the model emits JSON (Youtu) or calls tools
 
 - **`Open`** ignores any schema and lets the model name types freely — the
   zero-config default.
-- **`Fixed`** is closed-world: Youtu prompts "use only these types"; ToolCall
+- **`Fixed`** is closed-world: SchemaJson prompts "use only these types"; ToolCall
   JSON-Schema `enum`-constrains the tool arguments to them.
 - **`Evolving`** seeds the schema as guidance but lets the model add types;
   proposals are recorded under `new_schema_types` in the response metadata.
@@ -78,7 +78,7 @@ evolving from) an *empty* schema is meaningless, so it is rejected with an error
 rather than silently degrading. (It is the one degenerate cell of the
 *schema-present × may-add-types* grid, made unrepresentable.)
 
-Response metadata records both axes: `mode` = the engine (`youtu` / `toolcall`)
+Response metadata records both axes: `mode` = the engine (`schema_json` / `toolcall`)
 and `schema_mode` = `open` / `fixed` / `evolving`.
 
 A schema is a JSON object with `nodes` / `relations` / `attributes` arrays
@@ -92,26 +92,26 @@ A schema is a JSON object with `nodes` / `relations` / `attributes` arrays
 `ToolCallExtractor` exposes the same `.schema_mode(…)` builder.
 
 ```rust
-use kg_extract::extractor::{SchemaMode, YoutuExtractor};
+use kg_extract::extractor::{SchemaMode, SchemaJsonExtractor};
 use kg_extract::types::{ExtractionConfig, Schema};
 
-let open = YoutuExtractor::new(backend);                 // Open (default)
+let open = SchemaJsonExtractor::new(backend);                 // Open (default)
 
 let cfg = ExtractionConfig::from_schema(Schema::new(
     vec!["PERSON".into(), "ORGANIZATION".into()],        // nodes
     vec!["WORKS_AT".into()],                             // relations
     vec![],                                              // attributes
 ));
-let fixed = YoutuExtractor::with_config(backend, cfg)
+let fixed = SchemaJsonExtractor::with_config(backend, cfg)
     .schema_mode(SchemaMode::Fixed);                     // or SchemaMode::Evolving
 ```
 
 **CLI** — `--schema-mode` selects the mode; `--schema` points at the JSON file
-(required for `fixed`/`evolving`). Both flags apply to `-e youtu` and `-e toolcall`:
+(required for `fixed`/`evolving`). Both flags apply to `-e schema-json` and `-e toolcall`:
 
 ```bash
-kg-extract -e youtu    -f doc.txt                                          # open (default)
-kg-extract -e youtu    --schema-mode fixed    --schema schema.json -f doc.txt
+kg-extract -e schema-json    -f doc.txt                                          # open (default)
+kg-extract -e schema-json    --schema-mode fixed    --schema schema.json -f doc.txt
 kg-extract -e toolcall --schema-mode evolving --schema schema.json -f doc.txt
 ```
 
@@ -125,14 +125,14 @@ through either engine** via `with_spec`:
 
 ```rust
 use kg_extract::ExtractionSpec;
-use kg_extract::extractor::{SchemaMode, ToolCallExtractor, YoutuExtractor};
+use kg_extract::extractor::{SchemaMode, ToolCallExtractor, SchemaJsonExtractor};
 use kg_extract::types::Schema;
 
 let spec = ExtractionSpec::new(
     Schema::new(vec!["PERSON".into()], vec!["WORKS_AT".into()], vec![]),
     SchemaMode::Fixed,
 );
-let via_youtu = YoutuExtractor::with_spec(youtu_backend, spec.clone());
+let via_json = SchemaJsonExtractor::with_spec(sj_backend, spec.clone());
 let via_tools = ToolCallExtractor::with_spec(tool_backend, spec);  // same contract, different mechanism
 ```
 
@@ -195,7 +195,7 @@ println!("{}", response.get_mermaid_code());
 # Ok(()) }
 ```
 
-`YoutuExtractor` and `ToolCallExtractor` are **schema-driven** — see
+`SchemaJsonExtractor` and `ToolCallExtractor` are **schema-driven** — see
 [Schema modes](#schema-modes) for `Open` / `Fixed` / `Evolving` and how to seed
 a schema.
 
@@ -213,21 +213,21 @@ echo "OpenAI developed GPT-4." | kg-extract -e simple -b llms -o mermaid
 # Triplex via Ollama (sciphi/triplex), JSON output
 kg-extract -e triplex -b llms -f doc.txt -o json
 
-# Youtu open mode (no schema) — the default
-kg-extract -e youtu -b agent --agent minimaxcc -f doc.txt
-# Youtu evolving mode: seed a schema, let the model extend it
-kg-extract -e youtu --schema-mode evolving --schema schema.json -b agent --agent minimaxcc -f doc.txt
+# SchemaJson open mode (no schema) — the default
+kg-extract -e schema-json -b agent --agent minimaxcc -f doc.txt
+# SchemaJson evolving mode: seed a schema, let the model extend it
+kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent --agent minimaxcc -f doc.txt
 ```
 
 | Flag | Meaning |
 |------|---------|
-| `-e, --engine` | `simple` \| `triplex` \| `youtu` \| `toolcall` |
+| `-e, --engine` | `simple` \| `triplex` \| `schema-json` \| `toolcall` |
 | `-b, --backend` | `llms` \| `agent` \| `mock` |
 | `--agent` | agent CLI for `-b agent`: `minimaxcc` (default) \| `glmcc` \| `mimocc` |
 | `-c, --chunker` | `recursive` (default) \| `char` \| `token` |
 | `-m, --model` | override the engine's default model |
-| `--schema-mode` | youtu/toolcall: `open` (default) \| `fixed` \| `evolving` |
-| `--schema` | youtu/toolcall schema JSON file (required for `fixed`/`evolving`) |
+| `--schema-mode` | schema-json/toolcall: `open` (default) \| `fixed` \| `evolving` |
+| `--schema` | schema-json/toolcall schema JSON file (required for `fixed`/`evolving`) |
 | `--max-rounds` | tool-call rounds (1 = single-round, default) |
 | `-o, --output` | `json` (default) \| `mermaid` \| `stats` |
 

@@ -40,7 +40,7 @@ pub struct ToolCallExtractor {
 
 impl ToolCallExtractor {
     pub fn default_config() -> ExtractionConfig {
-        // Like Youtu, start from an EMPTY schema (no default seeding): the
+        // Like SchemaJson, start from an EMPTY schema (no default seeding): the
         // default `Open` mode applies no enum constraints, and `Fixed`/`Evolving`
         // take an explicit schema.
         ExtractionConfig {
@@ -62,7 +62,7 @@ impl ToolCallExtractor {
 
     /// Build from a declarative [`ExtractionSpec`] with ToolCall's default
     /// execution params. The same spec also runs through
-    /// [`YoutuExtractor::with_spec`](super::YoutuExtractor::with_spec).
+    /// [`SchemaJsonExtractor::with_spec`](super::SchemaJsonExtractor::with_spec).
     pub fn with_spec(backend: Arc<dyn LlmBackend>, spec: ExtractionSpec) -> Self {
         let mut config = Self::default_config();
         config.spec = spec;

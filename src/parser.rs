@@ -1,6 +1,6 @@
 //! Parse LLM responses into entities and relationships.
 //!
-//! Ported from `graph/kg_extractor/parser.py`. Used by the Triplex and Youtu
+//! Ported from `graph/kg_extractor/parser.py`. Used by the Triplex and SchemaJson
 //! JSON-style extractors. The Simple extractor has its own delimiter parser.
 
 use crate::types::{Entity, EntityType, ParsedResult, Predicate, PredicateType, Triple};

@@ -11,13 +11,13 @@
 //! - **Mechanism** — *how* the model is driven:
 //!   - **Prompt → parse**: the model emits text we parse. [`SimpleExtractor`]
 //!     (delimiter format + gleaning recall), [`TriplexExtractor`] (NER model →
-//!     JSON), [`YoutuExtractor`] (schema-guided JSON).
+//!     JSON), [`SchemaJsonExtractor`] (schema-guided JSON).
 //!   - **Tool call → structured**: the model calls typed tools; no parsing.
 //!     [`ToolCallExtractor`]. The MCP server ([`crate::mcp`]) exposes the same
 //!     tool/graph-building core to an *external* agent.
 //! - **Schema mode** — *how the schema constrains extraction*: [`SchemaMode`]
 //!   (`Open` / `Fixed` / `Evolving`). Orthogonal to mechanism; first-class on
-//!   Youtu and ToolCall today.
+//!   SchemaJson and ToolCall today.
 //!
 //! Graph construction shared across mechanisms (the id scheme, name-based
 //! relationship resolution, dangling-endpoint dropping) lives in
@@ -26,15 +26,15 @@
 use crate::types::ExtractionResponse;
 use async_trait::async_trait;
 
+pub mod schema_json;
 pub mod simple;
 pub mod toolcall;
 pub mod triplex;
-pub mod youtu;
 
+pub use schema_json::SchemaJsonExtractor;
 pub use simple::SimpleExtractor;
 pub use toolcall::ToolCallExtractor;
 pub use triplex::TriplexExtractor;
-pub use youtu::YoutuExtractor;
 
 // `SchemaMode` is part of the declarative spec; it lives in `types::spec` so
 // `ExtractionSpec` can hold it without a types→extractor cycle. Re-exported here

@@ -28,7 +28,7 @@ impl Schema {
     }
 
     /// Load from a JSON file. Accepts both `Nodes/Relations/Attributes`
-    /// (capitalised, youtu style) and lowercase keys.
+    /// (capitalised, SchemaJson style) and lowercase keys.
     pub fn from_json_file(path: impl AsRef<Path>) -> anyhow::Result<Schema> {
         let data = std::fs::read_to_string(path)?;
         Self::from_json_str(&data)
