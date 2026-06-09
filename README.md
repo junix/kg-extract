@@ -267,8 +267,8 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 | `--agent` | agent CLI for `-b agent` / `-e agentic`: `minimaxcc` (default) \| `glmcc` \| `mimocc` |
 | `-c, --chunker` | `recursive` (default) \| `char` \| `token` |
 | `-m, --model` | override the engine's default model |
-| `--schema-mode` | schema-json/toolcall: `open` (default) \| `fixed` \| `evolving` |
-| `--schema` | schema-json/toolcall schema JSON file (required for `fixed`/`evolving`) |
+| `--schema-mode` | schema-json/toolcall/agentic: `open` (default) \| `fixed` \| `evolving` (agentic enforces only `fixed`) |
+| `--schema` | schema JSON file (required for `fixed`/`evolving`; agentic validates each slice against it under `fixed`) |
 | `--preset` | bundled preset by key (`general/concept_graph`, or bare `graph`); routes through schema-json |
 | `--preset-file` | your own template YAML (takes precedence over `--preset`) |
 | `--lang` | language to render the preset/template (`zh` \| `en` \| …; default = template's first) |
@@ -307,6 +307,55 @@ extraction-time deduplication is *not* reproducible by a post-hoc merge pass
 (`--merge-strategy llm` only trims ~20 % of the fragments). The self-serve `grep`
 context the sandbox enables is rarely used in practice (in-order slices already
 carry context in the conversation); it matters mainly for cross-section lookups.
+
+#### Schema modes (`--schema-mode`)
+
+The agentic engine honours all three [schema modes](#schema-modes), each a
+different use of the multi-turn session:
+
+- **`open`** (default) — schema is hints only; the model extracts freely.
+- **`fixed`** — closed-world validation loop (below): out-of-schema records are
+  dropped and the model is corrected mid-conversation.
+- **`evolving`** — seed types are *preferred* but nothing is dropped; the types
+  the model uses **outside** the seed are recorded as `new_schema_types` in the
+  response metadata (and summarised on stderr), mirroring SchemaJson/ToolCall.
+
+Same rich paragraph, seed `{nodes:[Person,Company], relations:[WORKS_FOR]}`:
+
+| mode | entity types in graph | new types recorded |
+|---|---|---|
+| `open` | 8 (free) | — |
+| `evolving` | 6 (all kept) | City, Location, Pet, Product, Computing_Platform, Based_In, Lives_In, Owns, … |
+| `fixed` | **2** (Person, Company) | — (dropped instead) |
+
+##### Fixed-schema enforcement (`--schema-mode fixed`)
+
+`--schema-mode fixed --schema schema.json` turns the session into a per-slice
+validation loop:
+
+1. The system prompt states the closed type vocabulary (`STRICT SCHEMA — use ONLY…`).
+2. After each slice, every extracted entity/relation is checked against the schema.
+   Out-of-schema records are **dropped** (an entity by its type, a relation by its
+   type *or* a dropped endpoint), and the dropped type names are recorded.
+3. If anything was dropped, the **next slice's turn carries a correction** ("I
+   discarded N records, stay within these types"), so a drifting model
+   re-anchors instead of compounding the error.
+4. If a whole slice comes back *entirely* out-of-schema (the degenerate case),
+   it is **re-done once** with a sterner reminder before moving on.
+
+Validation is on the **raw type token**, so a domain-specific schema type outside
+the built-in `EntityType` vocabulary (which the enum would collapse to `Other`)
+still matches. `schema_dropped_records` / `schema_dropped_types` land in the
+response metadata for auditing.
+
+```bash
+kg-extract -e agentic --agent minimaxcc --schema-mode fixed --schema schema.json -f doc.txt -o json
+```
+
+In practice the strict prompt does most of the work — a compliant model rarely
+emits out-of-schema records, so the drop/feedback loop is mostly a **safety net**.
+Its value grows with document length (more slices = more chances to drift) and
+with stricter/smaller schemas.
 
 ```bash
 # Tool-calling engine via llms (requires --features llms-backend); open by default

@@ -464,7 +464,14 @@ async fn main() -> anyhow::Result<()> {
         if let Some(m) = &cfg.model {
             c.model_name = m.clone();
         }
+        // Fixed mode validates each slice against this schema and drops
+        // out-of-schema records; Open/Evolving leave it as hints.
+        if let Some(path) = &cfg.schema {
+            c.spec.schema = Schema::from_json_file(expand_tilde(path))
+                .with_context(|| format!("loading --schema {path}"))?;
+        }
         AgenticExtractor::with_config(&cfg.agent, c)
+            .schema_mode(cfg.schema_mode.into())
             .relation_gleanings(cfg.relation_gleaning)
             .extract(&text)
             .await?
