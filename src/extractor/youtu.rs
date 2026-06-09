@@ -171,7 +171,11 @@ Ensure valid JSON output."
                     .and_then(|v| v.as_str())
                     .map(String::from);
                 entity.metadata = attributes;
-                name_to_id.insert(name.clone(), id.clone());
+                // Key by lowercased name so a relationship that references the
+                // entity with different casing still resolves (matches
+                // simple.rs / toolcall.rs). Type resolution above still uses the
+                // exact model-supplied name.
+                name_to_id.insert(name.to_lowercase(), id.clone());
                 entities.insert(id.clone(), entity.clone());
                 kg.add_entity(entity);
             }
@@ -187,9 +191,10 @@ Ensure valid JSON output."
                 let predicate_str = arr[1].as_str().unwrap_or_default();
                 let object_name = arr[2].as_str().unwrap_or_default();
 
-                let (Some(sid), Some(oid)) =
-                    (name_to_id.get(subject_name), name_to_id.get(object_name))
-                else {
+                let (Some(sid), Some(oid)) = (
+                    name_to_id.get(&subject_name.to_lowercase()),
+                    name_to_id.get(&object_name.to_lowercase()),
+                ) else {
                     continue;
                 };
                 let predicate_type = predicate_str
@@ -342,6 +347,20 @@ mod tests {
         for e in out.knowledge_graph.entities.values() {
             assert!(e.metadata.contains_key("community_id"));
         }
+    }
+
+    #[tokio::test]
+    async fn relationship_resolves_case_insensitively() {
+        // Entities are "OpenAI"/"GPT-4" but the relationship references them in a
+        // different case; the edge must still be created, not silently dropped.
+        let json = r#"{"entities": {"OpenAI": {"type": "ORGANIZATION"}, "GPT-4": {"type": "TECHNOLOGY"}},
+                       "relationships": [["openai", "uses", "gpt-4"]]}"#;
+        let out = YoutuExtractor::new(Arc::new(MockBackend::single(json)))
+            .extract("text")
+            .await
+            .unwrap();
+        assert_eq!(out.num_entities(), 2);
+        assert_eq!(out.num_triples(), 1, "relationship must resolve despite case mismatch");
     }
 
     #[tokio::test]
