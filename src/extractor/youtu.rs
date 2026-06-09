@@ -4,10 +4,11 @@
 
 use super::{validate_input, Extractor, SchemaMode};
 use crate::backend::{CompletionOptions, LlmBackend};
+use crate::graph_build::GraphBuilder;
 use crate::parser::extract_json_from_response;
 use crate::types::{
-    Entity, EntityType, ExtractionConfig, ExtractionResponse, KnowledgeGraph, Predicate,
-    PredicateType, Schema, Triple,
+    EntityType, ExtractionConfig, ExtractionResponse, KnowledgeGraph, Predicate, PredicateType,
+    Schema,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -105,17 +106,11 @@ Ensure valid JSON output."
     }
 
     fn build_graph(&self, data: &serde_json::Value) -> KnowledgeGraph {
-        let mut entities: HashMap<String, Entity> = HashMap::new();
-        let entity_data = data.get("entities").and_then(|v| v.as_object());
         let entity_types = data.get("entity_types").and_then(|v| v.as_object());
+        let mut gb = GraphBuilder::new();
 
-        // Preserve insertion order while building name→entity for relationships.
-        let mut name_to_id: HashMap<String, String> = HashMap::new();
-        let mut kg = KnowledgeGraph::new();
-
-        if let Some(obj) = entity_data {
+        if let Some(obj) = data.get("entities").and_then(|v| v.as_object()) {
             for (name, info) in obj {
-                let id = entity_id(name);
                 let (type_str, attributes) = if let Some(io) = info.as_object() {
                     let t = io
                         .get("type")
@@ -143,26 +138,19 @@ Ensure valid JSON output."
                     (t, HashMap::new())
                 };
 
-                // Youtu uses strict name match, fallback PHYSICAL_OBJECT.
+                // Youtu uses strict name match, fallback PHYSICAL_OBJECT (its own
+                // quirk, distinct from `from_loose`), so parsing stays here rather
+                // than in the shared GraphBuilder.
                 let entity_type = type_str
                     .to_uppercase()
                     .replace([' ', '-'], "_")
                     .parse::<EntityType>()
                     .unwrap_or(EntityType::PhysicalObject);
-
-                let mut entity = Entity::new(id.clone(), name.clone(), entity_type);
-                entity.description = attributes
-                    .get("description")
-                    .and_then(|v| v.as_str())
-                    .map(String::from);
-                entity.metadata = attributes;
-                // Key by lowercased name so a relationship that references the
-                // entity with different casing still resolves (matches
-                // simple.rs / toolcall.rs). Type resolution above still uses the
-                // exact model-supplied name.
-                name_to_id.insert(name.to_lowercase(), id.clone());
-                entities.insert(id.clone(), entity.clone());
-                kg.add_entity(entity);
+                let description =
+                    attributes.get("description").and_then(|v| v.as_str()).map(String::from);
+                // GraphBuilder keys by lowercased name, so a relationship that
+                // references the entity with different casing still resolves.
+                gb.add_entity(name, entity_type, description, attributes);
             }
         }
 
@@ -176,28 +164,17 @@ Ensure valid JSON output."
                 let predicate_str = arr[1].as_str().unwrap_or_default();
                 let object_name = arr[2].as_str().unwrap_or_default();
 
-                let (Some(sid), Some(oid)) = (
-                    name_to_id.get(&subject_name.to_lowercase()),
-                    name_to_id.get(&object_name.to_lowercase()),
-                ) else {
-                    continue;
-                };
                 let predicate_type = predicate_str
                     .to_uppercase()
                     .replace([' ', '-'], "_")
                     .parse::<PredicateType>()
                     .unwrap_or(PredicateType::RelatedTo);
                 let predicate = Predicate::with_label(predicate_type, predicate_str);
-                let triple = Triple::new(
-                    entities[sid].clone(),
-                    predicate,
-                    entities[oid].clone(),
-                );
-                kg.add_triple(triple);
+                gb.add_relation(subject_name, predicate, object_name, |_| {});
             }
         }
 
-        kg
+        gb.into_graph()
     }
 }
 
@@ -257,17 +234,11 @@ impl Extractor for YoutuExtractor {
     }
 }
 
-/// Stable id for an entity name, matching simple.rs / toolcall.rs / mcp.rs so
-/// Youtu output is deterministic and interoperable (id == `entity_<md5(name)[..8]>`).
-fn entity_id(name: &str) -> String {
-    let digest = format!("{:x}", md5::compute(name.as_bytes()));
-    format!("entity_{}", &digest[..8])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::backend::MockBackend;
+    use crate::graph_build::entity_id;
 
     #[tokio::test]
     async fn schema_based_extraction() {

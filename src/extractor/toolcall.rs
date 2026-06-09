@@ -21,11 +21,9 @@ use super::{validate_input, Extractor, SchemaMode};
 use crate::backend::{
     CompletionOptions, LlmBackend, Message, ToolInvocation, ToolSpec,
 };
+use crate::graph_build::{build_predicate, parse_entity_type, GraphBuilder};
 use crate::merger::merge_knowledge_graphs;
-use crate::types::{
-    Entity, EntityType, ExtractionConfig, ExtractionResponse, KnowledgeGraph, Predicate,
-    PredicateType, Schema, Triple,
-};
+use crate::types::{ExtractionConfig, ExtractionResponse, KnowledgeGraph, Schema};
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -295,73 +293,41 @@ impl ToolCallExtractor {
     }
 
     fn build_graph(&self, acc: &Accumulator) -> KnowledgeGraph {
-        // Build entities (dedup by normalized name; first occurrence wins).
-        let mut name_to_id: HashMap<String, String> = HashMap::new();
-        let mut entities: HashMap<String, Entity> = HashMap::new();
-        let mut kg = KnowledgeGraph::new();
+        let mut gb = GraphBuilder::new();
 
+        // Entities: deduped by lowercased name (first occurrence wins).
         for draft in &acc.entities {
-            let key = draft.name.to_lowercase();
-            if name_to_id.contains_key(&key) {
-                continue;
-            }
-            let id = entity_id(&draft.name);
-            let entity_type = draft
-                .type_str
-                .parse::<EntityType>()
-                .unwrap_or_else(|_| EntityType::from_loose(&draft.type_str));
-            let mut entity = Entity::new(id.clone(), draft.name.clone(), entity_type);
-            entity.description = draft.description.clone();
-            entity.metadata = draft.attributes.clone();
-            name_to_id.insert(key, id.clone());
-            entities.insert(id.clone(), entity.clone());
-            kg.add_entity(entity);
+            gb.add_entity(
+                &draft.name,
+                parse_entity_type(&draft.type_str),
+                draft.description.clone(),
+                draft.attributes.clone(),
+            );
         }
 
-        // Build relations, resolving names → ids; drop dangling endpoints.
-        // (Done before attributes: add_triple re-inserts its endpoint entities,
-        // which would otherwise clobber attribute-enriched copies.)
+        // Relations: resolve names → ids, drop dangling endpoints, decorate with
+        // confidence/description. Before attributes, since add_triple re-inserts
+        // its endpoint entities and would otherwise clobber enriched copies.
         for rel in &acc.relations {
-            let (Some(sid), Some(tid)) = (
-                name_to_id.get(&rel.source.to_lowercase()),
-                name_to_id.get(&rel.target.to_lowercase()),
-            ) else {
-                continue;
-            };
-            let predicate_type = rel
-                .predicate
-                .to_uppercase()
-                .replace([' ', '-'], "_")
-                .parse::<PredicateType>()
-                .unwrap_or_else(|_| PredicateType::from_loose(&rel.predicate));
-            let predicate = Predicate::with_label(predicate_type, rel.predicate.clone());
-            let mut triple = Triple::new(entities[sid].clone(), predicate, entities[tid].clone());
-            triple.confidence = Some(rel.strength);
-            if let Some(d) = &rel.description {
-                triple.metadata.insert("description".into(), serde_json::json!(d));
-            }
-            kg.add_triple(triple);
-        }
-
-        // Apply standalone attributes last so they survive add_triple re-inserts.
-        for (name, key, value) in &acc.attributes {
-            if let Some(id) = name_to_id.get(&name.to_lowercase()) {
-                if let Some(e) = kg.entities.get_mut(id) {
-                    e.metadata.insert(key.clone(), value.clone());
+            gb.add_relation(&rel.source, build_predicate(&rel.predicate), &rel.target, |t| {
+                t.confidence = Some(rel.strength);
+                if let Some(d) = &rel.description {
+                    t.metadata.insert("description".into(), serde_json::json!(d));
                 }
-            }
+            });
         }
 
+        // Standalone attributes last so they survive add_triple re-inserts.
+        for (name, key, value) in &acc.attributes {
+            gb.set_attribute(name, key.clone(), value.clone());
+        }
+
+        let mut kg = gb.into_graph();
         if self.config.merge_duplicates {
             kg = merge_knowledge_graphs(KnowledgeGraph::new(), kg, true);
         }
         kg
     }
-}
-
-fn entity_id(name: &str) -> String {
-    let digest = format!("{:x}", md5::compute(name.as_bytes()));
-    format!("entity_{}", &digest[..8])
 }
 
 #[async_trait::async_trait]
@@ -440,6 +406,7 @@ impl Extractor for ToolCallExtractor {
 mod tests {
     use super::*;
     use crate::backend::MockBackend;
+    use crate::types::PredicateType;
 
     fn call(name: &str, args: serde_json::Value) -> ToolInvocation {
         ToolInvocation { id: format!("c_{name}"), name: name.into(), arguments: args }

@@ -17,30 +17,8 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde_json::Value;
 
-use crate::types::{Entity, EntityType, KnowledgeGraph, Predicate, PredicateType, Triple};
-
-/// Stable id for an entity name (matches `simple.rs` / `toolcall.rs`).
-pub fn entity_id(name: &str) -> String {
-    let digest = format!("{:x}", md5::compute(name.as_bytes()));
-    format!("entity_{}", &digest[..8])
-}
-
-fn parse_entity_type(s: &str) -> EntityType {
-    let s = s.trim();
-    if s.is_empty() {
-        return EntityType::from_loose("other");
-    }
-    s.parse::<EntityType>().unwrap_or_else(|_| EntityType::from_loose(s))
-}
-
-fn build_predicate(s: &str) -> Predicate {
-    let pt = s
-        .to_uppercase()
-        .replace([' ', '-'], "_")
-        .parse::<PredicateType>()
-        .unwrap_or_else(|_| PredicateType::from_loose(s));
-    Predicate::with_label(pt, s.to_string())
-}
+use crate::graph_build::{build_predicate, entity_id, parse_entity_type};
+use crate::types::{Entity, KnowledgeGraph, Triple};
 
 /// A directory-backed collection of knowledge graphs, one JSON file per `path`.
 ///

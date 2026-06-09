@@ -3,6 +3,7 @@
 
 use super::{validate_input, Extractor};
 use crate::backend::{CompletionOptions, LlmBackend, Message};
+use crate::graph_build::entity_id;
 use crate::merger::merge_knowledge_graphs;
 use crate::types::{
     Entity, EntityType, ExtractionConfig, ExtractionResponse, KnowledgeGraph, ParsedResult,
@@ -322,7 +323,7 @@ fn parse_entity_item(item: &str) -> Option<Entity> {
     let description = clean_description(description);
     let metadata = parse_attributes_string(attrs);
 
-    let mut entity = Entity::new(generate_entity_id(&name), &name, map_to_entity_type(&type_clean));
+    let mut entity = Entity::new(entity_id(&name), &name, map_to_entity_type(&type_clean));
     entity.description = Some(description);
     if !metadata.is_empty() {
         entity.metadata = metadata;
@@ -380,18 +381,13 @@ fn strip_parens(item: &str) -> String {
     item.to_string()
 }
 
-fn generate_entity_id(name: &str) -> String {
-    let digest = format!("{:x}", md5::compute(name.as_bytes()));
-    format!("entity_{}", &digest[..8])
-}
-
 fn normalize_key(name: &str) -> String {
     name.to_lowercase().trim().to_string()
 }
 
 fn resolve_entity_id(name: &str, id_map: &HashMap<String, String>) -> String {
     let key = normalize_key(name);
-    id_map.get(&key).cloned().unwrap_or_else(|| generate_entity_id(name))
+    id_map.get(&key).cloned().unwrap_or_else(|| entity_id(name))
 }
 
 fn clean_entity_name(name: &str) -> String {
@@ -561,7 +557,7 @@ mod tests {
 
     #[test]
     fn entity_id_is_deterministic_md5() {
-        assert_eq!(generate_entity_id("Openai"), generate_entity_id("Openai"));
-        assert!(generate_entity_id("X").starts_with("entity_"));
+        assert_eq!(entity_id("Openai"), entity_id("Openai"));
+        assert!(entity_id("X").starts_with("entity_"));
     }
 }

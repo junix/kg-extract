@@ -3,6 +3,25 @@
 //! All strategies implement the [`Extractor`] trait (the Rust analogue of the
 //! Python `BaseExtractor`). Construction takes a backend ([`crate::backend::LlmBackend`])
 //! and an [`ExtractionConfig`]; `extract` returns an [`ExtractionResponse`].
+//!
+//! # Two orthogonal axes
+//!
+//! The strategies vary along two independent dimensions:
+//!
+//! - **Mechanism** — *how* the model is driven:
+//!   - **Prompt → parse**: the model emits text we parse. [`SimpleExtractor`]
+//!     (delimiter format + gleaning recall), [`TriplexExtractor`] (NER model →
+//!     JSON), [`YoutuExtractor`] (schema-guided JSON).
+//!   - **Tool call → structured**: the model calls typed tools; no parsing.
+//!     [`ToolCallExtractor`]. The MCP server ([`crate::mcp`]) exposes the same
+//!     tool/graph-building core to an *external* agent.
+//! - **Schema mode** — *how the schema constrains extraction*: [`SchemaMode`]
+//!   (`Open` / `Fixed` / `Evolving`). Orthogonal to mechanism; first-class on
+//!   Youtu and ToolCall today.
+//!
+//! Graph construction shared across mechanisms (the id scheme, name-based
+//! relationship resolution, dangling-endpoint dropping) lives in
+//! [`crate::graph_build`].
 
 use crate::types::ExtractionResponse;
 use async_trait::async_trait;
