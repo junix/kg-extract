@@ -475,7 +475,10 @@ fn parse_attributes_string(s: &str) -> HashMap<String, serde_json::Value> {
                 current.push(ch);
             }
             ')' | '}' | ']' => {
-                depth -= 1;
+                // Clamp at 0: an unmatched closing bracket must not drive depth
+                // negative, which would suppress the depth==0 comma split (and the
+                // trailing sentinel flush) and silently drop every attribute.
+                depth = (depth - 1).max(0);
                 current.push(ch);
             }
             ',' if depth == 0 => {
@@ -545,6 +548,15 @@ mod tests {
             1,
             "relationship must survive even though its text contains the word 'entity'"
         );
+    }
+
+    #[test]
+    fn attributes_unmatched_bracket_does_not_drop_all() {
+        // A stray `]` previously drove the depth counter negative, suppressing
+        // every comma split so the whole attribute set was lost.
+        let attrs = parse_attributes_string("role: lead], team: platform");
+        assert!(attrs.contains_key("role"), "first attribute must survive: {attrs:?}");
+        assert!(attrs.contains_key("team"), "later attribute must survive: {attrs:?}");
     }
 
     #[test]
