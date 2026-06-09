@@ -193,7 +193,9 @@ impl KgStore {
         let object = kg.entities.get(&tid).expect("checked present").clone();
 
         let mut triple = Triple::new(subject, build_predicate(predicate), object);
-        triple.confidence = Some(strength.unwrap_or(0.8));
+        // The tool schema advertises confidence in 0..1; clamp so a caller that
+        // passes e.g. 2.0 or -1.0 can't store an out-of-range value.
+        triple.confidence = Some(strength.unwrap_or(0.8).clamp(0.0, 1.0));
         if let Some(d) = description {
             triple.metadata.insert("description".into(), serde_json::json!(d));
         }

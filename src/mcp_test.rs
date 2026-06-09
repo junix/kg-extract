@@ -126,6 +126,16 @@ fn add_relation_after_add_entity_keeps_rich_entity() {
 }
 
 #[test]
+fn add_relation_clamps_strength_to_unit_interval() {
+    let t = TmpStore::new();
+    t.store.add_entity("g", "Alice", "person", None, HashMap::new()).unwrap();
+    t.store.add_entity("g", "Acme", "organization", None, HashMap::new()).unwrap();
+    t.store.add_relation("g", "Alice", "works_at", "Acme", None, Some(2.0)).unwrap();
+    let kg = t.store.load("g").unwrap();
+    assert_eq!(kg.triples[0].confidence, Some(1.0), "out-of-range strength must clamp to 1.0");
+}
+
+#[test]
 fn add_attribute_requires_existing_entity() {
     let t = TmpStore::new();
     t.store.add_entity("g", "Alice", "person", None, HashMap::new()).unwrap();

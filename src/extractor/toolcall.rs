@@ -237,7 +237,12 @@ impl ToolCallExtractor {
                 ) else {
                     return "error: source/predicate/target required".into();
                 };
-                let strength = call.arguments.get("strength").and_then(|v| v.as_f64()).unwrap_or(0.8);
+                let strength = call
+                    .arguments
+                    .get("strength")
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.8)
+                    .clamp(0.0, 1.0);
                 acc.relations.push(RelDraft {
                     source,
                     predicate,
@@ -440,6 +445,18 @@ mod tests {
         assert_eq!(out.knowledge_graph.triples[0].predicate.predicate_type, PredicateType::DevelopedBy);
         let gpt = out.knowledge_graph.entities.values().find(|e| e.label == "GPT-4").unwrap();
         assert_eq!(gpt.metadata["params"], serde_json::json!("1.8T"));
+    }
+
+    #[tokio::test]
+    async fn relation_strength_is_clamped() {
+        let rounds = vec![vec![
+            call("add_entity", serde_json::json!({"name": "A", "type": "OTHER"})),
+            call("add_entity", serde_json::json!({"name": "B", "type": "OTHER"})),
+            call("add_relation", serde_json::json!({"source": "A", "predicate": "USES", "target": "B", "strength": 5.0})),
+        ]];
+        let backend = Arc::new(MockBackend::new(vec![]).with_tool_rounds(rounds));
+        let out = ToolCallExtractor::new(backend).extract("text").await.unwrap();
+        assert_eq!(out.knowledge_graph.triples[0].confidence, Some(1.0), "strength clamps to 1.0");
     }
 
     #[tokio::test]
