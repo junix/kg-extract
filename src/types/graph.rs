@@ -99,11 +99,23 @@ impl KnowledgeGraph {
                 }
             }
         }
-        let existing: HashSet<(String, String, String)> =
+        let mut existing: HashSet<(String, String, String)> =
             self.triples.iter().map(|t| t.to_tuple()).collect();
         for triple in other.triples {
-            if !existing.contains(&triple.to_tuple()) {
-                self.add_triple(triple);
+            // `insert` returns false when the key was already present, which
+            // dedups identical triples *within* `other` as well as against
+            // `self`. Push directly rather than via `add_triple`: the endpoints
+            // were already entity-merged above, and re-inserting the triple's
+            // (possibly staler, lower-confidence) endpoint snapshots would
+            // clobber that merge. Only materialise an endpoint that is missing.
+            if existing.insert(triple.to_tuple()) {
+                if !self.entities.contains_key(&triple.subject.id) {
+                    self.add_entity(triple.subject.clone());
+                }
+                if !self.entities.contains_key(&triple.object.id) {
+                    self.add_entity(triple.object.clone());
+                }
+                self.triples.push(triple);
             }
         }
         self
@@ -159,6 +171,66 @@ impl KnowledgeGraph {
             "entity_types": entity_types,
             "predicate_types": predicate_types,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::EntityType;
+
+    fn ent(id: &str, label: &str, conf: Option<f64>) -> Entity {
+        let mut e = Entity::new(id, label, EntityType::Other);
+        e.confidence = conf;
+        e
+    }
+    fn tri(s: &Entity, p: PredicateType, o: &Entity) -> Triple {
+        Triple::new(s.clone(), Predicate::new(p), o.clone())
+    }
+
+    #[test]
+    fn merge_dedups_identical_triples_within_other() {
+        let a = ent("e1", "A", None);
+        let b = ent("e2", "B", None);
+        let mut other = KnowledgeGraph::new();
+        other.add_entity(a.clone());
+        other.add_entity(b.clone());
+        // Two identical triples in `other` (e.g. an LLM segment that repeated a
+        // relation). The dedup set was seeded once and never updated, so both
+        // used to survive.
+        other.triples.push(tri(&a, PredicateType::Uses, &b));
+        other.triples.push(tri(&a, PredicateType::Uses, &b));
+
+        let mut g = KnowledgeGraph::new();
+        g.merge(other);
+        assert_eq!(g.triples.len(), 1, "identical triples within `other` must dedup");
+    }
+
+    #[test]
+    fn merge_does_not_clobber_higher_confidence_entity_via_triple_endpoint() {
+        // `self` has a rich, high-confidence X; `other` has a poor, low-confidence
+        // X embedded as a triple endpoint. The confidence-based entity merge must
+        // not be silently undone when the triple is added.
+        let mut x_rich = ent("x", "X", Some(0.9));
+        x_rich.description = Some("rich".into());
+        let mut g = KnowledgeGraph::new();
+        g.add_entity(x_rich);
+
+        let x_poor = ent("x", "X", Some(0.1));
+        let y = ent("y", "Y", None);
+        let mut other = KnowledgeGraph::new();
+        other.add_entity(x_poor.clone());
+        other.add_entity(y.clone());
+        other.add_triple(tri(&x_poor, PredicateType::Uses, &y));
+
+        g.merge(other);
+        let x = g.get_entity("x").expect("x present");
+        assert_eq!(x.confidence, Some(0.9), "higher-confidence entity must survive");
+        assert_eq!(
+            x.description.as_deref(),
+            Some("rich"),
+            "rich entity must not be clobbered by a stale triple endpoint"
+        );
     }
 }
 
