@@ -138,23 +138,39 @@ impl AgenticExtractor {
 
     /// Drain one turn's response stream, concatenating assistant text (the
     /// delimiter records). Tool round-trips (Read/Grep) are handled inside the
-    /// CLI; we just collect the final text it produces this turn.
-    async fn drain(&self, client: &ClaudeSdkClient) -> anyhow::Result<String> {
+    /// CLI; we collect the final text *and* count/log the tool calls the agent
+    /// made, so the "self-serve context" mechanism is observable. Returns
+    /// `(text, tool_use_count)`.
+    async fn drain(&self, client: &ClaudeSdkClient) -> anyhow::Result<(String, usize)> {
         let mut stream = client
             .receive_response()
             .map_err(|e| anyhow::anyhow!("agentic receive failed: {e}"))?;
         let mut out = String::new();
+        let mut tool_uses = 0usize;
         while let Some(msg) = stream.next().await {
             let msg = msg.map_err(|e| anyhow::anyhow!("agentic stream error: {e}"))?;
             if let SdkMessage::Assistant(a) = msg {
                 for block in &a.content {
-                    if let ContentBlock::Text(t) = block {
-                        out.push_str(&t.text);
+                    match block {
+                        ContentBlock::Text(t) => out.push_str(&t.text),
+                        ContentBlock::ToolUse(u) => {
+                            tool_uses += 1;
+                            if !self.quiet {
+                                // Summarise the call with the most telling arg.
+                                let arg = ["pattern", "file_path", "path", "query"]
+                                    .iter()
+                                    .find_map(|k| u.input.get(*k))
+                                    .map(|v| v.to_string())
+                                    .unwrap_or_default();
+                                eprintln!("  [agent tool] {} {}", u.name, arg);
+                            }
+                        }
+                        _ => {}
                     }
                 }
             }
         }
-        Ok(out.trim().to_string())
+        Ok((out.trim().to_string(), tool_uses))
     }
 }
 
@@ -215,6 +231,7 @@ impl AgenticExtractor {
         let mut all_entities: HashMap<String, Entity> = HashMap::new();
         let mut all_triples: Vec<Triple> = Vec::new();
         let mut parsed_results: Vec<ParsedResult> = Vec::new();
+        let mut total_tool_uses = 0usize;
 
         // 2. Feed each slice as a turn in the same conversation.
         for (i, slice) in slices.iter().enumerate() {
@@ -229,7 +246,10 @@ impl AgenticExtractor {
                 break;
             }
             let output = match self.drain(&client).await {
-                Ok(o) => o,
+                Ok((o, tools)) => {
+                    total_tool_uses += tools;
+                    o
+                }
                 Err(e) => {
                     if !self.quiet {
                         eprintln!("agentic slice {} drain error: {e}", i + 1);
@@ -269,7 +289,10 @@ impl AgenticExtractor {
                 break;
             }
             let output = match self.drain(&client).await {
-                Ok(o) => o,
+                Ok((o, tools)) => {
+                    total_tool_uses += tools;
+                    o
+                }
                 Err(_) => break,
             };
             if output.is_empty() || output.eq_ignore_ascii_case("no") {
@@ -296,9 +319,13 @@ impl AgenticExtractor {
         for t in all_triples {
             kg.add_triple(t);
         }
+        if !self.quiet {
+            eprintln!("agentic: {} slice(s), {} self-context tool call(s)", n, total_tool_uses);
+        }
         let mut resp = ExtractionResponse::new(kg);
         resp.parsed_results = parsed_results;
         resp.config = Some(self.config.clone());
+        resp.metadata.insert("tool_uses".into(), serde_json::json!(total_tool_uses));
         Ok(resp)
     }
 }
