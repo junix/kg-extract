@@ -3,7 +3,7 @@
 Multi-strategy **knowledge-graph extraction** in Rust — a faithful port of the
 Python `graph.kg_extractor` module. Turns unstructured text into a
 `KnowledgeGraph` of typed entities and predicate-typed triples, using one of
-three extraction strategies behind a common trait.
+four extraction strategies behind a common trait.
 
 ## Strategies
 
@@ -14,7 +14,7 @@ three extraction strategies behind a common trait.
 | `YoutuExtractor` | **Schema-driven** JSON extraction with three **schema modes**: open / fixed / evolving | `qwen-max` |
 | `ToolCallExtractor` | **Tool / function calling** — typed `add_entity` / `add_relation` / … tools; structured by construction, **no output parsing**; same open / fixed / evolving **schema modes** | `qwen-max` |
 
-All three implement the `Extractor` trait:
+All four implement the `Extractor` trait:
 
 ```rust
 #[async_trait]
@@ -45,20 +45,83 @@ KnowledgeGraph { entities, triples }  ──►  JSON │ Mermaid │ stats
 - **Backends** are pluggable via the `LlmBackend` trait:
   - `LlmsBackend` (feature `llms-backend`) — in-process [`llms`](../llms) crate;
     resolves any model string to the right provider (OpenAI-compatible, Ollama,
-    Anthropic, …). Used for normal chat (Simple / Triplex / Youtu noagent).
+    Anthropic, …). Used for normal chat (Simple / Triplex / Youtu).
   - `AgentCliBackend` — subprocess to a Claude-Code-wrapper agent CLI
     (`minimaxcc` default, or `glmcc` / `mimocc`) in headless `-p` mode. Intended
-    for Youtu **agent** mode, where schema-evolving extraction is genuinely
+    for Youtu **evolving** mode, where schema-evolving extraction is genuinely
     agentic.
   - `MockBackend` — deterministic canned responses for tests/offline demos.
+
+## Schema modes
+
+`YoutuExtractor` and `ToolCallExtractor` are **schema-driven**: a `SchemaMode`
+governs how a seed schema (lists of entity types, relation types and attributes)
+constrains extraction. This axis is **orthogonal to the extraction mechanism** —
+the same three modes apply whether the model emits JSON (Youtu) or calls tools
+(ToolCall).
+
+| Mode | Seed schema | The model may… | Use when |
+|------|-------------|----------------|----------|
+| `Open` *(default)* | not needed | infer any entity/relation types | exploring; no fixed ontology |
+| `Fixed` | **required** | use **only** the schema's types | enforcing a closed, known ontology |
+| `Evolving` | **required** | use the schema **and propose new types** | seeding a domain but allowing growth |
+
+- **`Open`** ignores any schema and lets the model name types freely — the
+  zero-config default.
+- **`Fixed`** is closed-world: Youtu prompts "use only these types"; ToolCall
+  JSON-Schema `enum`-constrains the tool arguments to them.
+- **`Evolving`** seeds the schema as guidance but lets the model add types;
+  proposals are recorded under `new_schema_types` in the response metadata.
+
+`Fixed` and `Evolving` **require a non-empty seed schema** — constraining to (or
+evolving from) an *empty* schema is meaningless, so it is rejected with an error
+rather than silently degrading. (It is the one degenerate cell of the
+*schema-present × may-add-types* grid, made unrepresentable.)
+
+Response metadata records both axes: `mode` = the engine (`youtu` / `toolcall`)
+and `schema_mode` = `open` / `fixed` / `evolving`.
+
+A schema is a JSON object with `nodes` / `relations` / `attributes` arrays
+(capitalised `Nodes` / `Relations` / `Attributes` are also accepted):
+
+```json
+{ "nodes": ["PERSON", "ORGANIZATION"], "relations": ["WORKS_AT"], "attributes": [] }
+```
+
+**Library** — `Open` needs no schema; `Fixed`/`Evolving` take one via the config.
+`ToolCallExtractor` exposes the same `.schema_mode(…)` builder.
+
+```rust
+use kg_extract::extractor::{SchemaMode, YoutuExtractor};
+use kg_extract::types::{ExtractionConfig, Schema};
+
+let open = YoutuExtractor::new(backend);                 // Open (default)
+
+let cfg = ExtractionConfig::from_schema(Schema::new(
+    vec!["PERSON".into(), "ORGANIZATION".into()],        // nodes
+    vec!["WORKS_AT".into()],                             // relations
+    vec![],                                              // attributes
+));
+let fixed = YoutuExtractor::with_config(backend, cfg)
+    .schema_mode(SchemaMode::Fixed);                     // or SchemaMode::Evolving
+```
+
+**CLI** — `--schema-mode` selects the mode; `--schema` points at the JSON file
+(required for `fixed`/`evolving`). Both flags apply to `-e youtu` and `-e toolcall`:
+
+```bash
+kg-extract -e youtu    -f doc.txt                                          # open (default)
+kg-extract -e youtu    --schema-mode fixed    --schema schema.json -f doc.txt
+kg-extract -e toolcall --schema-mode evolving --schema schema.json -f doc.txt
+```
 
 ## Tool-calling mode
 
 `ToolCallExtractor` exposes typed tools and lets the model **call** them instead
 of emitting a blob we parse. Tool-call arguments are already structured JSON, so
-parsing is essentially free. It shares Youtu's three [`SchemaMode`]s: in `Fixed`
-mode the entity/predicate tool args are JSON-Schema `enum`-constrained to the
-seeded schema; `Open` (default) and `Evolving` leave them free-form.
+parsing is essentially free. It shares the same [schema modes](#schema-modes):
+in `Fixed` mode the entity/predicate tool args are JSON-Schema `enum`-constrained
+to the seeded schema; `Open` (default) and `Evolving` leave them free-form.
 
 | Tool | Purpose |
 |------|---------|
@@ -111,27 +174,9 @@ println!("{}", response.get_mermaid_code());
 # Ok(()) }
 ```
 
-Youtu has three [`SchemaMode`]s: `Open` (no predefined types — the default),
-`Fixed` (use only the seeded schema), and `Evolving` (seed schema the model may
-extend). `Fixed`/`Evolving` require a non-empty seed schema. Evolving, driven by
-an agent CLI:
-
-```rust
-use kg_extract::backend::{AgentCli, AgentCliBackend};
-use kg_extract::extractor::{Extractor, SchemaMode, YoutuExtractor};
-use kg_extract::types::{ExtractionConfig, Schema};
-
-let backend = Arc::new(AgentCliBackend::new(AgentCli::Minimaxcc));
-// Evolving needs a seed schema; Open would need none.
-let cfg = ExtractionConfig::from_schema(Schema::new(
-    vec!["PERSON".into(), "ORGANIZATION".into()],
-    vec!["WORKS_AT".into()],
-    vec![],
-));
-let extractor = YoutuExtractor::with_config(backend, cfg)
-    .schema_mode(SchemaMode::Evolving);
-let response = extractor.extract(text).await?;
-```
+`YoutuExtractor` and `ToolCallExtractor` are **schema-driven** — see
+[Schema modes](#schema-modes) for `Open` / `Fixed` / `Evolving` and how to seed
+a schema.
 
 ## CLI
 
