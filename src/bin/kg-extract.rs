@@ -238,7 +238,11 @@ fn read_input(file: &Option<String>) -> anyhow::Result<String> {
             std::io::stdin().read_to_string(&mut s)?;
             Ok(s)
         }
-        Some(path) => Ok(std::fs::read_to_string(path)?),
+        Some(path) => {
+            let path = expand_tilde(path);
+            std::fs::read_to_string(&path)
+                .with_context(|| format!("reading input file {}", path.display()))
+        }
     }
 }
 

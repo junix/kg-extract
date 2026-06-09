@@ -70,6 +70,21 @@ fn expand_tilde_expands_home() {
     assert_eq!(expand_tilde("rel/path.json"), PathBuf::from("rel/path.json"));
 }
 
+#[test]
+fn read_input_expands_tilde_for_file() {
+    // `--file ~/x` must expand like `--config`, not fail with "No such file".
+    let home = std::env::var("HOME").expect("HOME set in test env");
+    let sub = format!("kg-extract-test-{}", nanoid::nanoid!());
+    let dir = PathBuf::from(&home).join(&sub);
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("in.txt"), "hello kg").unwrap();
+
+    let got = read_input(&Some(format!("~/{sub}/in.txt"))).unwrap();
+    assert_eq!(got, "hello kg");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 /// CLI flag beats config; config beats built-in default; default when neither set.
 #[test]
 fn precedence_cli_over_config_over_default() {
