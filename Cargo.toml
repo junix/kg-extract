@@ -46,7 +46,6 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io
 clap = { version = "4", features = ["derive"] }
 
 chonkie = { path = "../chonkie" }
-kg-community = { path = "../kg-community" }
 llms = { path = "../llms", optional = true }
 
 # MCP server (feature = "mcp"). rmcp is the official MCP Rust SDK, matching the

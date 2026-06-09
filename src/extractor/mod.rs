@@ -15,7 +15,38 @@ pub mod youtu;
 pub use simple::SimpleExtractor;
 pub use toolcall::ToolCallExtractor;
 pub use triplex::TriplexExtractor;
-pub use youtu::{YoutuExtractor, YoutuMode};
+pub use youtu::YoutuExtractor;
+
+/// How a seed schema constrains the schema-driven extractors (Youtu, ToolCall).
+///
+/// These are three of the four cells of the (schema present?) × (may add types?)
+/// grid; the fourth — constrain to an *empty* schema — is meaningless and is made
+/// unrepresentable by requiring a non-empty schema for `Fixed`/`Evolving`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SchemaMode {
+    /// No predefined schema; the model infers entity/relation types freely.
+    Open,
+    /// Closed: use only the types in the seeded schema. Requires a non-empty schema.
+    Fixed,
+    /// Seeded schema, but the model may propose new types (`new_schema_types`).
+    /// Requires a non-empty schema (an empty seed is just `Open`).
+    Evolving,
+}
+
+impl SchemaMode {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            SchemaMode::Open => "open",
+            SchemaMode::Fixed => "fixed",
+            SchemaMode::Evolving => "evolving",
+        }
+    }
+
+    /// `Fixed`/`Evolving` extract against a seed schema; `Open` does not.
+    pub(crate) fn needs_schema(&self) -> bool {
+        matches!(self, SchemaMode::Fixed | SchemaMode::Evolving)
+    }
+}
 
 /// Common extractor interface (analogue of Python `BaseExtractor`).
 #[async_trait]

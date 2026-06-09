@@ -8,9 +8,8 @@ fn file_config_parses_full_object() {
         "backend": "agent",
         "agent": "glmcc",
         "chunker": "token",
-        "youtu_agent": true,
-        "community": true,
-        "toolcall_agent": false,
+        "schema_mode": "evolving",
+        "schema": "schema.json",
         "max_rounds": 3,
         "output": "mermaid"
     }"#;
@@ -20,9 +19,8 @@ fn file_config_parses_full_object() {
     assert!(matches!(cfg.backend, Some(Backend::Agent)));
     assert_eq!(cfg.agent.as_deref(), Some("glmcc"));
     assert!(matches!(cfg.chunker, Some(Chunker::Token)));
-    assert_eq!(cfg.youtu_agent, Some(true));
-    assert_eq!(cfg.community, Some(true));
-    assert_eq!(cfg.toolcall_agent, Some(false));
+    assert!(matches!(cfg.schema_mode, Some(SchemaModeArg::Evolving)));
+    assert_eq!(cfg.schema.as_deref(), Some("schema.json"));
     assert_eq!(cfg.max_rounds, Some(3));
     assert!(matches!(cfg.output, Some(OutFmt::Mermaid)));
 }
@@ -106,28 +104,28 @@ fn precedence_cli_over_config_over_default() {
         engine: Some(Engine::Youtu),
         chunker: Some(Chunker::Token),
         max_rounds: Some(4),
-        youtu_agent: Some(true),
+        schema_mode: Some(SchemaModeArg::Evolving),
         ..Default::default()
     });
     assert!(matches!(r.engine, Engine::Youtu));
     assert!(matches!(r.chunker, Chunker::Token));
     assert_eq!(r.max_rounds, 4);
-    assert!(r.youtu_agent);
+    assert!(matches!(r.schema_mode, SchemaModeArg::Evolving));
 
     // 3. Built-in default when neither sets it.
     let r = render(&["kg-extract"], FileConfig::default());
     assert!(matches!(r.engine, Engine::Simple));
     assert!(matches!(r.chunker, Chunker::Recursive));
     assert_eq!(r.max_rounds, 1);
-    assert!(!r.youtu_agent);
+    assert!(matches!(r.schema_mode, SchemaModeArg::Open));
     assert_eq!(r.agent, "minimaxcc");
 }
 
-/// A bool flag explicitly passed must override a config value of `false`.
+/// An explicit CLI value flag overrides a differing config value.
 #[test]
-fn precedence_bool_flag_overrides_config_false() {
-    let m = Args::command().get_matches_from(["kg-extract", "--community"]);
+fn precedence_cli_flag_overrides_config() {
+    let m = Args::command().get_matches_from(["kg-extract", "--schema-mode", "fixed"]);
     let args = Args::from_arg_matches(&m).unwrap();
-    let r = resolve(&m, &args, FileConfig { community: Some(false), ..Default::default() });
-    assert!(r.community, "explicit --community must win over config false");
+    let r = resolve(&m, &args, FileConfig { schema_mode: Some(SchemaModeArg::Evolving), ..Default::default() });
+    assert!(matches!(r.schema_mode, SchemaModeArg::Fixed), "explicit --schema-mode must win over config");
 }

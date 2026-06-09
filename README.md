@@ -11,8 +11,8 @@ three extraction strategies behind a common trait.
 |-----------|----------|---------------|
 | `SimpleExtractor` | General LLM chat with GraphRAG-style **delimiter prompting** + **multi-gleaning** (iteratively asks "what did you miss?" for high recall) | `qwen-max` |
 | `TriplexExtractor` | **NER + triple** extraction via a Triplex-style model, **segmenting** large inputs and merging per-segment graphs | `sciphi/triplex:latest` (Ollama) |
-| `YoutuExtractor` | **Schema-driven** JSON extraction with optional **agent mode** (schema evolution) and **community detection** | `qwen-max` |
-| `ToolCallExtractor` | **Tool / function calling** — typed `add_entity` / `add_relation` / … tools; structured by construction, **no output parsing** | `qwen-max` |
+| `YoutuExtractor` | **Schema-driven** JSON extraction with three **schema modes**: open / fixed / evolving | `qwen-max` |
+| `ToolCallExtractor` | **Tool / function calling** — typed `add_entity` / `add_relation` / … tools; structured by construction, **no output parsing**; same open / fixed / evolving **schema modes** | `qwen-max` |
 
 All three implement the `Extractor` trait:
 
@@ -56,8 +56,9 @@ KnowledgeGraph { entities, triples }  ──►  JSON │ Mermaid │ stats
 
 `ToolCallExtractor` exposes typed tools and lets the model **call** them instead
 of emitting a blob we parse. Tool-call arguments are already structured JSON, so
-parsing is essentially free, and JSON-Schema `enum`s constrain entity/predicate
-types to the configured schema.
+parsing is essentially free. It shares Youtu's three [`SchemaMode`]s: in `Fixed`
+mode the entity/predicate tool args are JSON-Schema `enum`-constrained to the
+seeded schema; `Open` (default) and `Evolving` leave them free-form.
 
 | Tool | Purpose |
 |------|---------|
@@ -72,8 +73,9 @@ Execution is **single-round collection** by default (`max_rounds = 1`): one
 request, gather every tool call from that response, build the graph. Set
 `max_rounds > 1` for a bounded agentic loop where tool results (including
 `list_entities`) are fed back so the model can avoid dangling relations.
-`schema_evolution(true)` drops the enum constraints and records
-`propose_schema_type` calls into `new_schema_types` metadata.
+`.schema_mode(SchemaMode::Evolving)` (seed schema required) drops the enum
+constraints and records `propose_schema_type` calls into `new_schema_types`
+metadata.
 
 Requires a tool-capable backend (`LlmsBackend`; the agent-CLI backend does not
 expose function calling). Relations reference entity *names*, resolved at build
@@ -109,16 +111,25 @@ println!("{}", response.get_mermaid_code());
 # Ok(()) }
 ```
 
-Youtu with agent mode + community detection, driven by an agent CLI:
+Youtu has three [`SchemaMode`]s: `Open` (no predefined types — the default),
+`Fixed` (use only the seeded schema), and `Evolving` (seed schema the model may
+extend). `Fixed`/`Evolving` require a non-empty seed schema. Evolving, driven by
+an agent CLI:
 
 ```rust
 use kg_extract::backend::{AgentCli, AgentCliBackend};
-use kg_extract::extractor::{Extractor, YoutuExtractor, YoutuMode};
+use kg_extract::extractor::{Extractor, SchemaMode, YoutuExtractor};
+use kg_extract::types::{ExtractionConfig, Schema};
 
 let backend = Arc::new(AgentCliBackend::new(AgentCli::Minimaxcc));
-let extractor = YoutuExtractor::new(backend)
-    .mode(YoutuMode::Agent)
-    .community_detection(true);
+// Evolving needs a seed schema; Open would need none.
+let cfg = ExtractionConfig::from_schema(Schema::new(
+    vec!["PERSON".into(), "ORGANIZATION".into()],
+    vec!["WORKS_AT".into()],
+    vec![],
+));
+let extractor = YoutuExtractor::with_config(backend, cfg)
+    .schema_mode(SchemaMode::Evolving);
 let response = extractor.extract(text).await?;
 ```
 
@@ -136,8 +147,10 @@ echo "OpenAI developed GPT-4." | kg-extract -e simple -b llms -o mermaid
 # Triplex via Ollama (sciphi/triplex), JSON output
 kg-extract -e triplex -b llms -f doc.txt -o json
 
-# Youtu agent mode + community detection, driven by minimaxcc
-kg-extract -e youtu --youtu-agent --community -b agent --agent minimaxcc -f doc.txt
+# Youtu open mode (no schema) — the default
+kg-extract -e youtu -b agent --agent minimaxcc -f doc.txt
+# Youtu evolving mode: seed a schema, let the model extend it
+kg-extract -e youtu --schema-mode evolving --schema schema.json -b agent --agent minimaxcc -f doc.txt
 ```
 
 | Flag | Meaning |
@@ -147,17 +160,18 @@ kg-extract -e youtu --youtu-agent --community -b agent --agent minimaxcc -f doc.
 | `--agent` | agent CLI for `-b agent`: `minimaxcc` (default) \| `glmcc` \| `mimocc` |
 | `-c, --chunker` | `recursive` (default) \| `char` \| `token` |
 | `-m, --model` | override the engine's default model |
-| `--youtu-agent` | Youtu schema-evolution mode |
-| `--community` | enable community detection (Youtu) |
-| `--toolcall-agent` | tool-call schema-evolution mode |
+| `--schema-mode` | youtu/toolcall: `open` (default) \| `fixed` \| `evolving` |
+| `--schema` | youtu/toolcall schema JSON file (required for `fixed`/`evolving`) |
 | `--max-rounds` | tool-call rounds (1 = single-round, default) |
 | `-o, --output` | `json` (default) \| `mermaid` \| `stats` |
 
 ```bash
-# Tool-calling engine via llms (requires --features llms-backend)
+# Tool-calling engine via llms (requires --features llms-backend); open by default
 kg-extract -e toolcall -b llms -f doc.txt -o json
-# Agentic multi-round with schema evolution
-kg-extract -e toolcall -b llms --toolcall-agent --max-rounds 4 -f doc.txt
+# Fixed: enum-constrain tool args to a seeded schema
+kg-extract -e toolcall -b llms --schema-mode fixed --schema schema.json -f doc.txt -o json
+# Agentic multi-round, evolving schema
+kg-extract -e toolcall -b llms --schema-mode evolving --schema schema.json --max-rounds 4 -f doc.txt
 ```
 
 ## Parity notes
@@ -165,8 +179,7 @@ kg-extract -e toolcall -b llms --toolcall-agent --max-rounds 4 -f doc.txt
 This is a behavioural port of the Python original, including a couple of its
 quirks (documented in code): SimpleExtractor's relationship tuple field-shift
 (the relationship-type token drives predicate inference), and the
-exact-match-before-alias entity typing. Community detection uses dependency-free
-**label propagation** in place of networkx greedy-modularity.
+exact-match-before-alias entity typing.
 
 ## Dev
 

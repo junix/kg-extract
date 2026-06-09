@@ -12,7 +12,7 @@
 //!   via a Triplex-style model (default `sciphi/triplex` on Ollama), with
 //!   segmentation for large inputs.
 //! - [`YoutuExtractor`](extractor::YoutuExtractor) — schema-driven extraction
-//!   with optional agent mode (schema evolution) and community detection.
+//!   with three [`SchemaMode`](extractor::SchemaMode)s: open / fixed / evolving.
 //! - [`ToolCallExtractor`](extractor::ToolCallExtractor) — extraction via LLM
 //!   tool/function calling (typed `add_entity` / `add_relation` / … tools);
 //!   structured by construction, so no output parsing.
@@ -46,7 +46,7 @@ pub mod types;
 
 // Re-exports for ergonomic top-level use.
 pub use extractor::{
-    Extractor, SimpleExtractor, ToolCallExtractor, TriplexExtractor, YoutuExtractor, YoutuMode,
+    Extractor, SchemaMode, SimpleExtractor, ToolCallExtractor, TriplexExtractor, YoutuExtractor,
 };
 pub use types::{
     ChunkStrategy, Entity, EntityType, ExtractionConfig, ExtractionResponse, KnowledgeGraph,

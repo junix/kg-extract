@@ -1,7 +1,8 @@
-//! YoutuExtractor — schema-driven extraction with optional agent mode (schema
-//! evolution) and community detection. Ported from `graph/kg_extractor/youtu.py`.
+//! YoutuExtractor — schema-driven extraction with three schema modes:
+//! `Open` (no predefined types), `Fixed` (closed schema), and `Evolving`
+//! (seed schema the model may extend). Ported from `graph/kg_extractor/youtu.py`.
 
-use super::{validate_input, Extractor};
+use super::{validate_input, Extractor, SchemaMode};
 use crate::backend::{CompletionOptions, LlmBackend};
 use crate::parser::extract_json_from_response;
 use crate::types::{
@@ -11,30 +12,11 @@ use crate::types::{
 use std::collections::HashMap;
 use std::sync::Arc;
 
-/// Extraction mode.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum YoutuMode {
-    /// Fixed schema: use only the schema's types.
-    NoAgent,
-    /// Allow the model to propose new schema types (`new_schema_types`).
-    Agent,
-}
-
-impl YoutuMode {
-    fn as_str(&self) -> &'static str {
-        match self {
-            YoutuMode::NoAgent => "noagent",
-            YoutuMode::Agent => "agent",
-        }
-    }
-}
-
 /// Schema-based knowledge graph extractor.
 pub struct YoutuExtractor {
     backend: Arc<dyn LlmBackend>,
     config: ExtractionConfig,
-    pub mode: YoutuMode,
-    pub enable_community_detection: bool,
+    pub schema_mode: SchemaMode,
     pub quiet: bool,
 }
 
@@ -54,8 +36,7 @@ impl YoutuExtractor {
         YoutuExtractor {
             backend,
             config: Self::default_config(),
-            mode: YoutuMode::NoAgent,
-            enable_community_detection: false,
+            schema_mode: SchemaMode::Open,
             quiet: false,
         }
     }
@@ -64,19 +45,13 @@ impl YoutuExtractor {
         YoutuExtractor {
             backend,
             config,
-            mode: YoutuMode::NoAgent,
-            enable_community_detection: false,
+            schema_mode: SchemaMode::Open,
             quiet: false,
         }
     }
 
-    pub fn mode(mut self, mode: YoutuMode) -> Self {
-        self.mode = mode;
-        self
-    }
-
-    pub fn community_detection(mut self, enable: bool) -> Self {
-        self.enable_community_detection = enable;
+    pub fn schema_mode(mut self, mode: SchemaMode) -> Self {
+        self.schema_mode = mode;
         self
     }
 
@@ -92,8 +67,29 @@ impl YoutuExtractor {
         });
         let schema_json = serde_json::to_string(&schema).unwrap_or_default();
 
-        match self.mode {
-            YoutuMode::Agent => format!(
+        match self.schema_mode {
+            SchemaMode::Open => format!(
+                "Extract entities and relationships from the following text.\n\
+No predefined schema is given — infer suitable entity types and relation types from the content.\n\n\
+Text:\n{text}\n\n\
+Output JSON with:\n\
+1. \"entities\": {{\"entity_name\": {{\"type\": \"EntityType\", \"attributes\": {{\"attr\": \"value\"}}}}}}\n\
+2. \"relationships\": [[\"subject\", \"predicate\", \"object\"]]\n\
+3. \"entity_types\": {{\"entity_name\": \"type\"}} (map entities to their types)\n\n\
+Ensure valid JSON output."
+            ),
+            SchemaMode::Fixed => format!(
+                "Extract entities and relationships from the following text using the provided schema.\n\n\
+Schema:\n{schema_json}\n\n\
+Text:\n{text}\n\n\
+Output JSON with:\n\
+1. \"entities\": {{\"entity_name\": {{\"type\": \"EntityType\", \"attributes\": {{\"attr\": \"value\"}}}}}}\n\
+2. \"relationships\": [[\"subject\", \"predicate\", \"object\"]]\n\
+3. \"entity_types\": {{\"entity_name\": \"type\"}} (map entities to their types)\n\n\
+Use only the entity types and relations from the schema.\n\
+Ensure valid JSON output."
+            ),
+            SchemaMode::Evolving => format!(
                 "Extract entities and relationships from the following text using the provided schema as guidance.\n\
 You may suggest new entity types, relations, or attributes if they better represent the content.\n\n\
 Schema:\n{schema_json}\n\n\
@@ -103,17 +99,6 @@ Output JSON with:\n\
 2. \"relationships\": [[\"subject\", \"predicate\", \"object\"]]\n\
 3. \"entity_types\": {{\"entity_name\": \"type\"}} (map entities to their types)\n\
 4. \"new_schema_types\": {{\"nodes\": [], \"relations\": [], \"attributes\": []}} (if suggesting new types)\n\n\
-Ensure valid JSON output."
-            ),
-            YoutuMode::NoAgent => format!(
-                "Extract entities and relationships from the following text using the provided schema.\n\n\
-Schema:\n{schema_json}\n\n\
-Text:\n{text}\n\n\
-Output JSON with:\n\
-1. \"entities\": {{\"entity_name\": {{\"type\": \"EntityType\", \"attributes\": {{\"attr\": \"value\"}}}}}}\n\
-2. \"relationships\": [[\"subject\", \"predicate\", \"object\"]]\n\
-3. \"entity_types\": {{\"entity_name\": \"type\"}} (map entities to their types)\n\n\
-Use only the entity types and relations from the schema.\n\
 Ensure valid JSON output."
             ),
         }
@@ -221,6 +206,16 @@ impl Extractor for YoutuExtractor {
     async fn extract(&self, text: &str) -> anyhow::Result<ExtractionResponse> {
         validate_input(text, self.config.min_segment_size, self.quiet)?;
 
+        // Fixed/Evolving extract against a seed schema; constraining to (or
+        // evolving from) an empty schema is the degenerate cell of the grid.
+        if self.schema_mode.needs_schema() && self.config.extraction_schema.is_empty() {
+            anyhow::bail!(
+                "schema mode {:?} requires a non-empty schema (seed one via \
+                 ExtractionConfig::from_schema; CLI: --schema <file>), or use SchemaMode::Open",
+                self.schema_mode
+            );
+        }
+
         let prompt = self.build_prompt(text);
         let opts = CompletionOptions {
             model: self.config.model_name.clone(),
@@ -240,14 +235,12 @@ impl Extractor for YoutuExtractor {
         let data = extract_json_from_response(&response)
             .unwrap_or_else(|| serde_json::json!({"entities": {}, "relationships": []}));
 
-        let mut kg = self.build_graph(&data);
-        if self.enable_community_detection {
-            apply_community_detection(&mut kg);
-        }
+        let kg = self.build_graph(&data);
 
         let mut resp = ExtractionResponse::new(kg);
         resp.metadata.insert("model".into(), serde_json::json!(self.config.model_name));
-        resp.metadata.insert("mode".into(), serde_json::json!(self.mode.as_str()));
+        resp.metadata.insert("mode".into(), serde_json::json!("youtu"));
+        resp.metadata.insert("schema_mode".into(), serde_json::json!(self.schema_mode.as_str()));
         resp.metadata.insert(
             "schema_used".into(),
             serde_json::json!({
@@ -271,51 +264,21 @@ fn entity_id(name: &str) -> String {
     format!("entity_{}", &digest[..8])
 }
 
-/// Assign `community_id` to each entity by projecting the graph onto
-/// `(node_ids, edges)` and running label propagation. The algorithm itself
-/// lives in the dependency-free `kg-community` crate; this adapter only builds
-/// the projection and writes the resulting community indices back onto entities.
-fn apply_community_detection(kg: &mut KnowledgeGraph) {
-    let ids: Vec<String> = kg.entities.keys().cloned().collect();
-    if ids.is_empty() {
-        return;
-    }
-    let index: HashMap<&str, usize> = ids.iter().enumerate().map(|(i, s)| (s.as_str(), i)).collect();
-    let edges: Vec<(usize, usize)> = kg
-        .triples
-        .iter()
-        .filter_map(|t| match (index.get(t.subject.id.as_str()), index.get(t.object.id.as_str())) {
-            (Some(&a), Some(&b)) => Some((a, b)),
-            _ => None,
-        })
-        .collect();
-
-    let labels = kg_community::label_propagation(&ids, &edges);
-    for (i, id) in ids.iter().enumerate() {
-        if let Some(e) = kg.entities.get_mut(id) {
-            e.metadata.insert("community_id".into(), serde_json::json!(labels[i]));
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::backend::MockBackend;
 
     #[tokio::test]
-    async fn schema_based_extraction_with_community() {
+    async fn schema_based_extraction() {
         let json = r#"{"entities": {"OpenAI": {"type": "ORGANIZATION"},
                                       "GPT-4": {"type": "TECHNOLOGY"}},
                         "relationships": [["OpenAI", "DEVELOPED_BY", "GPT-4"]]}"#;
         let backend = Arc::new(MockBackend::single(json));
-        let ex = YoutuExtractor::new(backend).community_detection(true);
+        let ex = YoutuExtractor::new(backend);
         let out = ex.extract("OpenAI developed GPT-4.").await.unwrap();
         assert_eq!(out.num_entities(), 2);
         assert_eq!(out.num_triples(), 1);
-        for e in out.knowledge_graph.entities.values() {
-            assert!(e.metadata.contains_key("community_id"));
-        }
     }
 
     #[tokio::test]
@@ -354,14 +317,44 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn agent_mode_captures_new_schema() {
+    async fn open_is_the_default_and_needs_no_schema() {
+        // Default mode is Open: an empty schema is fine, model extracts freely.
+        let json = r#"{"entities": {"OpenAI": {"type": "ORGANIZATION"}}, "relationships": []}"#;
+        let out = YoutuExtractor::new(Arc::new(MockBackend::single(json)))
+            .extract("text")
+            .await
+            .unwrap();
+        assert_eq!(out.metadata["schema_mode"], serde_json::json!("open"));
+        assert_eq!(out.metadata["mode"], serde_json::json!("youtu"));
+        assert_eq!(out.num_entities(), 1);
+    }
+
+    #[tokio::test]
+    async fn evolving_mode_captures_new_schema() {
         let json = r#"{"entities": {"Movie X": {"type": "WORK_OF_ART"}},
                         "relationships": [],
                         "new_schema_types": {"nodes": ["Movie"], "relations": ["starring"], "attributes": []}}"#;
-        let backend = Arc::new(MockBackend::single(json));
-        let ex = YoutuExtractor::new(backend).mode(YoutuMode::Agent);
+        // Evolving requires a non-empty seed schema.
+        let cfg = ExtractionConfig::from_schema(Schema::new(
+            vec!["WORK_OF_ART".into()],
+            vec!["RELATED_TO".into()],
+            vec![],
+        ));
+        let ex = YoutuExtractor::with_config(Arc::new(MockBackend::single(json)), cfg)
+            .schema_mode(SchemaMode::Evolving);
         let out = ex.extract("Some text about a movie.").await.unwrap();
         assert!(out.metadata.contains_key("new_schema_types"));
-        assert_eq!(out.metadata["mode"], serde_json::json!("agent"));
+        assert_eq!(out.metadata["schema_mode"], serde_json::json!("evolving"));
+    }
+
+    #[tokio::test]
+    async fn fixed_mode_without_schema_errors() {
+        // Fixed on an empty schema is the degenerate combo — must error, not
+        // silently tell the model to "use only types from []".
+        let err = YoutuExtractor::new(Arc::new(MockBackend::single("{}")))
+            .schema_mode(SchemaMode::Fixed)
+            .extract("text")
+            .await;
+        assert!(err.is_err(), "Fixed mode with an empty schema must error");
     }
 }

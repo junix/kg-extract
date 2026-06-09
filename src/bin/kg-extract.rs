@@ -17,9 +17,9 @@ use serde::Deserialize;
 
 use kg_extract::backend::{AgentCli, AgentCliBackend, LlmBackend, MockBackend, PiAgentBackend};
 use kg_extract::extractor::{
-    Extractor, SimpleExtractor, ToolCallExtractor, TriplexExtractor, YoutuExtractor, YoutuMode,
+    Extractor, SchemaMode, SimpleExtractor, ToolCallExtractor, TriplexExtractor, YoutuExtractor,
 };
-use kg_extract::types::ChunkStrategy;
+use kg_extract::types::{ChunkStrategy, Schema};
 
 #[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -59,6 +59,25 @@ impl From<Chunker> for ChunkStrategy {
     }
 }
 
+/// Youtu schema mode (CLI mirror of [`SchemaMode`]).
+#[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum SchemaModeArg {
+    Open,
+    Fixed,
+    Evolving,
+}
+
+impl From<SchemaModeArg> for SchemaMode {
+    fn from(m: SchemaModeArg) -> Self {
+        match m {
+            SchemaModeArg::Open => SchemaMode::Open,
+            SchemaModeArg::Fixed => SchemaMode::Fixed,
+            SchemaModeArg::Evolving => SchemaMode::Evolving,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
 #[serde(rename_all = "lowercase")]
 enum OutFmt {
@@ -79,9 +98,8 @@ struct FileConfig {
     backend: Option<Backend>,
     agent: Option<String>,
     chunker: Option<Chunker>,
-    youtu_agent: Option<bool>,
-    community: Option<bool>,
-    toolcall_agent: Option<bool>,
+    schema_mode: Option<SchemaModeArg>,
+    schema: Option<String>,
     max_rounds: Option<usize>,
     output: Option<OutFmt>,
 }
@@ -120,17 +138,16 @@ struct Args {
     #[arg(short = 'k', long, value_enum, default_value_t = Chunker::Recursive)]
     chunker: Chunker,
 
-    /// Youtu agent mode (schema evolution).
-    #[arg(long)]
-    youtu_agent: bool,
+    /// Schema mode for the schema-driven engines (youtu / toolcall): `open` (no
+    /// predefined types, default) / `fixed` (use only the schema) / `evolving`
+    /// (seed schema, allow new types). `fixed` and `evolving` require --schema.
+    #[arg(long, value_enum, default_value_t = SchemaModeArg::Open)]
+    schema_mode: SchemaModeArg,
 
-    /// Enable community detection (Youtu engine).
+    /// Schema JSON file (entity/relation/attribute types) for youtu / toolcall.
+    /// Required for --schema-mode fixed|evolving; ignored by --schema-mode open.
     #[arg(long)]
-    community: bool,
-
-    /// Tool-call engine: allow schema evolution (drops enum constraints).
-    #[arg(long)]
-    toolcall_agent: bool,
+    schema: Option<String>,
 
     /// Tool-call engine: max tool-calling rounds (1 = single-round collection).
     #[arg(long, default_value_t = 1)]
@@ -152,9 +169,8 @@ struct Resolved {
     backend: Backend,
     agent: String,
     chunker: Chunker,
-    youtu_agent: bool,
-    community: bool,
-    toolcall_agent: bool,
+    schema_mode: SchemaModeArg,
+    schema: Option<String>,
     max_rounds: usize,
     output: OutFmt,
 }
@@ -224,9 +240,13 @@ fn resolve(m: &ArgMatches, args: &Args, cfg: FileConfig) -> Resolved {
         backend: pick(m, "backend", args.backend, cfg.backend),
         agent: pick(m, "agent", args.agent.clone(), cfg.agent),
         chunker: pick(m, "chunker", args.chunker, cfg.chunker),
-        youtu_agent: pick(m, "youtu_agent", args.youtu_agent, cfg.youtu_agent),
-        community: pick(m, "community", args.community, cfg.community),
-        toolcall_agent: pick(m, "toolcall_agent", args.toolcall_agent, cfg.toolcall_agent),
+        schema_mode: pick(m, "schema_mode", args.schema_mode, cfg.schema_mode),
+        // `schema` has no built-in default (like `model`): CLI > config > None.
+        schema: if m.value_source("schema") == Some(ValueSource::CommandLine) {
+            args.schema.clone()
+        } else {
+            cfg.schema.clone().or_else(|| args.schema.clone())
+        },
         max_rounds: pick(m, "max_rounds", args.max_rounds, cfg.max_rounds),
         output: pick(m, "output", args.output, cfg.output),
     }
@@ -320,10 +340,12 @@ async fn main() -> anyhow::Result<()> {
             if let Some(m) = &cfg.model {
                 c.model_name = m.clone();
             }
-            let mode = if cfg.youtu_agent { YoutuMode::Agent } else { YoutuMode::NoAgent };
+            if let Some(path) = &cfg.schema {
+                c.extraction_schema = Schema::from_json_file(expand_tilde(path))
+                    .with_context(|| format!("loading --schema {path}"))?;
+            }
             YoutuExtractor::with_config(backend, c)
-                .mode(mode)
-                .community_detection(cfg.community)
+                .schema_mode(cfg.schema_mode.into())
                 .extract(&text)
                 .await?
         }
@@ -333,8 +355,12 @@ async fn main() -> anyhow::Result<()> {
             if let Some(m) = &cfg.model {
                 c.model_name = m.clone();
             }
+            if let Some(path) = &cfg.schema {
+                c.extraction_schema = Schema::from_json_file(expand_tilde(path))
+                    .with_context(|| format!("loading --schema {path}"))?;
+            }
             ToolCallExtractor::with_config(backend, c)
-                .schema_evolution(cfg.toolcall_agent)
+                .schema_mode(cfg.schema_mode.into())
                 .max_rounds(cfg.max_rounds)
                 .extract(&text)
                 .await?

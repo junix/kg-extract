@@ -17,14 +17,14 @@
 //! `max_rounds > 1` for a bounded agentic loop where tool results (including
 //! `list_entities`) are fed back so the model can avoid dangling relations.
 
-use super::{validate_input, Extractor};
+use super::{validate_input, Extractor, SchemaMode};
 use crate::backend::{
     CompletionOptions, LlmBackend, Message, ToolInvocation, ToolSpec,
 };
 use crate::merger::merge_knowledge_graphs;
 use crate::types::{
     Entity, EntityType, ExtractionConfig, ExtractionResponse, KnowledgeGraph, Predicate,
-    PredicateType, Triple,
+    PredicateType, Schema, Triple,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -35,9 +35,10 @@ const SYSTEM_PROMPT: &str = "You are a knowledge-graph extraction engine. Read t
 pub struct ToolCallExtractor {
     backend: Arc<dyn LlmBackend>,
     config: ExtractionConfig,
-    /// Allow the model to invent new schema types (drops enum constraints and
-    /// records `propose_schema_type` calls). Mirrors Youtu agent mode.
-    pub schema_evolution: bool,
+    /// Schema constraint mode: `Open` (no enum, model names types freely) /
+    /// `Fixed` (enum-constrain tool args to the seeded schema) / `Evolving`
+    /// (no enum, but records `propose_schema_type` calls into `new_schema_types`).
+    pub schema_mode: SchemaMode,
     /// Max tool-calling rounds. 1 = single-round collection (default).
     pub max_rounds: usize,
     pub quiet: bool,
@@ -45,7 +46,11 @@ pub struct ToolCallExtractor {
 
 impl ToolCallExtractor {
     pub fn default_config() -> ExtractionConfig {
+        // Like Youtu, start from an EMPTY schema (no default seeding): the
+        // default `Open` mode applies no enum constraints, and `Fixed`/`Evolving`
+        // take an explicit schema.
         ExtractionConfig {
+            extraction_schema: Schema::default(),
             model_name: "qwen-max".into(),
             segment_size: 5000,
             min_segment_size: 100,
@@ -57,7 +62,7 @@ impl ToolCallExtractor {
         ToolCallExtractor {
             backend,
             config: Self::default_config(),
-            schema_evolution: false,
+            schema_mode: SchemaMode::Open,
             max_rounds: 1,
             quiet: false,
         }
@@ -67,14 +72,14 @@ impl ToolCallExtractor {
         ToolCallExtractor {
             backend,
             config,
-            schema_evolution: false,
+            schema_mode: SchemaMode::Open,
             max_rounds: 1,
             quiet: false,
         }
     }
 
-    pub fn schema_evolution(mut self, enable: bool) -> Self {
-        self.schema_evolution = enable;
+    pub fn schema_mode(mut self, mode: SchemaMode) -> Self {
+        self.schema_mode = mode;
         self
     }
 
@@ -87,15 +92,17 @@ impl ToolCallExtractor {
         &self.config
     }
 
-    /// JSON-Schema tool definitions, with enum constraints on entity type /
-    /// predicate when a schema is present and evolution is disabled.
+    /// JSON-Schema tool definitions. Only `Fixed` mode enum-constrains the entity
+    /// type / predicate args to the seeded schema; `Open`/`Evolving` leave them
+    /// free-form so the model can name (or propose) new types.
     fn tools(&self) -> Vec<ToolSpec> {
-        let type_schema = if !self.config.entity_types_list().is_empty() && !self.schema_evolution {
+        let enforce = matches!(self.schema_mode, SchemaMode::Fixed);
+        let type_schema = if enforce && !self.config.entity_types_list().is_empty() {
             serde_json::json!({"type": "string", "enum": self.config.entity_types_list()})
         } else {
             serde_json::json!({"type": "string"})
         };
-        let predicate_schema = if !self.config.predicates_list().is_empty() && !self.schema_evolution {
+        let predicate_schema = if enforce && !self.config.predicates_list().is_empty() {
             serde_json::json!({"type": "string", "enum": self.config.predicates_list()})
         } else {
             serde_json::json!({"type": "string"})
@@ -361,6 +368,15 @@ fn entity_id(name: &str) -> String {
 impl Extractor for ToolCallExtractor {
     async fn extract(&self, text: &str) -> anyhow::Result<ExtractionResponse> {
         validate_input(text, self.config.min_segment_size, self.quiet)?;
+        // Fixed/Evolving constrain to (or evolve from) a seed schema; an empty
+        // seed is the degenerate cell of the grid.
+        if self.schema_mode.needs_schema() && self.config.extraction_schema.is_empty() {
+            anyhow::bail!(
+                "schema mode {:?} requires a non-empty schema (seed one via \
+                 ExtractionConfig::from_schema; CLI: --schema <file>), or use SchemaMode::Open",
+                self.schema_mode
+            );
+        }
         if !self.backend.supports_tools() {
             anyhow::bail!("the selected backend does not support tool calling");
         }
@@ -405,6 +421,7 @@ impl Extractor for ToolCallExtractor {
         let mut response = ExtractionResponse::new(kg);
         response.config = Some(self.config.clone());
         response.metadata.insert("mode".into(), serde_json::json!("toolcall"));
+        response.metadata.insert("schema_mode".into(), serde_json::json!(self.schema_mode.as_str()));
         if !acc.new_nodes.is_empty() || !acc.new_relations.is_empty() || !acc.new_attributes.is_empty() {
             response.metadata.insert(
                 "new_schema_types".into(),
@@ -472,13 +489,35 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn agent_mode_records_proposed_types() {
+    async fn evolving_mode_records_proposed_types() {
         let rounds = vec![vec![
             call("add_entity", serde_json::json!({"name": "Dune", "type": "WORK_OF_ART"})),
             call("propose_schema_type", serde_json::json!({"kind": "node", "name": "Movie"})),
         ]];
         let backend = Arc::new(MockBackend::new(vec![]).with_tool_rounds(rounds));
-        let out = ToolCallExtractor::new(backend).schema_evolution(true).extract("text").await.unwrap();
+        // Evolving requires a non-empty seed schema.
+        let cfg = ExtractionConfig::from_schema(Schema::new(
+            vec!["WORK_OF_ART".into()],
+            vec!["RELATED_TO".into()],
+            vec![],
+        ));
+        let out = ToolCallExtractor::with_config(backend, cfg)
+            .schema_mode(SchemaMode::Evolving)
+            .extract("text")
+            .await
+            .unwrap();
         assert_eq!(out.metadata["new_schema_types"]["nodes"][0], serde_json::json!("Movie"));
+        assert_eq!(out.metadata["schema_mode"], serde_json::json!("evolving"));
+    }
+
+    #[tokio::test]
+    async fn fixed_mode_without_schema_errors() {
+        // Fixed on an empty schema is the degenerate combo — must error.
+        let backend = Arc::new(MockBackend::new(vec![]).with_tool_rounds(vec![vec![]]));
+        let err = ToolCallExtractor::new(backend)
+            .schema_mode(SchemaMode::Fixed)
+            .extract("text")
+            .await;
+        assert!(err.is_err(), "Fixed mode with an empty schema must error");
     }
 }
