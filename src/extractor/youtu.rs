@@ -8,7 +8,7 @@ use crate::types::{
     Entity, EntityType, ExtractionConfig, ExtractionResponse, KnowledgeGraph, Predicate,
     PredicateType, Schema, Triple,
 };
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Extraction mode.
@@ -271,60 +271,29 @@ fn entity_id(name: &str) -> String {
     format!("entity_{}", &digest[..8])
 }
 
-/// Assign `community_id` to each entity via label propagation on the undirected
-/// projection of the graph (dependency-free analogue of networkx greedy
-/// modularity communities).
+/// Assign `community_id` to each entity by projecting the graph onto
+/// `(node_ids, edges)` and running label propagation. The algorithm itself
+/// lives in the dependency-free `kg-community` crate; this adapter only builds
+/// the projection and writes the resulting community indices back onto entities.
 fn apply_community_detection(kg: &mut KnowledgeGraph) {
     let ids: Vec<String> = kg.entities.keys().cloned().collect();
     if ids.is_empty() {
         return;
     }
     let index: HashMap<&str, usize> = ids.iter().enumerate().map(|(i, s)| (s.as_str(), i)).collect();
+    let edges: Vec<(usize, usize)> = kg
+        .triples
+        .iter()
+        .filter_map(|t| match (index.get(t.subject.id.as_str()), index.get(t.object.id.as_str())) {
+            (Some(&a), Some(&b)) => Some((a, b)),
+            _ => None,
+        })
+        .collect();
 
-    let mut adj: Vec<HashSet<usize>> = vec![HashSet::new(); ids.len()];
-    for t in &kg.triples {
-        if let (Some(&a), Some(&b)) = (index.get(t.subject.id.as_str()), index.get(t.object.id.as_str())) {
-            if a != b {
-                adj[a].insert(b);
-                adj[b].insert(a);
-            }
-        }
-    }
-
-    // Label propagation: each node starts in its own community; iterate to the
-    // most common neighbour label. Deterministic tie-break by lowest label.
-    let mut labels: Vec<usize> = (0..ids.len()).collect();
-    for _ in 0..10 {
-        let mut changed = false;
-        for v in 0..ids.len() {
-            if adj[v].is_empty() {
-                continue;
-            }
-            let mut counts: HashMap<usize, usize> = HashMap::new();
-            for &n in &adj[v] {
-                *counts.entry(labels[n]).or_insert(0) += 1;
-            }
-            if let Some((&best, _)) =
-                counts.iter().max_by(|a, b| a.1.cmp(b.1).then(b.0.cmp(a.0)))
-            {
-                if labels[v] != best {
-                    labels[v] = best;
-                    changed = true;
-                }
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-
-    // Renumber communities to 0..k in first-seen order.
-    let mut remap: HashMap<usize, usize> = HashMap::new();
+    let labels = kg_community::label_propagation(&ids, &edges);
     for (i, id) in ids.iter().enumerate() {
-        let next = remap.len();
-        let comm = *remap.entry(labels[i]).or_insert(next);
         if let Some(e) = kg.entities.get_mut(id) {
-            e.metadata.insert("community_id".into(), serde_json::json!(comm));
+            e.metadata.insert("community_id".into(), serde_json::json!(labels[i]));
         }
     }
 }
