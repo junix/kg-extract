@@ -308,11 +308,30 @@ extraction-time deduplication is *not* reproducible by a post-hoc merge pass
 context the sandbox enables is rarely used in practice (in-order slices already
 carry context in the conversation); it matters mainly for cross-section lookups.
 
-#### Fixed-schema enforcement (`--schema-mode fixed`)
+#### Schema modes (`--schema-mode`)
 
-Multi-turn extraction is also the natural home for **closed-schema enforcement**.
-With `--schema-mode fixed --schema schema.json`, the agentic engine turns the
-session into a per-slice validation loop:
+The agentic engine honours all three [schema modes](#schema-modes), each a
+different use of the multi-turn session:
+
+- **`open`** (default) — schema is hints only; the model extracts freely.
+- **`fixed`** — closed-world validation loop (below): out-of-schema records are
+  dropped and the model is corrected mid-conversation.
+- **`evolving`** — seed types are *preferred* but nothing is dropped; the types
+  the model uses **outside** the seed are recorded as `new_schema_types` in the
+  response metadata (and summarised on stderr), mirroring SchemaJson/ToolCall.
+
+Same rich paragraph, seed `{nodes:[Person,Company], relations:[WORKS_FOR]}`:
+
+| mode | entity types in graph | new types recorded |
+|---|---|---|
+| `open` | 8 (free) | — |
+| `evolving` | 6 (all kept) | City, Location, Pet, Product, Computing_Platform, Based_In, Lives_In, Owns, … |
+| `fixed` | **2** (Person, Company) | — (dropped instead) |
+
+##### Fixed-schema enforcement (`--schema-mode fixed`)
+
+`--schema-mode fixed --schema schema.json` turns the session into a per-slice
+validation loop:
 
 1. The system prompt states the closed type vocabulary (`STRICT SCHEMA — use ONLY…`).
 2. After each slice, every extracted entity/relation is checked against the schema.
@@ -327,19 +346,11 @@ session into a per-slice validation loop:
 Validation is on the **raw type token**, so a domain-specific schema type outside
 the built-in `EntityType` vocabulary (which the enum would collapse to `Other`)
 still matches. `schema_dropped_records` / `schema_dropped_types` land in the
-response metadata for auditing. `Open`/`Evolving` leave extraction unconstrained
-(the schema is hints only), same as before.
+response metadata for auditing.
 
 ```bash
 kg-extract -e agentic --agent minimaxcc --schema-mode fixed --schema schema.json -f doc.txt -o json
 ```
-
-Measured on a rich biographical paragraph with `{nodes:[Person,Company], relations:[WORKS_FOR]}`:
-
-| | entity types | predicate types |
-|---|---|---|
-| `--schema-mode open` (no enforcement) | 8 (Person, Company, City, Location, Date, Product, Technology, Other) | 5 |
-| `--schema-mode fixed` (this schema) | **2** (Person, Company) | **1** (WORKS_FOR) |
 
 In practice the strict prompt does most of the work — a compliant model rarely
 emits out-of-schema records, so the drop/feedback loop is mostly a **safety net**.

@@ -64,6 +64,13 @@ const SCHEMA_STRICT: &str = r#"STRICT SCHEMA — you MUST use ONLY the types bel
 Entity types (use EXACTLY one of these as entity_type): {entity_types}
 Relationship types (use EXACTLY one of these as relationship_type): {relationship_types}"#;
 
+/// Open schema block (Evolving): the seed types are preferred, but the model
+/// may coin a new type when none fits — those proposals are recorded (nothing
+/// is dropped).
+const SCHEMA_EVOLVING: &str = r#"SEED SCHEMA — PREFER these types, but you MAY introduce a NEW entity_type or relationship_type when the seed has no good fit. Nothing is discarded.
+Entity types (seed): {entity_types}
+Relationship types (seed): {relationship_types}"#;
+
 /// Appended to the next slice's prompt after a turn dropped out-of-schema
 /// records, so the model self-corrects mid-conversation.
 const SCHEMA_FEEDBACK: &str = r#"NOTE: from your previous answer I discarded {dropped} record(s) because their types are NOT in the schema{dropped_types}. Stay strictly within — entity types: {entity_types}; relationship types: {relationship_types}. Do not emit any other type."#;
@@ -131,10 +138,12 @@ impl AgenticExtractor {
         self
     }
 
-    /// Set the schema mode (builder style). Under [`SchemaMode::Fixed`] with a
-    /// non-empty schema, each slice's output is validated against the schema:
-    /// out-of-schema entities/relations are dropped and the model is reminded
-    /// on the next turn. `Open`/`Evolving` leave extraction unconstrained.
+    /// Set the schema mode (builder style). With a non-empty schema:
+    /// [`SchemaMode::Fixed`] validates each slice and drops out-of-schema
+    /// records (reminding the model on the next turn); [`SchemaMode::Evolving`]
+    /// keeps everything but records the types used outside the seed as
+    /// `new_schema_types`. [`SchemaMode::Open`] (and either constrained mode with
+    /// an empty schema) leaves extraction unconstrained.
     pub fn schema_mode(mut self, mode: SchemaMode) -> Self {
         self.config.spec.mode = mode;
         self
@@ -233,12 +242,10 @@ struct SchemaFilter {
 }
 
 impl SchemaFilter {
-    /// Build a filter only when it would enforce something: `Fixed` mode with a
-    /// non-empty schema. Returns `None` otherwise (extraction stays unconstrained).
-    fn for_mode(mode: SchemaMode, schema: &Schema) -> Option<Self> {
-        if mode != SchemaMode::Fixed {
-            return None;
-        }
+    /// Build the seed-type sets, or `None` if the schema is empty (nothing to
+    /// enforce or evolve from — the degenerate `Fixed`/`Evolving` cell that is
+    /// just `Open`).
+    fn build(schema: &Schema) -> Option<Self> {
         let nodes: HashSet<String> = schema.nodes.iter().map(|s| norm_type(s)).collect();
         let relations: HashSet<String> = schema.relations.iter().map(|s| norm_type(s)).collect();
         if nodes.is_empty() && relations.is_empty() {
@@ -246,6 +253,42 @@ impl SchemaFilter {
         } else {
             Some(SchemaFilter { nodes, relations })
         }
+    }
+
+    /// Collect the normalized entity/relation types that appear in a parse but
+    /// are *outside* the seed schema — the `Evolving`-mode proposals. A seed half
+    /// left empty is treated as unconstrained (nothing is "new" for it), mirroring
+    /// the filter semantics.
+    fn new_types(
+        &self,
+        entities: &HashMap<String, Entity>,
+        triples: &[Triple],
+        type_tokens: &HashMap<String, String>,
+    ) -> (BTreeSet<String>, BTreeSet<String>) {
+        let mut nodes = BTreeSet::new();
+        let mut relations = BTreeSet::new();
+        for e in entities.values() {
+            let raw = type_tokens
+                .get(&e.label.trim().to_lowercase())
+                .cloned()
+                .unwrap_or_else(|| e.entity_type.to_string());
+            let t = norm_type(&raw);
+            if !self.node_ok(&t) {
+                nodes.insert(t);
+            }
+        }
+        for tr in triples {
+            let rl = tr
+                .predicate
+                .label
+                .clone()
+                .unwrap_or_else(|| tr.predicate.predicate_type.to_string());
+            let r = norm_type(&rl);
+            if !self.rel_ok(&r) {
+                relations.insert(r);
+            }
+        }
+        (nodes, relations)
     }
 
     fn node_ok(&self, t: &str) -> bool {
@@ -311,6 +354,30 @@ impl SchemaFilter {
     }
 }
 
+/// How the seed schema governs a run, resolved from [`SchemaMode`] + schema.
+enum SchemaPolicy {
+    /// Unconstrained: `Open`, or `Fixed`/`Evolving` with an empty schema.
+    Off,
+    /// Closed-world: validate each slice, drop out-of-schema, feed back.
+    Fixed(SchemaFilter),
+    /// Seeded but open: keep everything, record types outside the seed.
+    Evolving(SchemaFilter),
+}
+
+impl SchemaPolicy {
+    fn for_mode(mode: SchemaMode, schema: &Schema) -> Self {
+        match mode {
+            SchemaMode::Open => SchemaPolicy::Off,
+            SchemaMode::Fixed => {
+                SchemaFilter::build(schema).map(SchemaPolicy::Fixed).unwrap_or(SchemaPolicy::Off)
+            }
+            SchemaMode::Evolving => {
+                SchemaFilter::build(schema).map(SchemaPolicy::Evolving).unwrap_or(SchemaPolicy::Off)
+            }
+        }
+    }
+}
+
 #[async_trait]
 impl Extractor for AgenticExtractor {
     async fn extract(&self, text: &str) -> anyhow::Result<ExtractionResponse> {
@@ -343,16 +410,25 @@ impl AgenticExtractor {
     ) -> anyhow::Result<ExtractionResponse> {
         let entity_types = self.config.entity_types_list().join(", ");
         let rel_types = self.rel_types();
-        // A closed-world filter exists only under Fixed mode with a non-empty
-        // schema; it decides both the system-prompt tone (strict vs hints) and
-        // whether per-slice output is validated.
-        let filter = SchemaFilter::for_mode(self.config.spec.mode, &self.config.spec.schema);
-        if self.config.spec.mode == SchemaMode::Fixed && filter.is_none() && !self.quiet {
+        // The schema policy decides the system-prompt tone and how per-slice
+        // output is treated: Fixed validates+drops, Evolving records new types,
+        // Off leaves it as hints. A non-empty schema is required for the two
+        // constrained modes; an empty one degrades to Off.
+        let policy = SchemaPolicy::for_mode(self.config.spec.mode, &self.config.spec.schema);
+        if self.config.spec.mode.needs_schema()
+            && matches!(policy, SchemaPolicy::Off)
+            && !self.quiet
+        {
             eprintln!(
-                "agentic: --schema-mode fixed but the schema is empty — no schema enforcement (pass --schema <file>)"
+                "agentic: --schema-mode {} but the schema is empty — treating as open (pass --schema <file>)",
+                self.config.spec.mode.as_str()
             );
         }
-        let schema_section = if filter.is_some() { SCHEMA_STRICT } else { SCHEMA_HINTS };
+        let schema_section = match policy {
+            SchemaPolicy::Fixed(_) => SCHEMA_STRICT,
+            SchemaPolicy::Evolving(_) => SCHEMA_EVOLVING,
+            SchemaPolicy::Off => SCHEMA_HINTS,
+        };
         let system = SYSTEM_PROMPT
             .replace("{schema_section}", schema_section)
             .replace("{entity_types}", &entity_types)
@@ -380,10 +456,12 @@ impl AgenticExtractor {
         let mut all_triples: Vec<Triple> = Vec::new();
         let mut parsed_results: Vec<ParsedResult> = Vec::new();
         let mut total_tool_uses = 0usize;
-        // Schema-validation bookkeeping (Fixed mode only).
+        // Schema bookkeeping: Fixed drops/feeds back; Evolving collects proposals.
         let mut pending_feedback: Option<String> = None;
         let mut total_dropped = 0usize;
         let mut all_dropped_types: BTreeSet<String> = BTreeSet::new();
+        let mut new_nodes: BTreeSet<String> = BTreeSet::new();
+        let mut new_relations: BTreeSet<String> = BTreeSet::new();
 
         // 2. Feed each slice as a turn in the same conversation.
         'slices: for (i, slice) in slices.iter().enumerate() {
@@ -425,14 +503,40 @@ impl AgenticExtractor {
                 }
                 let parsed = parse_output(&output, &self.config);
 
-                let Some(f) = &filter else {
-                    // Unconstrained (Open / Evolving / no schema): merge as-is.
-                    for (id, e) in &parsed.entities {
-                        all_entities.entry(id.clone()).or_insert_with(|| e.clone());
+                let f = match &policy {
+                    SchemaPolicy::Off => {
+                        // Unconstrained (Open / empty schema): merge as-is.
+                        for (id, e) in &parsed.entities {
+                            all_entities.entry(id.clone()).or_insert_with(|| e.clone());
+                        }
+                        all_triples.extend(parsed.triples.clone());
+                        parsed_results.push(parsed);
+                        continue 'slices;
                     }
-                    all_triples.extend(parsed.triples.clone());
-                    parsed_results.push(parsed);
-                    continue 'slices;
+                    SchemaPolicy::Evolving(f) => {
+                        // Keep everything, but record the types the model used
+                        // that lie outside the seed schema.
+                        let tokens = entity_type_tokens(&output);
+                        let (nn, nr) = f.new_types(&parsed.entities, &parsed.triples, &tokens);
+                        if !self.quiet && (!nn.is_empty() || !nr.is_empty()) {
+                            let csv =
+                                nn.iter().chain(nr.iter()).cloned().collect::<Vec<_>>().join(", ");
+                            eprintln!(
+                                "  [schema] slice {} proposed {} new type(s): {csv}",
+                                i + 1,
+                                nn.len() + nr.len()
+                            );
+                        }
+                        new_nodes.extend(nn);
+                        new_relations.extend(nr);
+                        for (id, e) in &parsed.entities {
+                            all_entities.entry(id.clone()).or_insert_with(|| e.clone());
+                        }
+                        all_triples.extend(parsed.triples.clone());
+                        parsed_results.push(parsed);
+                        continue 'slices;
+                    }
+                    SchemaPolicy::Fixed(f) => f,
                 };
 
                 let tokens = entity_type_tokens(&output);
@@ -527,10 +631,10 @@ impl AgenticExtractor {
             let rescued: Vec<Triple> = parse_relations_against(&output, &all_entities)
                 .into_iter()
                 .filter(|t| seen.insert(t.to_tuple()))
-                // Gleaned relations must honour the schema too (endpoints are
-                // already in-schema entities; only the relation type can stray).
-                .filter(|t| match &filter {
-                    Some(f) => {
+                // Fixed: gleaned relations must honour the schema too (endpoints
+                // are already in-schema entities; only the relation type can stray).
+                .filter(|t| match &policy {
+                    SchemaPolicy::Fixed(f) => {
                         let rl = t
                             .predicate
                             .label
@@ -538,9 +642,23 @@ impl AgenticExtractor {
                             .unwrap_or_else(|| t.predicate.predicate_type.to_string());
                         f.rel_ok(&norm_type(&rl))
                     }
-                    None => true,
+                    _ => true,
                 })
                 .collect();
+            // Evolving: gleaned relations are kept; record any out-of-seed types.
+            if let SchemaPolicy::Evolving(f) = &policy {
+                for t in &rescued {
+                    let rl = t
+                        .predicate
+                        .label
+                        .clone()
+                        .unwrap_or_else(|| t.predicate.predicate_type.to_string());
+                    let r = norm_type(&rl);
+                    if !f.rel_ok(&r) {
+                        new_relations.insert(r);
+                    }
+                }
+            }
             if rescued.is_empty() {
                 break;
             }
@@ -557,14 +675,19 @@ impl AgenticExtractor {
             kg.add_triple(t);
         }
         if !self.quiet {
-            let dropped = if filter.is_some() {
-                format!(", {total_dropped} out-of-schema record(s) dropped")
-            } else {
-                String::new()
+            let tail = match &policy {
+                SchemaPolicy::Fixed(_) => {
+                    format!(", {total_dropped} out-of-schema record(s) dropped")
+                }
+                SchemaPolicy::Evolving(_) => format!(
+                    ", {} new type(s) proposed",
+                    new_nodes.len() + new_relations.len()
+                ),
+                SchemaPolicy::Off => String::new(),
             };
             eprintln!(
                 "agentic: {} slice(s), {} self-context tool call(s){}",
-                n, total_tool_uses, dropped
+                n, total_tool_uses, tail
             );
         }
         let mut resp = ExtractionResponse::new(kg);
@@ -572,12 +695,27 @@ impl AgenticExtractor {
         resp.config = Some(self.config.clone());
         resp.metadata.insert("tool_uses".into(), serde_json::json!(total_tool_uses));
         resp.metadata.insert("schema_mode".into(), serde_json::json!(self.config.spec.mode.as_str()));
-        if filter.is_some() {
-            resp.metadata.insert("schema_dropped_records".into(), serde_json::json!(total_dropped));
-            resp.metadata.insert(
-                "schema_dropped_types".into(),
-                serde_json::json!(all_dropped_types.into_iter().collect::<Vec<_>>()),
-            );
+        match &policy {
+            SchemaPolicy::Fixed(_) => {
+                resp.metadata
+                    .insert("schema_dropped_records".into(), serde_json::json!(total_dropped));
+                resp.metadata.insert(
+                    "schema_dropped_types".into(),
+                    serde_json::json!(all_dropped_types.into_iter().collect::<Vec<_>>()),
+                );
+            }
+            SchemaPolicy::Evolving(_) => {
+                // Mirror SchemaJson/ToolCall's `new_schema_types` shape.
+                resp.metadata.insert(
+                    "new_schema_types".into(),
+                    serde_json::json!({
+                        "nodes": new_nodes.into_iter().collect::<Vec<_>>(),
+                        "relations": new_relations.into_iter().collect::<Vec<_>>(),
+                        "attributes": [],
+                    }),
+                );
+            }
+            SchemaPolicy::Off => {}
         }
         Ok(resp)
     }
@@ -597,19 +735,33 @@ mod tests {
     }
 
     #[test]
-    fn filter_active_only_for_fixed_with_schema() {
+    fn policy_dispatch_by_mode_and_schema() {
         let schema = Schema::new(vec!["PRODUCT".into()], vec![], vec![]);
-        assert!(SchemaFilter::for_mode(SchemaMode::Open, &schema).is_none());
-        assert!(SchemaFilter::for_mode(SchemaMode::Evolving, &schema).is_none());
-        assert!(SchemaFilter::for_mode(SchemaMode::Fixed, &Schema::default()).is_none());
-        assert!(SchemaFilter::for_mode(SchemaMode::Fixed, &schema).is_some());
+        assert!(matches!(SchemaPolicy::for_mode(SchemaMode::Open, &schema), SchemaPolicy::Off));
+        assert!(matches!(
+            SchemaPolicy::for_mode(SchemaMode::Fixed, &schema),
+            SchemaPolicy::Fixed(_)
+        ));
+        assert!(matches!(
+            SchemaPolicy::for_mode(SchemaMode::Evolving, &schema),
+            SchemaPolicy::Evolving(_)
+        ));
+        // Empty schema degrades the constrained modes to Off.
+        assert!(matches!(
+            SchemaPolicy::for_mode(SchemaMode::Fixed, &Schema::default()),
+            SchemaPolicy::Off
+        ));
+        assert!(matches!(
+            SchemaPolicy::for_mode(SchemaMode::Evolving, &Schema::default()),
+            SchemaPolicy::Off
+        ));
     }
 
     #[test]
     fn drops_out_of_schema_entity_and_its_dependent_relation() {
         // Only PRODUCT entities and USES relations are allowed.
         let schema = Schema::new(vec!["PRODUCT".into()], vec!["USES".into()], vec![]);
-        let f = SchemaFilter::for_mode(SchemaMode::Fixed, &schema).unwrap();
+        let f = SchemaFilter::build(&schema).unwrap();
 
         let mut entities = HashMap::new();
         entities.insert("p".to_string(), ent("p", "Widget", EntityType::Product));
@@ -636,7 +788,7 @@ mod tests {
     #[test]
     fn drops_out_of_schema_relation_type_but_keeps_entities() {
         let schema = Schema::new(vec!["PRODUCT".into()], vec!["USES".into()], vec![]);
-        let f = SchemaFilter::for_mode(SchemaMode::Fixed, &schema).unwrap();
+        let f = SchemaFilter::build(&schema).unwrap();
         let mut entities = HashMap::new();
         entities.insert("a".into(), ent("a", "Widget", EntityType::Product));
         entities.insert("b".into(), ent("b", "Gadget", EntityType::Product));
@@ -658,7 +810,7 @@ mod tests {
         // GADGET is not an EntityType variant — from_loose collapses it to Other,
         // so enum-level checking would wrongly drop it. The raw token rescues it.
         let schema = Schema::new(vec!["GADGET".into()], vec![], vec![]);
-        let f = SchemaFilter::for_mode(SchemaMode::Fixed, &schema).unwrap();
+        let f = SchemaFilter::build(&schema).unwrap();
         let mut entities = HashMap::new();
         entities.insert("g".into(), ent("g", "Widget X", EntityType::Other));
         let toks = tokens(&[("widget x", "GADGET")]);
@@ -670,11 +822,34 @@ mod tests {
     #[test]
     fn all_dropped_flags_the_degenerate_slice() {
         let schema = Schema::new(vec!["PRODUCT".into()], vec![], vec![]);
-        let f = SchemaFilter::for_mode(SchemaMode::Fixed, &schema).unwrap();
+        let f = SchemaFilter::build(&schema).unwrap();
         let mut entities = HashMap::new();
         entities.insert("o".into(), ent("o", "Acme", EntityType::Organization));
         let toks = tokens(&[("acme", "ORGANIZATION")]);
         let sf = f.apply(entities, vec![], &toks);
         assert!(sf.all_dropped(), "every record fell outside the schema");
+    }
+
+    #[test]
+    fn evolving_collects_types_outside_the_seed() {
+        // Seed allows PRODUCT entities and USES relations. The model also emits an
+        // ORGANIZATION entity and a DEPENDS_ON relation — Evolving keeps both but
+        // reports them as proposed new types (nothing dropped).
+        let schema = Schema::new(vec!["PRODUCT".into()], vec!["USES".into()], vec![]);
+        let f = SchemaFilter::build(&schema).unwrap();
+        let mut entities = HashMap::new();
+        entities.insert("p".into(), ent("p", "Widget", EntityType::Product));
+        entities.insert("o".into(), ent("o", "Acme", EntityType::Organization));
+        let t = Triple::new(
+            ent("p", "Widget", EntityType::Product),
+            Predicate::with_label(PredicateType::RelatedTo, "DEPENDS_ON"),
+            ent("o", "Acme", EntityType::Organization),
+        );
+        let toks = tokens(&[("widget", "PRODUCT"), ("acme", "ORGANIZATION")]);
+        let (nodes, relations) = f.new_types(&entities, &[t], &toks);
+        assert!(nodes.contains("ORGANIZATION"), "out-of-seed node must be proposed");
+        assert!(!nodes.contains("PRODUCT"), "seed node is not a proposal");
+        assert!(relations.contains("DEPENDS_ON"), "out-of-seed relation must be proposed");
+        assert!(!relations.contains("USES"), "seed relation is not a proposal");
     }
 }
