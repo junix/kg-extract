@@ -207,13 +207,22 @@ fn parse_output(output: &str, _config: &ExtractionConfig) -> ParsedResult {
         if item.starts_with('(') && !item.ends_with(')') {
             item.push(')');
         }
-        let low = item.to_lowercase();
-        if low.contains("entity") && item.contains(TUPLE_DELIMITER) {
+        // Classify by the record's leading token, not a substring scan of the
+        // whole line: a relationship whose description mentions "entity" (e.g.
+        // "these two entities are related") must not be misrouted to the entity
+        // branch and silently dropped.
+        let head = item
+            .trim_start_matches('(')
+            .split(TUPLE_DELIMITER)
+            .next()
+            .unwrap_or("")
+            .to_lowercase();
+        if head.contains("entity") && item.contains(TUPLE_DELIMITER) {
             if let Some(e) = parse_entity_item(&item) {
                 entity_id_map.insert(normalize_key(&e.label), e.id.clone());
                 entities.insert(e.id.clone(), e);
             }
-        } else if low.contains("relationship") && item.contains(TUPLE_DELIMITER) {
+        } else if head.contains("relationship") && item.contains(TUPLE_DELIMITER) {
             if let Some(r) = parse_relationship_item(&item, &entity_id_map) {
                 relationships.push(r);
             }
@@ -519,6 +528,23 @@ mod tests {
         assert_eq!(out.num_entities(), 2);
         assert_eq!(out.num_triples(), 1);
         assert_eq!(out.knowledge_graph.triples[0].predicate.predicate_type, PredicateType::Uses);
+    }
+
+    #[tokio::test]
+    async fn relationship_with_entity_in_text_is_not_dropped() {
+        // The relationship description mentions "entities"; the record must be
+        // classified by its leading token, not a whole-line substring scan.
+        let resp = "(entity<|>OpenAI<|>organization<|>An AI lab.<|>)##\
+            (entity<|>GPT-4<|>technology<|>A model.<|>)##\
+            (relationship<|>OpenAI<|>GPT-4<|>uses<|>OpenAI is the parent entity of GPT-4.<|>0.9)##";
+        let backend = Arc::new(MockBackend::new(vec![resp.into(), String::new()]));
+        let out = SimpleExtractor::new(backend).extract("OpenAI and GPT-4.").await.unwrap();
+        assert_eq!(out.num_entities(), 2);
+        assert_eq!(
+            out.num_triples(),
+            1,
+            "relationship must survive even though its text contains the word 'entity'"
+        );
     }
 
     #[test]
