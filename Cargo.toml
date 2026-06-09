@@ -5,6 +5,9 @@ edition = "2021"
 license = "MIT"
 description = "Multi-strategy knowledge-graph extraction (Simple / Triplex / Youtu), ported from the Python graph.kg_extractor"
 publish = false
+# Bins are declared explicitly below; disable auto-discovery so the sibling
+# `src/bin/*_test.rs` files (pulled in via #[path]) aren't treated as binaries.
+autobins = false
 
 [lib]
 path = "src/lib.rs"
@@ -13,11 +16,20 @@ path = "src/lib.rs"
 name = "kg-extract"
 path = "src/bin/kg-extract.rs"
 
+# stdio MCP server exposing function-call style graph-building tools. Optional:
+# pulls in the `rmcp` SDK only when built with `--features mcp`.
+[[bin]]
+name = "kg-extract-mcp"
+path = "src/bin/kg-extract-mcp.rs"
+required-features = ["mcp"]
+
 [features]
 default = []
 # Pull in the real `llms` crate backend. Without it, only the AgentCli backend
 # (subprocess to glmcc/minimaxcc/mimocc) and a Mock backend are available.
 llms-backend = ["dep:llms"]
+# Build the `kg-extract-mcp` stdio MCP server (rmcp SDK + schemars).
+mcp = ["dep:rmcp", "dep:schemars"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -35,6 +47,11 @@ clap = { version = "4", features = ["derive"] }
 
 chonkie = { path = "../chonkie" }
 llms = { path = "../llms", optional = true }
+
+# MCP server (feature = "mcp"). rmcp is the official MCP Rust SDK, matching the
+# workspace convention (gitnexus / mcp2cmd / openmemory).
+rmcp = { git = "https://github.com/modelcontextprotocol/rust-sdk.git", features = ["server", "transport-io", "macros"], optional = true }
+schemars = { version = "1", optional = true }
 
 [dev-dependencies]
 pretty_assertions = "1"

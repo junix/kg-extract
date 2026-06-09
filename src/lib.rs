@@ -39,6 +39,7 @@
 pub mod backend;
 pub mod chunking;
 pub mod extractor;
+pub mod mcp;
 pub mod merger;
 pub mod parser;
 pub mod types;

@@ -1,2 +1,7 @@
 /target
 Cargo.lock
+
+# Local test scratch (copied corpora + generated graphs) — not part of the repo
+/e2e/
+# Real runtime config (example lives in config.example.json)
+/config.json

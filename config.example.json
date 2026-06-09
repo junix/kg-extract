@@ -1,0 +1,12 @@
+{
+  "engine": "simple",
+  "model": "gpt-4o-mini",
+  "backend": "agent",
+  "agent": "minimaxcc",
+  "chunker": "recursive",
+  "youtu_agent": false,
+  "community": false,
+  "toolcall_agent": false,
+  "max_rounds": 1,
+  "output": "json"
+}
