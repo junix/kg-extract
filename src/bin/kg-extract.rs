@@ -111,7 +111,8 @@ struct Args {
     #[arg(short, long, value_enum, default_value_t = Backend::Llms)]
     backend: Backend,
 
-    /// Agent CLI to use when --backend agent (default minimaxcc).
+    /// Agent CLI to use when --backend agent: minimaxcc / glmcc / mimocc /
+    /// pi-agent (default minimaxcc).
     #[arg(long, default_value = "minimaxcc")]
     agent: String,
 
@@ -253,6 +254,11 @@ fn make_backend(
 ) -> anyhow::Result<Arc<dyn LlmBackend>> {
     match backend {
         Backend::Agent => {
+            // pi-agent (from pi-rs) has a different CLI contract than the
+            // Claude-Code wrappers, so it gets its own backend.
+            if PiAgentBackend::accepts(agent) {
+                return Ok(Arc::new(PiAgentBackend::new()));
+            }
             let cli = AgentCli::parse(agent)
                 .ok_or_else(|| anyhow::anyhow!("unknown agent CLI: {}", agent))?;
             Ok(Arc::new(AgentCliBackend::new(cli)))

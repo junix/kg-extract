@@ -141,13 +141,23 @@ impl Extractor for TriplexExtractor {
             }
         }
 
-        let mut merged = if graphs.is_empty() { KnowledgeGraph::new() } else { merge_all(graphs) };
-        // Honor merge_duplicates like SimpleExtractor: collapse entities that
-        // share a (case-insensitive) label across segments. merge_all only
-        // dedups by id, so cross-segment label variants would otherwise persist.
-        if self.config.merge_duplicates {
-            merged = merge_knowledge_graphs(KnowledgeGraph::new(), merged, true);
-        }
+        // Honor merge_duplicates like SimpleExtractor, but fold segment graphs
+        // with the collision-aware dedup from the start rather than running
+        // `merge_all` first. Triplex JSON commonly reuses segment-local ids
+        // (e.g. "e1") across segments; merge_all dedups only by id, so a second
+        // segment's `e1` (a *different* entity) would be dropped before any
+        // label dedup could run. merge_with_deduplication instead mints a fresh
+        // id on an id-collision-with-different-label and remaps that segment's
+        // triples onto it, so no entity is lost and relations stay attributed.
+        let merged = if self.config.merge_duplicates {
+            graphs
+                .into_iter()
+                .fold(KnowledgeGraph::new(), |acc, g| merge_knowledge_graphs(acc, g, true))
+        } else if graphs.is_empty() {
+            KnowledgeGraph::new()
+        } else {
+            merge_all(graphs)
+        };
         let mut resp = ExtractionResponse::new(merged);
         resp.parsed_results = parsed_results;
         resp.config = Some(self.config.clone());
@@ -175,6 +185,35 @@ mod tests {
         assert_eq!(out.num_triples(), 1);
         assert_eq!(out.knowledge_graph.entities["e1"].entity_type, EntityType::Organization);
         assert_eq!(out.knowledge_graph.triples[0].predicate.predicate_type, PredicateType::DevelopedBy);
+    }
+
+    #[tokio::test]
+    async fn segmented_merge_preserves_colliding_local_ids() {
+        use crate::types::ChunkStrategy;
+        // Two segments both reuse local id "e1" for *different* entities.
+        let seg1 = r#"{"entities": {"e1": {"label": "Alice", "type": "person"},
+                                    "e2": {"label": "Acme", "type": "organization"}},
+                       "relationships": [["e1", "works_for", "e2"]]}"#;
+        let seg2 = r#"{"entities": {"e1": {"label": "Bob", "type": "person"},
+                                    "e3": {"label": "Paris", "type": "city"}},
+                       "relationships": [["e1", "located_in", "e3"]]}"#;
+        let backend = Arc::new(MockBackend::new(vec![seg1.into(), seg2.into()]));
+
+        let mut cfg = TriplexExtractor::default_config();
+        cfg.segment_size = 60; // force segmentation
+        cfg.overlap = 0;
+        cfg.min_segment_size = 1;
+        cfg.chunker = ChunkStrategy::Char;
+        let ex = TriplexExtractor::with_config(backend, cfg);
+
+        // 120 chars → exactly two 60-char Char chunks → seg1 then seg2.
+        let text = "a".repeat(60) + &"b".repeat(60);
+        let out = ex.extract(&text).await.unwrap();
+
+        let labels: Vec<&str> = out.knowledge_graph.entities.values().map(|e| e.label.as_str()).collect();
+        assert!(labels.contains(&"Bob"), "Bob must survive the e1 collision: {labels:?}");
+        assert_eq!(out.num_entities(), 4, "Alice/Acme/Bob/Paris all distinct: {labels:?}");
+        assert_eq!(out.num_triples(), 2, "both relations must be kept and attributed");
     }
 
     #[tokio::test]
