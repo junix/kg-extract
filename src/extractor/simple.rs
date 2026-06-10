@@ -3,7 +3,7 @@
 
 use super::{validate_input, Extractor};
 use crate::backend::{ChatSession, CompletionOptions, LlmBackend, ReplaySession};
-use crate::chunking::segment;
+use crate::chunking::{segment, Segment};
 use crate::graph_build::entity_id;
 use crate::merger::{merge_all, merge_all_dedup_llm, merge_knowledge_graphs_with};
 use crate::types::{
@@ -388,8 +388,8 @@ impl Extractor for SimpleExtractor {
         // Segment only when the text exceeds segment_size; otherwise a single
         // chunk preserves the original single-shot + gleaning behaviour exactly.
         // Each chunk keeps its char offsets so provenance can be line-mapped.
-        let chunks: Vec<(String, usize, usize)> = if text.chars().count() > self.config.segment_size
-        {
+        #[allow(unused_mut)]
+        let mut chunks: Vec<Segment> = if text.chars().count() > self.config.segment_size {
             segment(
                 text,
                 self.config.chunker,
@@ -397,37 +397,66 @@ impl Extractor for SimpleExtractor {
                 self.config.overlap,
             )
             .into_iter()
-            .enumerate()
-            .filter(|(i, s)| !(s.content.chars().count() < self.config.min_segment_size && *i > 0))
-            .map(|(_, s)| (s.content, s.start, s.end))
+            .filter(|s| !(s.content.chars().count() < self.config.min_segment_size && s.index > 0))
             .collect()
         } else {
-            let len = text.chars().count();
-            vec![(text.to_string(), 0, len)]
+            vec![Segment {
+                content: text.to_string(),
+                index: 0,
+                start: 0,
+                end: text.chars().count(),
+                lines: None,
+            }]
         };
 
+        // Lines are derivable here because we hold the full text; pre-chunked
+        // input instead carries them from the chunk metadata.
         #[cfg(feature = "citations")]
-        let line_index = crate::citation::LineIndex::new(text);
-        #[cfg(feature = "citations")]
-        let line_index = &line_index;
+        {
+            let line_index = crate::citation::LineIndex::new(text);
+            for c in chunks.iter_mut() {
+                c.lines = Some(line_index.line_range(c.start, c.end));
+            }
+        }
 
+        self.extract_segments(chunks).await
+    }
+
+    /// Pre-chunked input: the given chunks ARE the segments — no re-chunking,
+    /// no `min_segment_size` filtering. Provenance lines come from the chunks'
+    /// own metadata (chunks without it are simply not stamped).
+    async fn extract_prechunked(&self, chunks: &[Segment]) -> anyhow::Result<ExtractionResponse> {
+        if chunks.is_empty() {
+            anyhow::bail!("No pre-chunked input provided");
+        }
+        self.extract_segments(chunks.to_vec()).await
+    }
+}
+
+impl SimpleExtractor {
+    /// Shared extraction core: run every segment through the per-chunk
+    /// prompt + gleaning pipeline concurrently, stamp provenance, and fold the
+    /// per-chunk graphs per the configured dedup strategy.
+    async fn extract_segments(&self, chunks: Vec<Segment>) -> anyhow::Result<ExtractionResponse> {
         // Extract chunks concurrently. LLM calls are I/O-bound, so `buffered`
         // runs up to `max_concurrency` in flight while preserving chunk order.
         let max_conc = self.config.max_concurrency.max(1);
         let per_chunk: Vec<(Vec<ParsedResult>, KnowledgeGraph)> = stream::iter(chunks)
-            .map(|(chunk, _start, _end)| async move {
-                let result = self.extract_chunk(&chunk).await;
+            .map(|seg| async move {
+                let result = self.extract_chunk(&seg.content).await;
                 #[cfg(feature = "citations")]
-                let result = {
-                    let (prs, mut kg) = result;
-                    let (start_line, end_line) = line_index.line_range(_start, _end);
-                    let cite = crate::citation::Citation::new(
-                        self.config.source_doc.clone(),
-                        start_line,
-                        end_line,
-                    );
-                    crate::citation::stamp_graph(&mut kg, &cite);
-                    (prs, kg)
+                let result = match seg.lines {
+                    Some((start_line, end_line)) => {
+                        let (prs, mut kg) = result;
+                        let cite = crate::citation::Citation::new(
+                            self.config.source_doc.clone(),
+                            start_line,
+                            end_line,
+                        );
+                        crate::citation::stamp_graph(&mut kg, &cite);
+                        (prs, kg)
+                    }
+                    None => result,
                 };
                 result
             })
@@ -982,6 +1011,109 @@ mod tests {
             "chunk 1 entity must be present: {labels:?}"
         );
         assert_eq!(out.num_entities(), 2);
+    }
+
+    /// Pre-chunked input is consumed chunk-for-chunk: each given chunk gets its
+    /// own LLM call (no joining, no re-chunking). The two chunks together are
+    /// far below `segment_size`, so if the text were joined and re-segmented it
+    /// would collapse into ONE chunk and only the first canned response would
+    /// be consumed — Beta surviving proves the second chunk ran separately.
+    #[tokio::test]
+    async fn prechunked_extracts_each_given_chunk_without_rechunking() {
+        use crate::chunking::Segment;
+        let r0 = "(entity<|>Alpha<|>organization<|>First chunk entity.<|>)##";
+        let r1 = "(entity<|>Beta<|>organization<|>Second chunk entity.<|>)##";
+        let backend = Arc::new(MockBackend::new(vec![r0.into(), r1.into()]));
+        let mut ex = SimpleExtractor::new(backend);
+        ex.max_gleanings = 0;
+
+        let chunks: Vec<Segment> = [(0usize, "Alpha exists."), (1, "Beta exists.")]
+            .into_iter()
+            .map(|(i, t)| Segment {
+                content: t.to_string(),
+                index: i,
+                start: i * 13,
+                end: (i + 1) * 13,
+                lines: None,
+            })
+            .collect();
+        let out = ex.extract_prechunked(&chunks).await.unwrap();
+
+        let labels: Vec<&str> = out
+            .knowledge_graph
+            .entities
+            .values()
+            .map(|e| e.label.as_str())
+            .collect();
+        assert!(labels.contains(&"Alpha"), "chunk 0 ran: {labels:?}");
+        assert!(
+            labels.contains(&"Beta"),
+            "chunk 1 must run as its own chunk, not be re-chunked away: {labels:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn prechunked_empty_input_errors() {
+        let backend = Arc::new(MockBackend::new(vec![]));
+        let ex = SimpleExtractor::new(backend);
+        assert!(ex.extract_prechunked(&[]).await.is_err());
+    }
+
+    /// Pre-chunked provenance: line ranges come from the chunks' own metadata
+    /// (chonkie's `start_line`/`end_line`), the doc from `source_doc`; a chunk
+    /// without line info contributes records unstamped.
+    #[cfg(feature = "citations")]
+    #[tokio::test]
+    async fn prechunked_citations_use_chunk_metadata_lines() {
+        use crate::chunking::Segment;
+        use crate::citation::CITATIONS_KEY;
+
+        let r0 = "(entity<|>Alpha<|>organization<|>First chunk entity.<|>)##";
+        let r1 = "(entity<|>Beta<|>organization<|>Second chunk entity.<|>)##";
+        let backend = Arc::new(MockBackend::new(vec![r0.into(), r1.into()]));
+        let mut cfg = SimpleExtractor::default_config();
+        cfg.max_concurrency = 1; // sequential → deterministic response order
+        cfg.source_doc = Some("doc.md".into());
+        let mut ex = SimpleExtractor::with_config(backend, cfg);
+        ex.max_gleanings = 0;
+
+        let chunks = vec![
+            Segment {
+                content: "Alpha exists.".into(),
+                index: 0,
+                start: 0,
+                end: 13,
+                lines: Some((5, 9)),
+            },
+            Segment {
+                content: "Beta exists.".into(),
+                index: 1,
+                start: 13,
+                end: 25,
+                lines: None, // no metadata → no stamp
+            },
+        ];
+        let out = ex.extract_prechunked(&chunks).await.unwrap();
+
+        let by_label = |label: &str| {
+            out.knowledge_graph
+                .entities
+                .values()
+                .find(|e| e.label == label)
+                .unwrap_or_else(|| panic!("{label} missing"))
+                .metadata
+                .get(CITATIONS_KEY)
+                .cloned()
+        };
+        let alpha = by_label("Alpha").expect("Alpha must be stamped");
+        assert_eq!(
+            alpha,
+            serde_json::json!([{"doc": "doc.md", "lines": [5, 9]}])
+        );
+        assert!(
+            by_label("Beta").is_none(),
+            "a chunk without line metadata must not be stamped"
+        );
     }
 
     /// End-to-end provenance: chunked extraction stamps every record with the

@@ -136,6 +136,21 @@ fn precedence_cli_over_config_over_default() {
     assert_eq!(r.agent, "minimaxcc");
 }
 
+#[test]
+fn input_format_defaults_to_text_and_accepts_chunks() {
+    let m = Args::command().get_matches_from(["kg-extract"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(matches!(args.input_format, InputFormat::Text));
+
+    let m = Args::command().get_matches_from(["kg-extract", "--input-format", "chunks"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(matches!(args.input_format, InputFormat::Chunks));
+
+    let m = Args::command().get_matches_from(["kg-extract", "-F", "chunks"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(matches!(args.input_format, InputFormat::Chunks));
+}
+
 /// An explicit CLI value flag overrides a differing config value.
 #[test]
 fn precedence_cli_flag_overrides_config() {

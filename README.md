@@ -237,7 +237,10 @@ maps offsets to lines — so citations cannot be hallucinated. Granularity
 follows the engine: `simple`/`agentic` cite the chunk/slice containing the
 mention (agentic relation-gleaning records, which look at the whole document,
 cite the full range); single-shot `schema-json`/`toolcall` cite the whole
-document. The CLI sets the doc name from `-f` (stdin → `null`); library users
+document. The CLI sets the doc name from `-f` (stdin → `null`); with
+`--input-format chunks` it comes from the chunks' `metadata.source` instead,
+and line ranges from their `metadata.start_line`/`end_line` (see
+[Pre-chunked input](#pre-chunked-input---input-format-chunks)). Library users
 set `config.source_doc`.
 
 A record seen in several places accumulates **multiple citations**: slice-level
@@ -307,7 +310,39 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 | `--list-presets` | print the bundled presets and exit |
 | `--max-rounds` | tool-call rounds (1 = single-round, default) |
 | `--relation-gleaning` | simple/agentic: targeted rounds that re-question orphan entities to recover edges (0 = off) |
+| `-F, --input-format` | `text` (default) \| `chunks` — input is chonkie chunk JSON/JSONL, consumed without re-chunking |
 | `-o, --output` | `json` (default) \| `node-link` \| `mermaid` \| `stats` |
+
+### Pre-chunked input (`--input-format chunks`)
+
+If the text was already chunked — e.g. by the sibling [`chonkie`](../chonkie)
+crate — feed the chunks straight in instead of letting kg-extract re-chunk:
+
+```bash
+# chonkie cuts doc.md into chunks; kg-extract extracts per given chunk.
+chonkie --jsonl --chunker recursive --chunk-size 512 -f doc.md \
+  | kg-extract -F chunks -e simple -b llms
+```
+
+Accepted shapes: a JSON array (`chonkie --json`), JSONL (`chonkie --jsonl`,
+whose trailing `{"truncated": ...}` metadata line is skipped), or the
+`{"chunks": [...]}` truncation wrapper. Each chunk needs a `text` field;
+`start_index`/`end_index` and `metadata.{source,start_line,end_line}` are used
+when present.
+
+Engine behaviour:
+
+- **`simple` / `agentic`** (the chunking engines): the given chunks ARE the
+  chunks/slices — no internal segmentation, no `min_segment_size` filtering.
+  `--chunker` and segment sizing are ignored.
+- **`schema-json` / `toolcall`** (single-shot engines): the chunk texts are
+  joined (`\n\n`) and extracted in one call, exactly as for plain text.
+
+With `--features citations`, provenance comes from the chunks themselves:
+`metadata.source` names the cited document (the *original* file the chunks
+were cut from — `-f` names the chunks file, so it is not used as the doc) and
+`metadata.start_line`/`end_line` become each record's cited line range. Chunks
+without line metadata (e.g. `chonkie --no-lines`) yield unstamped records.
 
 ### Agentic engine (`-e agentic`)
 

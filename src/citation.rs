@@ -207,8 +207,16 @@ mod tests {
         kg.add_triple(t);
 
         let stored = kg.get_entity("e1").unwrap();
-        let cites = stored.metadata.get(CITATIONS_KEY).and_then(|v| v.as_array()).unwrap();
-        assert_eq!(cites.len(), 1, "endpoint overwrite must keep prior citations");
+        let cites = stored
+            .metadata
+            .get(CITATIONS_KEY)
+            .and_then(|v| v.as_array())
+            .unwrap();
+        assert_eq!(
+            cites.len(),
+            1,
+            "endpoint overwrite must keep prior citations"
+        );
     }
 
     #[test]

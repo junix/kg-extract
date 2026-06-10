@@ -4,7 +4,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 arch_suffix := if arch() == "aarch64" { "arm64" } else { "x86" }
 install_bin := home_directory() / "sync" / ("bin_" + arch_suffix)
-target_dir := env("CARGO_TARGET_DIR", parent_directory(justfile_directory()) / "target")
+target_dir := env("CARGO_TARGET_DIR", justfile_directory() / "target")
 
 # 构建（含 llms 后端 + mcp server）
 build:

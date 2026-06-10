@@ -36,7 +36,7 @@ use futures::StreamExt;
 
 use super::{validate_input, Extractor, SchemaMode};
 use crate::backend::sdk_agent::provider_env;
-use crate::chunking::segment;
+use crate::chunking::{segment, Segment};
 use crate::extractor::simple::{entity_type_tokens, parse_output, parse_relations_against};
 use crate::types::{
     Entity, ExtractionConfig, ExtractionResponse, KnowledgeGraph, ParsedResult, Schema, Triple,
@@ -181,7 +181,7 @@ impl AgenticExtractor {
     /// the text fits in `segment_size`, otherwise segmented (dropping a tiny
     /// trailing fragment). Each slice keeps its char offsets so provenance can
     /// be line-mapped.
-    fn slices(&self, text: &str) -> Vec<(String, usize, usize)> {
+    fn slices(&self, text: &str) -> Vec<Segment> {
         if text.chars().count() > self.config.segment_size {
             segment(
                 text,
@@ -190,13 +190,16 @@ impl AgenticExtractor {
                 self.config.overlap,
             )
             .into_iter()
-            .enumerate()
-            .filter(|(i, s)| !(s.content.chars().count() < self.config.min_segment_size && *i > 0))
-            .map(|(_, s)| (s.content, s.start, s.end))
+            .filter(|s| !(s.content.chars().count() < self.config.min_segment_size && s.index > 0))
             .collect()
         } else {
-            let len = text.chars().count();
-            vec![(text.to_string(), 0, len)]
+            vec![Segment {
+                content: text.to_string(),
+                index: 0,
+                start: 0,
+                end: text.chars().count(),
+                lines: None,
+            }]
         }
     }
 
@@ -423,6 +426,60 @@ impl Extractor for AgenticExtractor {
     async fn extract(&self, text: &str) -> anyhow::Result<ExtractionResponse> {
         validate_input(text, self.config.min_segment_size, self.quiet)?;
 
+        #[allow(unused_mut)]
+        let mut slices = self.slices(text);
+        // Lines are derivable here because we hold the full text; pre-chunked
+        // input instead carries them from the chunk metadata.
+        #[cfg(feature = "citations")]
+        let doc_lines = {
+            let line_index = crate::citation::LineIndex::new(text);
+            for s in slices.iter_mut() {
+                s.lines = Some(line_index.line_range(s.start, s.end));
+            }
+            Some((1, line_index.total_lines()))
+        };
+        #[cfg(not(feature = "citations"))]
+        let doc_lines = None;
+
+        self.extract_slices(text, slices, doc_lines).await
+    }
+
+    /// Pre-chunked input: the given chunks ARE the slices — no re-slicing, no
+    /// `min_segment_size` filtering. The on-disk `document.md` the agent can
+    /// grep is reconstructed by joining the chunks; provenance lines come from
+    /// the chunks' own metadata (chunks without it are simply not stamped).
+    async fn extract_prechunked(&self, chunks: &[Segment]) -> anyhow::Result<ExtractionResponse> {
+        if chunks.is_empty() {
+            anyhow::bail!("No pre-chunked input provided");
+        }
+        let document = chunks
+            .iter()
+            .map(|s| s.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        // Whole-document provenance (used by the final gleaning pass) is the
+        // overall span the chunks cover — when any of them knows its lines.
+        let doc_lines = chunks.iter().filter_map(|s| s.lines).fold(
+            None,
+            |acc: Option<(usize, usize)>, (s, e)| match acc {
+                Some((lo, hi)) => Some((lo.min(s), hi.max(e))),
+                None => Some((s, e)),
+            },
+        );
+        self.extract_slices(&document, chunks.to_vec(), doc_lines)
+            .await
+    }
+}
+
+impl AgenticExtractor {
+    /// Shared session driver: set up the isolated read-only workspace with
+    /// `document` on disk, then feed `slices` through one multi-turn session.
+    async fn extract_slices(
+        &self,
+        document: &str,
+        slices: Vec<Segment>,
+        doc_lines: Option<(usize, usize)>,
+    ) -> anyhow::Result<ExtractionResponse> {
         // 1. Isolated read-only workspace with the full document on disk.
         let (agent, env) = provider_env(&self.agent)?;
         let workdir: PathBuf =
@@ -430,21 +487,22 @@ impl Extractor for AgenticExtractor {
         std::fs::create_dir_all(&workdir)
             .map_err(|e| anyhow::anyhow!("creating workspace {}: {e}", workdir.display()))?;
         let doc_path = workdir.join("document.md");
-        std::fs::write(&doc_path, text)
+        std::fs::write(&doc_path, document)
             .map_err(|e| anyhow::anyhow!("writing {}: {e}", doc_path.display()))?;
 
-        let result = self.run_session(text, agent, env, &workdir).await;
+        let result = self
+            .run_session(slices, doc_lines, agent, env, &workdir)
+            .await;
 
         // Best-effort cleanup of the temp workspace regardless of outcome.
         let _ = std::fs::remove_dir_all(&workdir);
         result
     }
-}
 
-impl AgenticExtractor {
     async fn run_session(
         &self,
-        text: &str,
+        slices: Vec<Segment>,
+        _doc_lines: Option<(usize, usize)>,
         agent: String,
         env: std::collections::BTreeMap<String, String>,
         workdir: &Path,
@@ -495,10 +553,7 @@ impl AgenticExtractor {
             .await
             .map_err(|e| anyhow::anyhow!("agentic {agent} connect failed: {e}"))?;
 
-        let slices = self.slices(text);
         let n = slices.len();
-        #[cfg(feature = "citations")]
-        let line_index = crate::citation::LineIndex::new(text);
         let mut all_entities: HashMap<String, Entity> = HashMap::new();
         let mut all_triples: Vec<Triple> = Vec::new();
         let mut parsed_results: Vec<ParsedResult> = Vec::new();
@@ -511,11 +566,11 @@ impl AgenticExtractor {
         let mut new_relations: BTreeSet<String> = BTreeSet::new();
 
         // 2. Feed each slice as a turn in the same conversation.
-        'slices: for (i, (slice, _slice_start, _slice_end)) in slices.iter().enumerate() {
+        'slices: for (i, seg) in slices.iter().enumerate() {
             let base_prompt = SLICE_PROMPT
                 .replace("{i}", &(i + 1).to_string())
                 .replace("{n}", &n.to_string())
-                .replace("{slice}", slice);
+                .replace("{slice}", &seg.content);
             // The first turn for this slice carries any correction the previous
             // slice's out-of-schema drops produced (re-anchors a drifting model).
             let mut prompt = match pending_feedback.take() {
@@ -551,8 +606,7 @@ impl AgenticExtractor {
                 #[allow(unused_mut)]
                 let mut parsed = parse_output(&output, &self.config);
                 #[cfg(feature = "citations")]
-                {
-                    let (start_line, end_line) = line_index.line_range(*_slice_start, *_slice_end);
+                if let Some((start_line, end_line)) = seg.lines {
                     let cite = crate::citation::Citation::new(
                         self.config.source_doc.clone(),
                         start_line,
@@ -748,19 +802,22 @@ impl AgenticExtractor {
                 break;
             }
             // Gleaned relations come from a whole-document pass, so they cite
-            // the full document rather than one slice.
+            // the full document rather than one slice (when its span is known).
             #[cfg(feature = "citations")]
-            let rescued = {
-                let mut rescued = rescued;
-                let cite = crate::citation::Citation::new(
-                    self.config.source_doc.clone(),
-                    1,
-                    line_index.total_lines(),
-                );
-                for t in rescued.iter_mut() {
-                    crate::citation::attach_citation(&mut t.metadata, &cite);
+            let rescued = match _doc_lines {
+                Some((start_line, end_line)) => {
+                    let mut rescued = rescued;
+                    let cite = crate::citation::Citation::new(
+                        self.config.source_doc.clone(),
+                        start_line,
+                        end_line,
+                    );
+                    for t in rescued.iter_mut() {
+                        crate::citation::attach_citation(&mut t.metadata, &cite);
+                    }
+                    rescued
                 }
-                rescued
+                None => rescued,
             };
             all_triples.extend(rescued);
         }

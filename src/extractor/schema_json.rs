@@ -456,6 +456,44 @@ mod tests {
         assert_eq!(out.num_triples(), 1);
     }
 
+    /// Single-shot engines never chunk, so pre-chunked input goes through the
+    /// trait's default: the chunk texts are joined and extracted in one call,
+    /// exactly like plain-text input.
+    #[tokio::test]
+    async fn prechunked_default_joins_chunks_into_one_call() {
+        use crate::chunking::Segment;
+        let json = r#"{"entities": {"OpenAI": {"type": "ORGANIZATION"}}, "relationships": []}"#;
+        let backend = Arc::new(MockBackend::single(json));
+        let ex = SchemaJsonExtractor::new(backend.clone());
+
+        let chunks = vec![
+            Segment {
+                content: "OpenAI is an AI lab.".into(),
+                index: 0,
+                start: 0,
+                end: 20,
+                lines: Some((1, 1)),
+            },
+            Segment {
+                content: "It developed GPT-4.".into(),
+                index: 1,
+                start: 20,
+                end: 39,
+                lines: Some((2, 2)),
+            },
+        ];
+        let out = ex.extract_prechunked(&chunks).await.unwrap();
+        assert_eq!(out.num_entities(), 1);
+
+        let prompts = backend.seen_prompts.lock().unwrap();
+        assert_eq!(prompts.len(), 1, "single-shot: exactly one LLM call");
+        assert!(
+            prompts[0].contains("OpenAI is an AI lab.\n\nIt developed GPT-4."),
+            "chunks must be joined into the user turn: {}",
+            prompts[0]
+        );
+    }
+
     #[tokio::test]
     async fn within_response_duplicates_honor_merge_strategy() {
         // The model emits the same entity twice (different casing) with different

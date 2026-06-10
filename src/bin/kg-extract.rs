@@ -65,6 +65,17 @@ impl From<Chunker> for ChunkStrategy {
     }
 }
 
+/// What the input stream/file contains.
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum InputFormat {
+    /// Plain text — segmented internally per --chunker.
+    Text,
+    /// Pre-chunked chonkie output (JSON array or JSONL, e.g. `chonkie --jsonl`).
+    /// The chunking engines (simple / agentic) use the chunks AS-IS instead of
+    /// re-chunking; the single-shot engines (schema-json / toolcall) join them.
+    Chunks,
+}
+
 /// Schema mode (CLI mirror of [`SchemaMode`]).
 #[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -156,6 +167,12 @@ struct Args {
     /// Input file (use '-' or omit for stdin).
     #[arg(short, long)]
     file: Option<String>,
+
+    /// Input format: plain `text` (default), or chonkie `chunks` (JSON/JSONL,
+    /// e.g. from `chonkie --jsonl`) consumed as-is — the chunking engines skip
+    /// their internal re-chunking and extract per given chunk.
+    #[arg(short = 'F', long, value_enum, default_value_t = InputFormat::Text)]
+    input_format: InputFormat,
 
     /// Model name (overrides the engine default).
     #[arg(short, long)]
@@ -466,13 +483,27 @@ async fn main() -> anyhow::Result<()> {
     if text.trim().is_empty() {
         anyhow::bail!("no input text (provide --file or pipe via stdin)");
     }
-    // Document identity for provenance citations (feature `citations`):
-    // the input file path, or none when reading stdin.
-    let source_doc: Option<String> = args.file.as_ref().filter(|f| f.as_str() != "-").cloned();
+    // Pre-chunked input (chonkie chunks): parse up front so a malformed file
+    // fails fast, before any backend is constructed.
+    let prechunked = match args.input_format {
+        InputFormat::Text => None,
+        InputFormat::Chunks => Some(
+            kg_extract::chunking::parse_prechunked(&text)
+                .context("parsing --input-format chunks input")?,
+        ),
+    };
+    // Document identity for provenance citations (feature `citations`): with
+    // pre-chunked input the chunks' recorded source document (`-f` names the
+    // chunks file, not the document); otherwise the input file path, or none
+    // when reading stdin.
+    let source_doc: Option<String> = match &prechunked {
+        Some(p) => p.source.clone(),
+        None => args.file.as_ref().filter(|f| f.as_str() != "-").cloned(),
+    };
     // The agentic engine drives the SDK client itself (cwd sandbox + one
     // long-lived session), so it bypasses `make_backend` and its `--backend`
     // value — the provider is chosen by `--agent`.
-    let response = if matches!(cfg.engine, Engine::Agentic) {
+    let extractor: Box<dyn Extractor + Send + Sync> = if matches!(cfg.engine, Engine::Agentic) {
         let mut c = AgenticExtractor::default_config();
         c.chunker = cfg.chunker.into();
         c.source_doc = source_doc.clone();
@@ -485,11 +516,11 @@ async fn main() -> anyhow::Result<()> {
             c.spec.schema = Schema::from_json_file(expand_tilde(path))
                 .with_context(|| format!("loading --schema {path}"))?;
         }
-        AgenticExtractor::with_config(&cfg.agent, c)
-            .schema_mode(cfg.schema_mode.into())
-            .relation_gleanings(cfg.relation_gleaning)
-            .extract(&text)
-            .await?
+        Box::new(
+            AgenticExtractor::with_config(&cfg.agent, c)
+                .schema_mode(cfg.schema_mode.into())
+                .relation_gleanings(cfg.relation_gleaning),
+        )
     } else {
         let backend = make_backend(cfg.backend, &cfg.agent, args.mock_response.as_deref())?;
         match cfg.engine {
@@ -502,10 +533,10 @@ async fn main() -> anyhow::Result<()> {
                 if let Some(m) = &cfg.model {
                     c.model_name = m.clone();
                 }
-                SimpleExtractor::with_config(backend, c)
-                    .relation_gleanings(cfg.relation_gleaning)
-                    .extract(&text)
-                    .await?
+                Box::new(
+                    SimpleExtractor::with_config(backend, c)
+                        .relation_gleanings(cfg.relation_gleaning),
+                )
             }
             Engine::SchemaJson => {
                 let mut c = SchemaJsonExtractor::default_config();
@@ -523,10 +554,10 @@ async fn main() -> anyhow::Result<()> {
                     c.spec.language = cfg.lang.clone();
                     c.spec.template = Some(tpl);
                 }
-                SchemaJsonExtractor::with_config(backend, c)
-                    .schema_mode(cfg.schema_mode.into())
-                    .extract(&text)
-                    .await?
+                Box::new(
+                    SchemaJsonExtractor::with_config(backend, c)
+                        .schema_mode(cfg.schema_mode.into()),
+                )
             }
             Engine::Toolcall => {
                 let mut c = ToolCallExtractor::default_config();
@@ -540,14 +571,18 @@ async fn main() -> anyhow::Result<()> {
                     c.spec.schema = Schema::from_json_file(expand_tilde(path))
                         .with_context(|| format!("loading --schema {path}"))?;
                 }
-                ToolCallExtractor::with_config(backend, c)
-                    .schema_mode(cfg.schema_mode.into())
-                    .max_rounds(cfg.max_rounds)
-                    .extract(&text)
-                    .await?
+                Box::new(
+                    ToolCallExtractor::with_config(backend, c)
+                        .schema_mode(cfg.schema_mode.into())
+                        .max_rounds(cfg.max_rounds),
+                )
             }
             Engine::Agentic => unreachable!("agentic handled above"),
         }
+    };
+    let response = match &prechunked {
+        Some(p) => extractor.extract_prechunked(&p.segments).await?,
+        None => extractor.extract(&text).await?,
     };
 
     match cfg.output {

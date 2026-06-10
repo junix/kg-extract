@@ -23,6 +23,7 @@
 //! relationship resolution, dangling-endpoint dropping) lives in
 //! [`crate::graph_build`].
 
+use crate::chunking::Segment;
 use crate::types::ExtractionResponse;
 use async_trait::async_trait;
 
@@ -46,6 +47,22 @@ pub use crate::types::SchemaMode;
 pub trait Extractor {
     /// Extract a knowledge graph from a single text document.
     async fn extract(&self, text: &str) -> anyhow::Result<ExtractionResponse>;
+
+    /// Extract from pre-chunked input (e.g. chonkie chunks parsed by
+    /// [`crate::chunking::parse_prechunked`]). The chunking engines
+    /// ([`SimpleExtractor`], [`AgenticExtractor`]) override this to consume the
+    /// chunks **as-is** instead of re-chunking; this default — for the
+    /// single-shot engines that never chunk ([`SchemaJsonExtractor`],
+    /// [`ToolCallExtractor`]) — joins the chunk texts and extracts over them
+    /// exactly as it would over plain-text input.
+    async fn extract_prechunked(&self, chunks: &[Segment]) -> anyhow::Result<ExtractionResponse> {
+        let text = chunks
+            .iter()
+            .map(|s| s.content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        self.extract(&text).await
+    }
 }
 
 /// Validate input text against `min_segment_size`; warns (non-fatal) like the
