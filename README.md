@@ -74,8 +74,13 @@ the same three modes apply whether the model emits JSON (SchemaJson) or calls to
 
 - **`Open`** ignores any schema and lets the model name types freely — the
   zero-config default.
-- **`Fixed`** is closed-world: SchemaJson prompts "use only these types"; ToolCall
-  JSON-Schema `enum`-constrains the tool arguments to them.
+- **`Fixed`** is closed-world, enforced by every engine (by different means):
+  ToolCall JSON-Schema `enum`-constrains the tool arguments so the model *can't*
+  emit out-of-schema types; SchemaJson and Agentic parse first, then **drop**
+  whatever fell outside the schema (an entity by its type, a relation by its type
+  or a dropped endpoint) and report it under `schema_dropped_records` /
+  `schema_dropped_types`. Agentic additionally feeds the drop back into the next
+  turn so a drifting model self-corrects.
 - **`Evolving`** seeds the schema as guidance but lets the model add types;
   proposals are recorded under `new_schema_types` in the response metadata.
 
