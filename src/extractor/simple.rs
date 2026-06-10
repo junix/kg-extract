@@ -4,7 +4,7 @@
 use super::{validate_input, Extractor};
 use crate::backend::{ChatSession, CompletionOptions, LlmBackend, ReplaySession};
 use crate::chunking::{segment, Segment};
-use crate::graph_build::entity_id;
+use crate::graph_build::{entity_id, should_swap_passive_by};
 use crate::merger::{merge_all, merge_all_dedup_llm, merge_knowledge_graphs_with};
 use crate::types::{
     Entity, EntityType, ExtractionConfig, ExtractionResponse, KnowledgeGraph, ParsedResult,
@@ -360,12 +360,16 @@ pub(crate) fn parse_relations_against(
         let (Some(s), Some(o)) = (known.get(&rel.source_id), known.get(&rel.target_id)) else {
             continue;
         };
-        // Mirror `parse_output`'s triple construction exactly (incl. the
-        // field-shift quirk: `rel.description` carries the relationship-type token).
-        let predicate_type = infer_predicate_type(&rel.description);
-        let label: String = rel.description.chars().take(50).collect();
+        // Mirror `parse_output`'s triple construction exactly.
+        let predicate_type = infer_predicate_type(&rel.predicate);
+        let label: String = rel.predicate.chars().take(50).collect();
         let predicate = Predicate::with_label(predicate_type, label);
-        let mut t = Triple::new(s.clone(), predicate, o.clone());
+        let (subject, object) = if should_swap_passive_by(s, &predicate, o) {
+            (o.clone(), s.clone())
+        } else {
+            (s.clone(), o.clone())
+        };
+        let mut t = Triple::new(subject, predicate, object);
         t.confidence = Some(rel.strength);
         t.metadata
             .insert("description".into(), serde_json::json!(rel.description));
@@ -540,10 +544,15 @@ pub(crate) fn parse_output(output: &str, _config: &ExtractionConfig) -> ParsedRe
         else {
             continue;
         };
-        let predicate_type = infer_predicate_type(&rel.description);
-        let label: String = rel.description.chars().take(50).collect();
+        let predicate_type = infer_predicate_type(&rel.predicate);
+        let label: String = rel.predicate.chars().take(50).collect();
         let predicate = Predicate::with_label(predicate_type, label);
-        let mut t = Triple::new(s.clone(), predicate, o.clone());
+        let (subject, object) = if should_swap_passive_by(s, &predicate, o) {
+            (o.clone(), s.clone())
+        } else {
+            (s.clone(), o.clone())
+        };
+        let mut t = Triple::new(subject, predicate, object);
         t.confidence = Some(rel.strength);
         t.metadata
             .insert("description".into(), serde_json::json!(rel.description));
@@ -606,6 +615,7 @@ struct RelData {
     target_id: String,
     source_name: String,
     target_name: String,
+    predicate: String,
     description: String,
     strength: f64,
 }
@@ -686,19 +696,14 @@ fn parse_relationship_item(item: &str, id_map: &HashMap<String, String>) -> Opti
     if !parts[0].to_lowercase().contains("relationship") {
         return None;
     }
-    // NOTE: faithful to the Python `source, target, description, *strength = components`
-    // destructuring. The emitted tuple is
-    // (relationship, source, target, REL_TYPE, description, strength), so the
-    // *relationship-type* token lands in `description` (and is what drives
-    // predicate inference), while the real description text falls into the
-    // first strength element. Preserved deliberately for parity.
     let components = &parts[1..];
     let source = clean_entity_name(components.first().copied().unwrap_or(""));
     let target = clean_entity_name(components.get(1).copied().unwrap_or(""));
-    let description = clean_description(components.get(2).copied().unwrap_or(""));
+    let predicate = clean_description(components.get(2).copied().unwrap_or(""));
+    let description = clean_description(components.get(3).copied().unwrap_or(""));
 
     let strength = components
-        .get(3)
+        .get(4)
         .map(|s| {
             let digits: String = s
                 .chars()
@@ -716,6 +721,7 @@ fn parse_relationship_item(item: &str, id_map: &HashMap<String, String>) -> Opti
         target_id: resolve_entity_id(&target, id_map),
         source_name: source,
         target_name: target,
+        predicate,
         description,
         strength,
     })
@@ -790,6 +796,11 @@ fn map_to_entity_type(type_str: &str) -> EntityType {
 }
 
 fn infer_predicate_type(description: &str) -> PredicateType {
+    let direct = PredicateType::from_loose(description);
+    if direct != PredicateType::RelatedTo || description.trim().eq_ignore_ascii_case("related_to") {
+        return direct;
+    }
+
     let d = description.to_lowercase();
     let has = |words: &[&str]| words.iter().any(|w| d.contains(w));
     if has(&["use", "utilize", "employ", "apply"]) {
@@ -874,8 +885,7 @@ mod tests {
 
     #[tokio::test]
     async fn extracts_entities_and_relationship() {
-        // 4th tuple field is the relationship type; it drives predicate inference
-        // (the field-shift quirk documented in parse_relationship_item).
+        // 4th tuple field is the relationship type; it drives predicate inference.
         let resp_text = "(entity<|>OpenAI<|>organization<|>An AI research lab.<|>)##\
             (entity<|>GPT-4<|>technology<|>A large language model.<|>)##\
             (relationship<|>OpenAI<|>GPT-4<|>uses<|>OpenAI develops GPT-4.<|>0.9)##";
@@ -889,6 +899,41 @@ mod tests {
             out.knowledge_graph.triples[0].predicate.predicate_type,
             PredicateType::Uses
         );
+    }
+
+    #[tokio::test]
+    async fn relationship_type_token_maps_to_enum_predicate() {
+        let resp_text = "(entity<|>OpenAI<|>organization<|>An AI research lab.<|>)##\
+            (entity<|>GPT-4<|>technology<|>A large language model.<|>)##\
+            (relationship<|>GPT-4<|>OpenAI<|>developed_by<|>GPT-4 was developed by OpenAI.<|>0.9)##";
+        let backend = Arc::new(MockBackend::new(vec![resp_text.into(), String::new()]));
+        let ex = SimpleExtractor::new(backend);
+        let out = ex.extract("OpenAI developed GPT-4.").await.unwrap();
+        assert_eq!(
+            out.knowledge_graph.triples[0].predicate.predicate_type,
+            PredicateType::DevelopedBy
+        );
+        assert_eq!(
+            out.knowledge_graph.triples[0].metadata["description"],
+            serde_json::json!("GPT-4 was developed by OpenAI.")
+        );
+    }
+
+    #[tokio::test]
+    async fn passive_by_relation_reverses_actor_to_product_direction() {
+        let resp_text = "(entity<|>Helio Systems<|>organization<|>A software company.<|>)##\
+            (entity<|>Aurora Portal<|>product<|>A customer operations product.<|>)##\
+            (relationship<|>Helio Systems<|>Aurora Portal<|>developed_by<|>Helio Systems developed Aurora Portal.<|>0.9)##";
+        let backend = Arc::new(MockBackend::new(vec![resp_text.into(), String::new()]));
+        let ex = SimpleExtractor::new(backend);
+        let out = ex
+            .extract("Aurora Portal is developed by Helio Systems.")
+            .await
+            .unwrap();
+        let triple = &out.knowledge_graph.triples[0];
+        assert_eq!(triple.subject.label, "Aurora Portal");
+        assert_eq!(triple.object.label, "Helio Systems");
+        assert_eq!(triple.predicate.predicate_type, PredicateType::DevelopedBy);
     }
 
     #[tokio::test]

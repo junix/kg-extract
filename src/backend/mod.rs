@@ -125,7 +125,7 @@ pub struct ToolSpec {
 }
 
 /// A single tool call requested by the model.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Deserialize)]
 pub struct ToolInvocation {
     pub id: String,
     pub name: String,

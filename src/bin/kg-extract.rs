@@ -15,7 +15,9 @@ use clap::parser::ValueSource;
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser, ValueEnum};
 use serde::Deserialize;
 
-use kg_extract::backend::{LlmBackend, MockBackend, PiAgentBackend, SdkAgentBackend};
+use kg_extract::backend::{
+    LlmBackend, MockBackend, PiAgentBackend, SdkAgentBackend, ToolInvocation,
+};
 use kg_extract::extractor::{
     AgenticExtractor, Extractor, SchemaJsonExtractor, SchemaMode, SimpleExtractor,
     ToolCallExtractor,
@@ -123,6 +125,9 @@ enum OutFmt {
     #[serde(rename = "node-link")]
     #[value(name = "node-link", alias = "nodelink")]
     NodeLink,
+    #[serde(rename = "ladybug-import")]
+    #[value(name = "ladybug-import", alias = "lbug-import")]
+    LadybugImport,
     Mermaid,
     Stats,
 }
@@ -245,6 +250,12 @@ struct Args {
     /// Canned response for --backend mock.
     #[arg(long)]
     mock_response: Option<String>,
+
+    /// Scripted tool calls for --backend mock with --engine toolcall.
+    /// Accepts inline JSON or a JSON file path. Shape: `[{"name": "...",
+    /// "arguments": {...}}]` for one round, or `[[...], [...]]` for many rounds.
+    #[arg(long)]
+    mock_tool_calls: Option<String>,
 
     /// Output format.
     #[arg(short, long, value_enum, default_value_t = OutFmt::Json)]
@@ -395,6 +406,7 @@ fn make_backend(
     backend: Backend,
     agent: &str,
     mock_response: Option<&str>,
+    mock_tool_calls: Option<&str>,
 ) -> anyhow::Result<Arc<dyn LlmBackend>> {
     match backend {
         Backend::Agent => {
@@ -408,7 +420,14 @@ fn make_backend(
         }
         Backend::Mock => {
             let resp = mock_response.unwrap_or_default().to_string();
-            Ok(Arc::new(MockBackend::single(resp)))
+            let mock = MockBackend::single(resp);
+            if let Some(tool_calls) = mock_tool_calls {
+                Ok(Arc::new(
+                    mock.with_tool_rounds(parse_mock_tool_rounds(tool_calls)?),
+                ))
+            } else {
+                Ok(Arc::new(mock))
+            }
         }
         Backend::Llms => {
             #[cfg(feature = "llms-backend")]
@@ -424,6 +443,58 @@ fn make_backend(
             }
         }
     }
+}
+
+#[derive(Deserialize)]
+struct RawToolCall {
+    #[serde(default)]
+    id: Option<String>,
+    name: String,
+    #[serde(default, alias = "args")]
+    arguments: serde_json::Value,
+}
+
+fn parse_mock_tool_rounds(input: &str) -> anyhow::Result<Vec<Vec<ToolInvocation>>> {
+    let raw = if input.trim_start().starts_with('[') {
+        input.to_string()
+    } else {
+        let path = expand_tilde(input);
+        std::fs::read_to_string(&path)
+            .with_context(|| format!("reading --mock-tool-calls {}", path.display()))?
+    };
+    let value: serde_json::Value =
+        serde_json::from_str(&raw).context("parsing --mock-tool-calls JSON")?;
+    let rounds = if value
+        .as_array()
+        .and_then(|a| a.first())
+        .is_some_and(|first| first.is_array())
+    {
+        serde_json::from_value::<Vec<Vec<RawToolCall>>>(value)?
+            .into_iter()
+            .enumerate()
+            .map(|(round_idx, round)| raw_round_to_invocations(round_idx, round))
+            .collect()
+    } else {
+        vec![raw_round_to_invocations(
+            0,
+            serde_json::from_value::<Vec<RawToolCall>>(value)?,
+        )]
+    };
+    Ok(rounds)
+}
+
+fn raw_round_to_invocations(round_idx: usize, calls: Vec<RawToolCall>) -> Vec<ToolInvocation> {
+    calls
+        .into_iter()
+        .enumerate()
+        .map(|(call_idx, call)| ToolInvocation {
+            id: call
+                .id
+                .unwrap_or_else(|| format!("mock_{round_idx}_{call_idx}")),
+            name: call.name,
+            arguments: call.arguments,
+        })
+        .collect()
 }
 
 /// Resolve a rich template from `--preset-file` (a user YAML, takes precedence)
@@ -522,7 +593,12 @@ async fn main() -> anyhow::Result<()> {
                 .relation_gleanings(cfg.relation_gleaning),
         )
     } else {
-        let backend = make_backend(cfg.backend, &cfg.agent, args.mock_response.as_deref())?;
+        let backend = make_backend(
+            cfg.backend,
+            &cfg.agent,
+            args.mock_response.as_deref(),
+            args.mock_tool_calls.as_deref(),
+        )?;
         match cfg.engine {
             Engine::Simple => {
                 let mut c = SimpleExtractor::default_config();
@@ -596,6 +672,14 @@ async fn main() -> anyhow::Result<()> {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&response.knowledge_graph.to_node_link())?
+            )
+        }
+        OutFmt::LadybugImport => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&kg_extract::ladybug_export::to_ladybug_import_json(
+                    &response.knowledge_graph
+                ))?
             )
         }
         OutFmt::Mermaid => println!("{}", response.get_mermaid_code()),

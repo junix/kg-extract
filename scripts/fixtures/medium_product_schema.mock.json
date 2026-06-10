@@ -1,0 +1,38 @@
+{
+  "entities": {
+    "Aurora Portal": {"type": "PRODUCT", "attributes": {"description": "A customer operations product developed by Helio Systems."}},
+    "Helio Systems": {"type": "ORGANIZATION", "attributes": {"description": "The company that develops Aurora Portal and is located in Singapore."}},
+    "Singapore": {"type": "CITY", "attributes": {"description": "The city where Helio Systems is located."}},
+    "Identity Service": {"type": "SOFTWARE", "attributes": {"description": "The service used by Aurora Portal for user profiles and sessions."}},
+    "Billing Worker": {"type": "SOFTWARE", "attributes": {"description": "The worker that handles asynchronous billing messages and invoice calculations."}},
+    "Audit Console": {"type": "SOFTWARE", "attributes": {"description": "The console used for analytical audit queries."}},
+    "Export Job": {"type": "SOFTWARE", "attributes": {"description": "The job that creates generated CSV exports."}},
+    "API Gateway": {"type": "SOFTWARE", "attributes": {"description": "The gateway that accepts customer requests after identity checks."}},
+    "PostgreSQL": {"type": "TECHNOLOGY", "attributes": {"description": "The database used by the Identity Service."}},
+    "Kafka": {"type": "TECHNOLOGY", "attributes": {"description": "The messaging system used by the Billing Worker."}},
+    "ClickHouse": {"type": "TECHNOLOGY", "attributes": {"description": "The analytics database used by the Audit Console."}},
+    "Object Storage": {"type": "TECHNOLOGY", "attributes": {"description": "The storage used by the Export Job for CSV exports."}},
+    "Kubernetes": {"type": "TECHNOLOGY", "attributes": {"description": "The runtime environment where Aurora Portal is deployed."}},
+    "Invoice Events": {"type": "EVENT", "attributes": {"description": "Events produced by the Billing Worker after invoice calculations."}},
+    "Data Retention Policy": {"type": "LAW", "attributes": {"description": "The governance policy for audit log retention."}},
+    "Audit Logs": {"type": "DIGITAL_ASSET", "attributes": {"description": "Logs governed by the Data Retention Policy and used as evidence."}},
+    "Incident Reports": {"type": "DIGITAL_ASSET", "attributes": {"description": "Reports that are evidenced by Audit Logs."}}
+  },
+  "relationships": [
+    ["Aurora Portal", "DEVELOPED_BY", "Helio Systems"],
+    ["Helio Systems", "LOCATED_IN", "Singapore"],
+    ["Aurora Portal", "INCLUDES", "Identity Service"],
+    ["Aurora Portal", "INCLUDES", "Billing Worker"],
+    ["Aurora Portal", "INCLUDES", "Audit Console"],
+    ["Aurora Portal", "INCLUDES", "Export Job"],
+    ["API Gateway", "REQUIRES", "Identity Service"],
+    ["Identity Service", "USES", "PostgreSQL"],
+    ["Billing Worker", "USES", "Kafka"],
+    ["Audit Console", "USES", "ClickHouse"],
+    ["Export Job", "USES", "Object Storage"],
+    ["Aurora Portal", "DEPLOYED_IN", "Kubernetes"],
+    ["Billing Worker", "PRODUCES", "Invoice Events"],
+    ["Data Retention Policy", "GOVERNS", "Audit Logs"],
+    ["Incident Reports", "EVIDENCED_BY", "Audit Logs"]
+  ]
+}

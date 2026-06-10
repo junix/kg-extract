@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "AtlasDB": {
+      "type": "TECHNOLOGY",
+      "attributes": {
+        "description": "A graph analytics product developed by Nova Labs."
+      }
+    },
+    "Nova Labs": {
+      "type": "ORGANIZATION",
+      "attributes": {
+        "description": "The organization that develops AtlasDB and is located in Berlin."
+      }
+    },
+    "Berlin": {
+      "type": "CITY",
+      "attributes": {
+        "description": "The city where Nova Labs is located."
+      }
+    },
+    "Rust": {
+      "type": "TECHNOLOGY",
+      "attributes": {
+        "description": "The programming language used by AtlasDB for its embedded query engine."
+      }
+    },
+    "Vector Search": {
+      "type": "FEATURE",
+      "attributes": {
+        "description": "The nearest-neighbor retrieval feature included in AtlasDB."
+      }
+    },
+    "HNSW": {
+      "type": "ALGORITHM",
+      "attributes": {
+        "description": "The approximate nearest-neighbor indexing algorithm used by Vector Search."
+      }
+    }
+  },
+  "relationships": [
+    ["AtlasDB", "DEVELOPED_BY", "Nova Labs"],
+    ["Nova Labs", "LOCATED_IN", "Berlin"],
+    ["AtlasDB", "USES", "Rust"],
+    ["AtlasDB", "INCLUDES", "Vector Search"],
+    ["Vector Search", "USES", "HNSW"]
+  ]
+}

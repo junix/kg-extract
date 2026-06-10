@@ -1,0 +1,11 @@
+(entity<|>AtlasDB<|>technology<|>A graph analytics product developed by Nova Labs.<|>)##
+(entity<|>Nova Labs<|>organization<|>The organization that develops AtlasDB and is located in Berlin.<|>)##
+(entity<|>Berlin<|>city<|>The city where Nova Labs is located.<|>)##
+(entity<|>Rust<|>technology<|>The programming language used by AtlasDB for its embedded query engine.<|>)##
+(entity<|>Vector Search<|>feature<|>The nearest-neighbor retrieval feature included in AtlasDB.<|>)##
+(entity<|>HNSW<|>algorithm<|>The approximate nearest-neighbor indexing algorithm used by Vector Search.<|>)##
+(relationship<|>AtlasDB<|>Nova Labs<|>developed_by<|>AtlasDB is developed by Nova Labs.<|>0.95)##
+(relationship<|>Nova Labs<|>Berlin<|>located_in<|>Nova Labs is located in Berlin.<|>0.95)##
+(relationship<|>AtlasDB<|>Rust<|>uses<|>AtlasDB uses Rust for its embedded query engine.<|>0.9)##
+(relationship<|>AtlasDB<|>Vector Search<|>includes<|>AtlasDB includes Vector Search.<|>0.9)##
+(relationship<|>Vector Search<|>HNSW<|>uses<|>Vector Search uses HNSW.<|>0.9)##

@@ -1,0 +1,32 @@
+(entity<|>Aurora Portal<|>product<|>A customer operations product developed by Helio Systems.<|>)##
+(entity<|>Helio Systems<|>organization<|>The company that develops Aurora Portal and is located in Singapore.<|>)##
+(entity<|>Singapore<|>city<|>The city where Helio Systems is located.<|>)##
+(entity<|>Identity Service<|>software<|>The service used by Aurora Portal for user profiles and sessions.<|>)##
+(entity<|>Billing Worker<|>software<|>The worker that handles asynchronous billing messages and invoice calculations.<|>)##
+(entity<|>Audit Console<|>software<|>The console used for analytical audit queries.<|>)##
+(entity<|>Export Job<|>software<|>The job that creates generated CSV exports.<|>)##
+(entity<|>API Gateway<|>software<|>The gateway that accepts customer requests after identity checks.<|>)##
+(entity<|>PostgreSQL<|>technology<|>The database used by the Identity Service.<|>)##
+(entity<|>Kafka<|>technology<|>The messaging system used by the Billing Worker.<|>)##
+(entity<|>ClickHouse<|>technology<|>The analytics database used by the Audit Console.<|>)##
+(entity<|>Object Storage<|>technology<|>The storage used by the Export Job for CSV exports.<|>)##
+(entity<|>Kubernetes<|>technology<|>The runtime environment where Aurora Portal is deployed.<|>)##
+(entity<|>Invoice Events<|>event<|>Events produced by the Billing Worker after invoice calculations.<|>)##
+(entity<|>Data Retention Policy<|>law<|>The governance policy for audit log retention.<|>)##
+(entity<|>Audit Logs<|>digital asset<|>Logs governed by the Data Retention Policy and used as evidence.<|>)##
+(entity<|>Incident Reports<|>digital asset<|>Reports that are evidenced by Audit Logs.<|>)##
+(relationship<|>Aurora Portal<|>Helio Systems<|>developed_by<|>Aurora Portal is developed by Helio Systems.<|>0.95)##
+(relationship<|>Helio Systems<|>Singapore<|>located_in<|>Helio Systems is located in Singapore.<|>0.95)##
+(relationship<|>Aurora Portal<|>Identity Service<|>includes<|>Aurora Portal includes the Identity Service.<|>0.9)##
+(relationship<|>Aurora Portal<|>Billing Worker<|>includes<|>Aurora Portal includes the Billing Worker.<|>0.9)##
+(relationship<|>Aurora Portal<|>Audit Console<|>includes<|>Aurora Portal includes the Audit Console.<|>0.9)##
+(relationship<|>Aurora Portal<|>Export Job<|>includes<|>Aurora Portal includes the Export Job.<|>0.9)##
+(relationship<|>API Gateway<|>Identity Service<|>requires<|>The API Gateway requires the Identity Service.<|>0.9)##
+(relationship<|>Identity Service<|>PostgreSQL<|>uses<|>The Identity Service uses PostgreSQL.<|>0.9)##
+(relationship<|>Billing Worker<|>Kafka<|>uses<|>The Billing Worker uses Kafka.<|>0.9)##
+(relationship<|>Audit Console<|>ClickHouse<|>uses<|>The Audit Console uses ClickHouse.<|>0.9)##
+(relationship<|>Export Job<|>Object Storage<|>uses<|>The Export Job uses Object Storage.<|>0.9)##
+(relationship<|>Aurora Portal<|>Kubernetes<|>deployed_in<|>Aurora Portal is deployed in Kubernetes.<|>0.9)##
+(relationship<|>Billing Worker<|>Invoice Events<|>produces<|>The Billing Worker produces Invoice Events.<|>0.9)##
+(relationship<|>Data Retention Policy<|>Audit Logs<|>governs<|>The Data Retention Policy governs Audit Logs.<|>0.9)##
+(relationship<|>Incident Reports<|>Audit Logs<|>evidenced_by<|>Incident Reports are evidenced by Audit Logs.<|>0.9)##

@@ -310,8 +310,62 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 | `--list-presets` | print the bundled presets and exit |
 | `--max-rounds` | tool-call rounds (1 = single-round, default) |
 | `--relation-gleaning` | simple/agentic: targeted rounds that re-question orphan entities to recover edges (0 = off) |
+| `--mock-tool-calls` | mock backend only: scripted tool calls for `-e toolcall` offline/e2e tests |
 | `-F, --input-format` | `text` (default) \| `chunks` — input is chonkie chunk JSON/JSONL, consumed without re-chunking |
-| `-o, --output` | `json` (default) \| `node-link` \| `mermaid` \| `stats` |
+| `-o, --output` | `json` (default) \| `node-link` \| `ladybug-import` \| `mermaid` \| `stats` |
+
+### LadybugDB import output
+
+`-o ladybug-import` emits the JSON format accepted by the sibling
+[`graphdb-ladybug`](../graphdb-ladybug) CLI:
+
+```bash
+kg-extract -e schema-json -b agent --agent minimaxcc -f doc.md -o ladybug-import > kg.lbug.json
+lbug /tmp/kg-doc import kg.lbug.json --create-tables
+lbug /tmp/kg-doc query "MATCH (a:KgEntity)-[r:DEVELOPED_BY]->(b:KgEntity) RETURN a.label, r.predicate, b.label;"
+```
+
+The export uses one generic node table (`KgEntity`) and one relationship table
+per extracted predicate. Entity and relation metadata are stored as JSON strings
+so the import stays compatible with Ladybug's scalar property binding.
+
+For a deterministic local smoke test that avoids live LLM calls:
+
+```bash
+just ladybug-smoke
+```
+
+For a broader fact-coverage check, run the fixture evaluator. It imports the
+same Markdown facts through six deterministic variants — `simple`,
+`schema-json`, and `toolcall`, each with chunked/plain input — then queries
+Ladybug for every expected relationship:
+
+```bash
+just ladybug-eval
+just ladybug-eval medium_product
+```
+
+To append one real agent extraction pass on the same fixture:
+
+```bash
+just ladybug-eval-live minimaxcc
+just ladybug-eval-live minimaxcc medium_product
+```
+
+To test the multi-turn `agentic` extractor instead:
+
+```bash
+just ladybug-eval-agentic minimaxcc
+just ladybug-eval-agentic minimaxcc medium_product
+```
+
+To run the full local loop — deterministic variants, live `schema-json`, live
+`agentic`, and an agent that judges the Ladybug query evidence:
+
+```bash
+just ladybug-eval-full-verify minimaxcc
+just ladybug-eval-full-verify minimaxcc medium_product
+```
 
 ### Pre-chunked input (`--input-format chunks`)
 

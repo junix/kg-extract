@@ -1,0 +1,77 @@
+[
+  {
+    "subject": "Aurora Portal",
+    "predicate": "DEVELOPED_BY",
+    "object": "Helio Systems"
+  },
+  {
+    "subject": "Helio Systems",
+    "predicate": "LOCATED_IN",
+    "object": "Singapore"
+  },
+  {
+    "subject": "Aurora Portal",
+    "predicate": "INCLUDES",
+    "object": "Identity Service"
+  },
+  {
+    "subject": "Aurora Portal",
+    "predicate": "INCLUDES",
+    "object": "Billing Worker"
+  },
+  {
+    "subject": "Aurora Portal",
+    "predicate": "INCLUDES",
+    "object": "Audit Console"
+  },
+  {
+    "subject": "Aurora Portal",
+    "predicate": "INCLUDES",
+    "object": "Export Job"
+  },
+  {
+    "subject": "API Gateway",
+    "predicate": "REQUIRES",
+    "object": "Identity Service"
+  },
+  {
+    "subject": "Identity Service",
+    "predicate": "USES",
+    "object": "PostgreSQL"
+  },
+  {
+    "subject": "Billing Worker",
+    "predicate": "USES",
+    "object": "Kafka"
+  },
+  {
+    "subject": "Audit Console",
+    "predicate": "USES",
+    "object": "ClickHouse"
+  },
+  {
+    "subject": "Export Job",
+    "predicate": "USES",
+    "object": "Object Storage"
+  },
+  {
+    "subject": "Aurora Portal",
+    "predicate": "DEPLOYED_IN",
+    "object": "Kubernetes"
+  },
+  {
+    "subject": "Billing Worker",
+    "predicate": "PRODUCES",
+    "object": "Invoice Events"
+  },
+  {
+    "subject": "Data Retention Policy",
+    "predicate": "GOVERNS",
+    "object": "Audit Logs"
+  },
+  {
+    "subject": "Incident Reports",
+    "predicate": "EVIDENCED_BY",
+    "object": "Audit Logs"
+  }
+]

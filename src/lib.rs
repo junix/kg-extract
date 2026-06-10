@@ -38,6 +38,7 @@ pub mod chunking;
 pub mod citation;
 pub mod extractor;
 pub(crate) mod graph_build;
+pub mod ladybug_export;
 pub mod mcp;
 pub mod merger;
 pub mod parser;

@@ -14,6 +14,34 @@ build:
 test:
     cargo test --features mcp
 
+# Markdown -> chonkie -> kg-extract -> graphdb-ladybug -> query smoke
+ladybug-smoke:
+    bash scripts/ladybug-e2e-smoke.sh
+
+# Markdown facts -> extraction variants -> graphdb-ladybug -> query coverage
+ladybug-eval fixture="ladybug_eval":
+    FIXTURE={{ fixture }} bash scripts/ladybug-e2e-eval.sh
+
+# Same eval, plus one live schema-json extraction through an agent backend
+ladybug-eval-live agent="minimaxcc" fixture="ladybug_eval":
+    FIXTURE={{ fixture }} LIVE_AGENT={{ agent }} bash scripts/ladybug-e2e-eval.sh
+
+# Same eval, plus one live agentic extraction through an agent backend
+ladybug-eval-agentic agent="minimaxcc" fixture="ladybug_eval":
+    FIXTURE={{ fixture }} LIVE_AGENTIC={{ agent }} bash scripts/ladybug-e2e-eval.sh
+
+# Same eval, then ask an agent to judge the query evidence
+ladybug-eval-verify agent="minimaxcc" fixture="ladybug_eval":
+    FIXTURE={{ fixture }} VERIFY_AGENT={{ agent }} bash scripts/ladybug-e2e-eval.sh
+
+# Live extraction plus agent verification over the query evidence
+ladybug-eval-live-verify agent="minimaxcc" fixture="ladybug_eval":
+    FIXTURE={{ fixture }} LIVE_AGENT={{ agent }} VERIFY_AGENT={{ agent }} bash scripts/ladybug-e2e-eval.sh
+
+# Deterministic variants + live schema-json + live agentic + agent verification
+ladybug-eval-full-verify agent="minimaxcc" fixture="ladybug_eval":
+    FIXTURE={{ fixture }} LIVE_AGENT={{ agent }} LIVE_AGENTIC={{ agent }} VERIFY_AGENT={{ agent }} bash scripts/ladybug-e2e-eval.sh
+
 # Lint
 lint:
     cargo clippy --all-targets --features "llms-backend mcp"

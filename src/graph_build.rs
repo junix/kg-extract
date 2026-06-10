@@ -52,6 +52,84 @@ pub(crate) fn build_predicate(s: &str) -> Predicate {
     Predicate::with_label(pt, s.to_string())
 }
 
+pub(crate) fn should_swap_passive_by(
+    subject: &Entity,
+    predicate: &Predicate,
+    object: &Entity,
+) -> bool {
+    if !predicate.predicate_type.value().ends_with("_BY") {
+        return false;
+    }
+    if is_actor_type(subject.entity_type) && !is_actor_type(object.entity_type) {
+        return true;
+    }
+    predicate.predicate_type == PredicateType::EvidencedBy
+        && looks_like_evidence_source(subject)
+        && looks_like_evidenced_claim(object)
+}
+
+fn is_actor_type(t: EntityType) -> bool {
+    matches!(
+        t,
+        EntityType::Person
+            | EntityType::Organization
+            | EntityType::Company
+            | EntityType::Institution
+            | EntityType::GovernmentAgency
+            | EntityType::PoliticalParty
+            | EntityType::MilitaryUnit
+    )
+}
+
+fn looks_like_evidence_source(e: &Entity) -> bool {
+    entity_label_contains_any(
+        e,
+        &[
+            "audit log",
+            "audit logs",
+            "log",
+            "logs",
+            "evidence",
+            "evidentiary",
+            "trace",
+            "traces",
+            "record",
+            "records",
+            "metric",
+            "metrics",
+            "measurement",
+            "measurements",
+        ],
+    )
+}
+
+fn looks_like_evidenced_claim(e: &Entity) -> bool {
+    entity_label_contains_any(
+        e,
+        &[
+            "incident report",
+            "incident reports",
+            "report",
+            "reports",
+            "claim",
+            "claims",
+            "finding",
+            "findings",
+            "conclusion",
+            "conclusions",
+            "assertion",
+            "assertions",
+            "hypothesis",
+            "hypotheses",
+        ],
+    )
+}
+
+fn entity_label_contains_any(e: &Entity, needles: &[&str]) -> bool {
+    let label = e.label.to_lowercase();
+    needles.iter().any(|needle| label.contains(needle))
+}
+
 /// Accumulates entities and resolves relationships by name into a
 /// [`KnowledgeGraph`].
 ///
@@ -137,6 +215,11 @@ impl GraphBuilder {
         ) else {
             return false;
         };
+        let (subject, object) = if should_swap_passive_by(&subject, &predicate, &object) {
+            (object, subject)
+        } else {
+            (subject, object)
+        };
         let mut triple = Triple::new(subject, predicate, object);
         decorate(&mut triple);
         self.kg.add_triple(triple);
@@ -157,5 +240,43 @@ impl GraphBuilder {
     /// Consume the builder, yielding the accumulated graph.
     pub(crate) fn into_graph(self) -> KnowledgeGraph {
         self.kg
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn passive_by_relation_swaps_actor_to_non_actor_direction() {
+        let org = Entity::new("org", "Helio Systems", EntityType::Organization);
+        let product = Entity::new("product", "Aurora Portal", EntityType::Product);
+        let predicate = Predicate::new(PredicateType::DevelopedBy);
+
+        assert!(should_swap_passive_by(&org, &predicate, &product));
+        assert!(!should_swap_passive_by(&product, &predicate, &org));
+    }
+
+    #[test]
+    fn evidenced_by_swaps_evidence_source_to_claim_direction() {
+        let mut logs = Entity::new("logs", "Audit Logs", EntityType::Other);
+        logs.description = Some("Operational records used as evidence.".into());
+        let mut reports = Entity::new("reports", "Incident Reports", EntityType::Other);
+        reports.description = Some("Reports that are evidenced by logs.".into());
+        let predicate = Predicate::new(PredicateType::EvidencedBy);
+
+        assert!(should_swap_passive_by(&logs, &predicate, &reports));
+        assert!(!should_swap_passive_by(&reports, &predicate, &logs));
+    }
+
+    #[test]
+    fn evidenced_by_does_not_swap_correct_direction_from_cross_descriptions() {
+        let mut reports = Entity::new("reports", "Incident Reports", EntityType::Other);
+        reports.description = Some("Reports evidenced by Audit Logs.".into());
+        let mut logs = Entity::new("logs", "Audit Logs", EntityType::Other);
+        logs.description = Some("Audit records evidencing Incident Reports.".into());
+        let predicate = Predicate::new(PredicateType::EvidencedBy);
+
+        assert!(!should_swap_passive_by(&reports, &predicate, &logs));
     }
 }

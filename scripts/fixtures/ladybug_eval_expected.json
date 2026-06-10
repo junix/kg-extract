@@ -1,0 +1,27 @@
+[
+  {
+    "subject": "AtlasDB",
+    "predicate": "DEVELOPED_BY",
+    "object": "Nova Labs"
+  },
+  {
+    "subject": "Nova Labs",
+    "predicate": "LOCATED_IN",
+    "object": "Berlin"
+  },
+  {
+    "subject": "AtlasDB",
+    "predicate": "USES",
+    "object": "Rust"
+  },
+  {
+    "subject": "AtlasDB",
+    "predicate": "INCLUDES",
+    "object": "Vector Search"
+  },
+  {
+    "subject": "Vector Search",
+    "predicate": "USES",
+    "object": "HNSW"
+  }
+]

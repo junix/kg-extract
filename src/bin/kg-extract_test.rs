@@ -54,9 +54,51 @@ fn load_config_inline_json_with_leading_space() {
 }
 
 #[test]
+fn file_config_parses_ladybug_import_output() {
+    let cfg: FileConfig = serde_json::from_str(r#"{"output": "ladybug-import"}"#).unwrap();
+    assert!(matches!(cfg.output, Some(OutFmt::LadybugImport)));
+}
+
+#[test]
 fn load_config_missing_explicit_path_errors() {
     let err = load_config(Some("/no/such/kg-extract-config-xyz.json"));
     assert!(err.is_err(), "an explicit missing path must error");
+}
+
+#[test]
+fn parse_mock_tool_rounds_accepts_inline_single_round() {
+    let rounds = parse_mock_tool_rounds(
+        r#"[{"name":"add_entity","arguments":{"name":"AtlasDB","type":"PRODUCT"}}]"#,
+    )
+    .unwrap();
+    assert_eq!(rounds.len(), 1);
+    assert_eq!(rounds[0].len(), 1);
+    assert_eq!(rounds[0][0].name, "add_entity");
+    assert_eq!(rounds[0][0].arguments["name"], "AtlasDB");
+    assert_eq!(rounds[0][0].id, "mock_0_0");
+}
+
+#[test]
+fn parse_mock_tool_rounds_accepts_file_multi_round() {
+    let dir = std::env::temp_dir().join(format!("kg-tool-rounds-{}", nanoid::nanoid!()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("rounds.json");
+    std::fs::write(
+        &path,
+        r#"[
+          [{"id":"e1","name":"add_entity","args":{"name":"A","type":"PRODUCT"}}],
+          [{"name":"finish","arguments":{}}]
+        ]"#,
+    )
+    .unwrap();
+
+    let rounds = parse_mock_tool_rounds(path.to_str().unwrap()).unwrap();
+    assert_eq!(rounds.len(), 2);
+    assert_eq!(rounds[0][0].id, "e1");
+    assert_eq!(rounds[0][0].arguments["name"], "A");
+    assert_eq!(rounds[1][0].name, "finish");
+
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
