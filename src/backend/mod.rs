@@ -55,7 +55,11 @@ pub struct CompletionOptions {
 
 impl Default for CompletionOptions {
     fn default() -> Self {
-        CompletionOptions { model: "qwen-max".into(), temperature: 0.3, max_tokens: 4000 }
+        CompletionOptions {
+            model: "qwen-max".into(),
+            temperature: 0.3,
+            max_tokens: 4000,
+        }
     }
 }
 
@@ -74,7 +78,11 @@ pub struct Message {
 
 impl Message {
     pub fn new(role: impl Into<String>, content: impl Into<String>) -> Self {
-        Message { role: role.into(), content: content.into(), ..Default::default() }
+        Message {
+            role: role.into(),
+            content: content.into(),
+            ..Default::default()
+        }
     }
     pub fn system(content: impl Into<String>) -> Self {
         Message::new("system", content)
@@ -86,7 +94,10 @@ impl Message {
         Message::new("assistant", content)
     }
     /// Assistant message that issued `tool_calls` (raw OpenAI objects).
-    pub fn assistant_with_tool_calls(content: Option<String>, tool_calls: Vec<serde_json::Value>) -> Self {
+    pub fn assistant_with_tool_calls(
+        content: Option<String>,
+        tool_calls: Vec<serde_json::Value>,
+    ) -> Self {
         Message {
             role: "assistant".into(),
             content: content.unwrap_or_default(),
@@ -228,7 +239,11 @@ impl ReplaySession {
         if let Some(s) = system {
             history.push(Message::system(s));
         }
-        ReplaySession { backend, history, options }
+        ReplaySession {
+            backend,
+            history,
+            options,
+        }
     }
 }
 
@@ -249,8 +264,14 @@ mod tests {
     #[tokio::test]
     async fn backends_have_no_native_session_by_default() {
         let backend = MockBackend::single("x");
-        let session = backend.open_session(None, &CompletionOptions::default()).await.unwrap();
-        assert!(session.is_none(), "default open_session must be None so callers replay");
+        let session = backend
+            .open_session(None, &CompletionOptions::default())
+            .await
+            .unwrap();
+        assert!(
+            session.is_none(),
+            "default open_session must be None so callers replay"
+        );
     }
 
     #[tokio::test]

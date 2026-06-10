@@ -4,11 +4,24 @@ use super::*;
 
 #[test]
 fn accepts_recognizes_pi_agent_aliases() {
-    for name in ["pi-agent", "pi_agent", "piagent", "pi", "PI-AGENT", "  Pi-Agent  "] {
-        assert!(PiAgentBackend::accepts(name), "{name:?} should select pi-agent");
+    for name in [
+        "pi-agent",
+        "pi_agent",
+        "piagent",
+        "pi",
+        "PI-AGENT",
+        "  Pi-Agent  ",
+    ] {
+        assert!(
+            PiAgentBackend::accepts(name),
+            "{name:?} should select pi-agent"
+        );
     }
     for name in ["minimaxcc", "glmcc", "mimocc", "pip", "", "agent"] {
-        assert!(!PiAgentBackend::accepts(name), "{name:?} should not select pi-agent");
+        assert!(
+            !PiAgentBackend::accepts(name),
+            "{name:?} should not select pi-agent"
+        );
     }
 }
 
@@ -75,7 +88,12 @@ fn surfaces_error_record_as_err() {
 
 #[test]
 fn agent_end_not_ok_without_error_record_is_an_error() {
-    let stdout = concat!(r#"{"type":"agent_start"}"#, "\n", r#"{"type":"agent_end","ok":false}"#, "\n");
+    let stdout = concat!(
+        r#"{"type":"agent_start"}"#,
+        "\n",
+        r#"{"type":"agent_end","ok":false}"#,
+        "\n"
+    );
     assert!(extract_assistant_text(stdout).is_err());
 }
 
@@ -195,7 +213,10 @@ mod subprocess {
         let out = fake
             .backend()
             .complete(
-                &[Message::system("be terse"), Message::user("extract entities")],
+                &[
+                    Message::system("be terse"),
+                    Message::user("extract entities"),
+                ],
                 &CompletionOptions::default(),
             )
             .await

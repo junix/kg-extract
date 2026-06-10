@@ -46,10 +46,12 @@ impl LlmBackend for MockBackend {
         messages: &[Message],
         _options: &CompletionOptions,
     ) -> anyhow::Result<String> {
-        self.seen_prompts
-            .lock()
-            .unwrap()
-            .push(messages.last().map(|m| m.content.clone()).unwrap_or_default());
+        self.seen_prompts.lock().unwrap().push(
+            messages
+                .last()
+                .map(|m| m.content.clone())
+                .unwrap_or_default(),
+        );
         let mut n = self.calls.lock().unwrap();
         let idx = (*n).min(self.responses.len().saturating_sub(1));
         *n += 1;
@@ -66,21 +68,23 @@ impl LlmBackend for MockBackend {
         _tools: &[ToolSpec],
         _options: &CompletionOptions,
     ) -> anyhow::Result<ToolChatResponse> {
-        self.seen_prompts
-            .lock()
-            .unwrap()
-            .push(messages.last().map(|m| m.content.clone()).unwrap_or_default());
+        self.seen_prompts.lock().unwrap().push(
+            messages
+                .last()
+                .map(|m| m.content.clone())
+                .unwrap_or_default(),
+        );
         let mut i = self.tool_calls_idx.lock().unwrap();
         let idx = *i;
         *i += 1;
         let tool_calls = if self.tool_rounds.is_empty() {
             Vec::new()
         } else {
-            self.tool_rounds
-                .get(idx)
-                .cloned()
-                .unwrap_or_default()
+            self.tool_rounds.get(idx).cloned().unwrap_or_default()
         };
-        Ok(ToolChatResponse { content: None, tool_calls })
+        Ok(ToolChatResponse {
+            content: None,
+            tool_calls,
+        })
     }
 }

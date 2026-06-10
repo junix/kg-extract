@@ -132,13 +132,21 @@ impl ExtractionSpec {
     /// A spec seeded with `schema`, in `mode`. (`Fixed`/`Evolving` need a
     /// non-empty schema; the extractor validates this at `extract` time.)
     pub fn new(schema: Schema, mode: SchemaMode) -> Self {
-        ExtractionSpec { schema, mode, ..Default::default() }
+        ExtractionSpec {
+            schema,
+            mode,
+            ..Default::default()
+        }
     }
 
     /// A spec driven by a rich [`template`](crate::template::TemplateCfg)
     /// (preset), rendered in `lang` (`None` = the template's first declared
     /// language). The template guides extraction regardless of [`mode`](Self::mode).
     pub fn from_template(template: crate::template::TemplateCfg, lang: Option<String>) -> Self {
-        ExtractionSpec { template: Some(template), language: lang, ..Default::default() }
+        ExtractionSpec {
+            template: Some(template),
+            language: lang,
+            ..Default::default()
+        }
     }
 }

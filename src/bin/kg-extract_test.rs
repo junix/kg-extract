@@ -62,10 +62,19 @@ fn load_config_missing_explicit_path_errors() {
 #[test]
 fn expand_tilde_expands_home() {
     let home = std::env::var("HOME").expect("HOME set in test env");
-    assert_eq!(expand_tilde("~/foo/bar.json"), PathBuf::from(&home).join("foo/bar.json"));
+    assert_eq!(
+        expand_tilde("~/foo/bar.json"),
+        PathBuf::from(&home).join("foo/bar.json")
+    );
     // No leading ~/ → passthrough.
-    assert_eq!(expand_tilde("/abs/path.json"), PathBuf::from("/abs/path.json"));
-    assert_eq!(expand_tilde("rel/path.json"), PathBuf::from("rel/path.json"));
+    assert_eq!(
+        expand_tilde("/abs/path.json"),
+        PathBuf::from("/abs/path.json")
+    );
+    assert_eq!(
+        expand_tilde("rel/path.json"),
+        PathBuf::from("rel/path.json")
+    );
 }
 
 #[test]
@@ -93,20 +102,26 @@ fn precedence_cli_over_config_over_default() {
     };
 
     // 1. CLI flag wins over config.
-    let r = render(&["kg-extract", "--engine", "simple"], FileConfig {
-        engine: Some(Engine::SchemaJson),
-        ..Default::default()
-    });
+    let r = render(
+        &["kg-extract", "--engine", "simple"],
+        FileConfig {
+            engine: Some(Engine::SchemaJson),
+            ..Default::default()
+        },
+    );
     assert!(matches!(r.engine, Engine::Simple));
 
     // 2. Config wins when CLI flag absent.
-    let r = render(&["kg-extract"], FileConfig {
-        engine: Some(Engine::SchemaJson),
-        chunker: Some(Chunker::Token),
-        max_rounds: Some(4),
-        schema_mode: Some(SchemaModeArg::Evolving),
-        ..Default::default()
-    });
+    let r = render(
+        &["kg-extract"],
+        FileConfig {
+            engine: Some(Engine::SchemaJson),
+            chunker: Some(Chunker::Token),
+            max_rounds: Some(4),
+            schema_mode: Some(SchemaModeArg::Evolving),
+            ..Default::default()
+        },
+    );
     assert!(matches!(r.engine, Engine::SchemaJson));
     assert!(matches!(r.chunker, Chunker::Token));
     assert_eq!(r.max_rounds, 4);
@@ -126,6 +141,16 @@ fn precedence_cli_over_config_over_default() {
 fn precedence_cli_flag_overrides_config() {
     let m = Args::command().get_matches_from(["kg-extract", "--schema-mode", "fixed"]);
     let args = Args::from_arg_matches(&m).unwrap();
-    let r = resolve(&m, &args, FileConfig { schema_mode: Some(SchemaModeArg::Evolving), ..Default::default() });
-    assert!(matches!(r.schema_mode, SchemaModeArg::Fixed), "explicit --schema-mode must win over config");
+    let r = resolve(
+        &m,
+        &args,
+        FileConfig {
+            schema_mode: Some(SchemaModeArg::Evolving),
+            ..Default::default()
+        },
+    );
+    assert!(
+        matches!(r.schema_mode, SchemaModeArg::Fixed),
+        "explicit --schema-mode must win over config"
+    );
 }

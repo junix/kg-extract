@@ -36,7 +36,8 @@ pub(crate) fn parse_entity_type(s: &str) -> EntityType {
     if s.is_empty() {
         return EntityType::from_loose("other");
     }
-    s.parse::<EntityType>().unwrap_or_else(|_| EntityType::from_loose(s))
+    s.parse::<EntityType>()
+        .unwrap_or_else(|_| EntityType::from_loose(s))
 }
 
 /// Build a [`Predicate`] from a free-form relation string, keeping the raw string
@@ -130,9 +131,10 @@ impl GraphBuilder {
         let (Some(sid), Some(tid)) = (sid, tid) else {
             return false;
         };
-        let (Some(subject), Some(object)) =
-            (self.kg.entities.get(&sid).cloned(), self.kg.entities.get(&tid).cloned())
-        else {
+        let (Some(subject), Some(object)) = (
+            self.kg.entities.get(&sid).cloned(),
+            self.kg.entities.get(&tid).cloned(),
+        ) else {
             return false;
         };
         let mut triple = Triple::new(subject, predicate, object);

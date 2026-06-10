@@ -9,7 +9,18 @@ use strum_macros::{AsRefStr, Display, EnumIter, EnumString};
 
 /// Enumeration of all supported predicate types for relationship extraction.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display, EnumString, EnumIter, AsRefStr,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+    AsRefStr,
 )]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
@@ -233,7 +244,10 @@ fn title_case(screaming: &str) -> String {
         .map(|w| {
             let mut chars = w.chars();
             match chars.next() {
-                Some(c) => c.to_uppercase().chain(chars.flat_map(|c| c.to_lowercase())).collect(),
+                Some(c) => c
+                    .to_uppercase()
+                    .chain(chars.flat_map(|c| c.to_lowercase()))
+                    .collect(),
                 None => String::new(),
             }
         })
@@ -249,14 +263,23 @@ mod tests {
     fn roundtrip_values() {
         assert_eq!(PredicateType::IsA.value(), "IS_A");
         assert_eq!(PredicateType::WorksFor.value(), "WORKS_FOR");
-        assert_eq!(PredicateType::ReducesDimensionality.value(), "REDUCES_DIMENSIONALITY");
+        assert_eq!(
+            PredicateType::ReducesDimensionality.value(),
+            "REDUCES_DIMENSIONALITY"
+        );
     }
 
     #[test]
     fn loose_match() {
         assert_eq!(PredicateType::from_loose("uses"), PredicateType::Uses);
-        assert_eq!(PredicateType::from_loose("is used by"), PredicateType::IsUsedBy);
-        assert_eq!(PredicateType::from_loose("no such thing"), PredicateType::RelatedTo);
+        assert_eq!(
+            PredicateType::from_loose("is used by"),
+            PredicateType::IsUsedBy
+        );
+        assert_eq!(
+            PredicateType::from_loose("no such thing"),
+            PredicateType::RelatedTo
+        );
     }
 
     #[test]
@@ -270,7 +293,10 @@ mod tests {
 
     #[test]
     fn display_label_titlecase() {
-        assert_eq!(Predicate::new(PredicateType::DevelopedBy).display_label(), "Developed By");
+        assert_eq!(
+            Predicate::new(PredicateType::DevelopedBy).display_label(),
+            "Developed By"
+        );
     }
 
     #[test]

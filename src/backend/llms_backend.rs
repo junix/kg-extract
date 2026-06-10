@@ -93,9 +93,16 @@ impl LlmBackend for LlmsBackend {
             .map(|tc| {
                 let arguments = serde_json::from_str::<serde_json::Value>(&tc.function.arguments)
                     .unwrap_or(serde_json::Value::Null);
-                ToolInvocation { id: tc.id, name: tc.function.name, arguments }
+                ToolInvocation {
+                    id: tc.id,
+                    name: tc.function.name,
+                    arguments,
+                }
             })
             .collect();
-        Ok(ToolChatResponse { content: resp.content, tool_calls })
+        Ok(ToolChatResponse {
+            content: resp.content,
+            tool_calls,
+        })
     }
 }

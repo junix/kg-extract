@@ -39,14 +39,20 @@ pub(crate) fn provider_env(name: &str) -> anyhow::Result<(String, BTreeMap<Strin
             "https://api.minimaxi.com/anthropic",
             "MiniMax-M3-highspeed",
         ),
-        "glmcc" | "glm" => ("GLM_API_KEY", "https://open.bigmodel.cn/api/anthropic", "glm-5.1"),
+        "glmcc" | "glm" => (
+            "GLM_API_KEY",
+            "https://open.bigmodel.cn/api/anthropic",
+            "glm-5.1",
+        ),
         "mimocc" | "mimo" => (
             "MIMO_API_KEY",
             "https://token-plan-cn.xiaomimimo.com/anthropic",
             "mimo-v2.5-pro",
         ),
         other => {
-            anyhow::bail!("unknown sdk-agent provider: {other} (expected minimaxcc / glmcc / mimocc)")
+            anyhow::bail!(
+                "unknown sdk-agent provider: {other} (expected minimaxcc / glmcc / mimocc)"
+            )
         }
     };
     let token = std::env::var(key_var)
@@ -58,7 +64,10 @@ pub(crate) fn provider_env(name: &str) -> anyhow::Result<(String, BTreeMap<Strin
     env.insert("ANTHROPIC_MODEL".into(), model.into());
     env.insert("ANTHROPIC_SMALL_FAST_MODEL".into(), model.into());
     env.insert("API_TIMEOUT_MS".into(), "3000000".into());
-    env.insert("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".into(), "1".into());
+    env.insert(
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC".into(),
+        "1".into(),
+    );
 
     Ok((n, env))
 }
@@ -68,7 +77,10 @@ impl SdkAgentBackend {
     /// `mimocc`). See [`provider_env`].
     pub fn for_agent(name: &str) -> anyhow::Result<Self> {
         let (agent, provider_env) = provider_env(name)?;
-        Ok(SdkAgentBackend { provider_env, agent })
+        Ok(SdkAgentBackend {
+            provider_env,
+            agent,
+        })
     }
 }
 
@@ -119,7 +131,11 @@ impl LlmBackend for SdkAgentBackend {
         }
         // No `max_turns = 1` here — this is the genuinely multi-turn path.
         let client = ClaudeSdkClient::new(opts);
-        Ok(Some(Box::new(SdkChatSession { client, started: false, agent: self.agent.clone() })))
+        Ok(Some(Box::new(SdkChatSession {
+            client,
+            started: false,
+            agent: self.agent.clone(),
+        })))
     }
 }
 

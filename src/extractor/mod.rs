@@ -50,7 +50,11 @@ pub trait Extractor {
 
 /// Validate input text against `min_segment_size`; warns (non-fatal) like the
 /// Python `_validate_input`, errors only on empty input.
-pub(crate) fn validate_input(text: &str, min_segment_size: usize, quiet: bool) -> anyhow::Result<()> {
+pub(crate) fn validate_input(
+    text: &str,
+    min_segment_size: usize,
+    quiet: bool,
+) -> anyhow::Result<()> {
     if text.trim().is_empty() {
         anyhow::bail!("No input text provided");
     }

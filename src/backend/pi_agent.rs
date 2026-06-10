@@ -45,7 +45,10 @@ pub struct PiAgentBackend {
 
 impl Default for PiAgentBackend {
     fn default() -> Self {
-        PiAgentBackend { binary: "pi-agent".to_string(), extra_args: Vec::new() }
+        PiAgentBackend {
+            binary: "pi-agent".to_string(),
+            extra_args: Vec::new(),
+        }
     }
 }
 
@@ -57,20 +60,29 @@ impl PiAgentBackend {
 
     /// A backend with extra args inserted before `-p` (e.g. `--model X`).
     pub fn with_args(extra_args: Vec<String>) -> Self {
-        PiAgentBackend { binary: "pi-agent".to_string(), extra_args }
+        PiAgentBackend {
+            binary: "pi-agent".to_string(),
+            extra_args,
+        }
     }
 
     /// A backend driving an explicit binary path (used by tests with a fake
     /// `pi-agent`) plus extra args.
     pub fn with_binary(binary: impl Into<String>, extra_args: Vec<String>) -> Self {
-        PiAgentBackend { binary: binary.into(), extra_args }
+        PiAgentBackend {
+            binary: binary.into(),
+            extra_args,
+        }
     }
 
     /// Whether `name` selects the pi-agent backend (case-insensitive). Used by
     /// the CLI to route `--backend agent --agent pi-agent` here instead of to
     /// [`SdkAgentBackend`](super::SdkAgentBackend).
     pub fn accepts(name: &str) -> bool {
-        matches!(name.trim().to_lowercase().as_str(), "pi-agent" | "pi_agent" | "piagent" | "pi")
+        matches!(
+            name.trim().to_lowercase().as_str(),
+            "pi-agent" | "pi_agent" | "piagent" | "pi"
+        )
     }
 }
 
@@ -171,13 +183,14 @@ fn extract_assistant_text(stdout: &str) -> anyhow::Result<String> {
                 }
             }
             Some("error") => {
-                let message =
-                    value.get("message").and_then(|m| m.as_str()).unwrap_or("unknown error");
+                let message = value
+                    .get("message")
+                    .and_then(|m| m.as_str())
+                    .unwrap_or("unknown error");
                 error = Some(message.to_string());
             }
             Some("agent_end")
-                if value.get("ok").and_then(|o| o.as_bool()) == Some(false)
-                    && error.is_none() =>
+                if value.get("ok").and_then(|o| o.as_bool()) == Some(false) && error.is_none() =>
             {
                 error = Some("pi-agent reported agent_end ok=false".to_string());
             }

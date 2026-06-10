@@ -20,7 +20,12 @@ pub struct Schema {
 
 impl Schema {
     pub fn new(nodes: Vec<String>, relations: Vec<String>, attributes: Vec<String>) -> Self {
-        Schema { nodes, relations, attributes, metadata: HashMap::new() }
+        Schema {
+            nodes,
+            relations,
+            attributes,
+            metadata: HashMap::new(),
+        }
     }
 
     pub fn is_empty(&self) -> bool {
@@ -40,7 +45,11 @@ impl Schema {
             v.get(cap)
                 .or_else(|| v.get(low))
                 .and_then(|x| x.as_array())
-                .map(|a| a.iter().filter_map(|s| s.as_str().map(String::from)).collect())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|s| s.as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default()
         };
         let metadata = v
@@ -69,7 +78,12 @@ impl Schema {
     /// Merge with another schema, set-unioning each list.
     pub fn merge(&self, other: &Schema) -> Schema {
         let union = |a: &[String], b: &[String]| -> Vec<String> {
-            a.iter().chain(b.iter()).cloned().collect::<BTreeSet<_>>().into_iter().collect()
+            a.iter()
+                .chain(b.iter())
+                .cloned()
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect()
         };
         let mut metadata = self.metadata.clone();
         metadata.extend(other.metadata.clone());

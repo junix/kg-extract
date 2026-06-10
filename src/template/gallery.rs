@@ -48,9 +48,14 @@ fn collect(dir: &Dir<'_>, out: &mut Vec<Preset>, on_error: &mut impl FnMut(&str,
                     continue;
                 }
                 // domain = the first path component under presets/.
-                let domain = path.components().next().and_then(|c| c.as_os_str().to_str());
+                let domain = path
+                    .components()
+                    .next()
+                    .and_then(|c| c.as_os_str().to_str());
                 let Some(domain) = domain else { continue };
-                let Some(text) = f.contents_utf8() else { continue };
+                let Some(text) = f.contents_utf8() else {
+                    continue;
+                };
                 match TemplateCfg::from_yaml_str(text) {
                     Ok(template) => {
                         let key = format!("{domain}/{}", template.name);
@@ -77,7 +82,10 @@ pub fn get(name: &str) -> Option<TemplateCfg> {
     } else {
         format!("general/{name}")
     };
-    list().iter().find(|p| p.key == key).map(|p| p.template.clone())
+    list()
+        .iter()
+        .find(|p| p.key == key)
+        .map(|p| p.template.clone())
 }
 
 /// The bundled preset keys (sorted), e.g. for `--list-presets`.

@@ -33,7 +33,11 @@ pub fn parse_llm_response(response_text: &str) -> ParsedResult {
     let entities_and_triples = json_data
         .get("entities_and_triples")
         .and_then(|v| v.as_array())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect())
+        .map(|a| {
+            a.iter()
+                .filter_map(|x| x.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
 
     // Build the Entity objects up front so `ParsedResult.entities` is actually
@@ -115,7 +119,10 @@ pub fn parse_entities_and_triples(
                                 .and_then(|v| v.as_str())
                                 .unwrap_or(id)
                                 .to_string(),
-                            r#type: info_obj.get("type").and_then(|v| v.as_str()).map(String::from),
+                            r#type: info_obj
+                                .get("type")
+                                .and_then(|v| v.as_str())
+                                .map(String::from),
                             description: info_obj
                                 .get("description")
                                 .and_then(|v| v.as_str())
@@ -130,7 +137,10 @@ pub fn parse_entities_and_triples(
                 } else {
                     entities.insert(
                         id.clone(),
-                        EntityInfo { label: value_to_string(info), ..Default::default() },
+                        EntityInfo {
+                            label: value_to_string(info),
+                            ..Default::default()
+                        },
                     );
                 }
             }
@@ -153,7 +163,10 @@ pub fn parse_entities_and_triples(
                         EntityInfo {
                             label,
                             r#type: o.get("type").and_then(|v| v.as_str()).map(String::from),
-                            description: o.get("description").and_then(|v| v.as_str()).map(String::from),
+                            description: o
+                                .get("description")
+                                .and_then(|v| v.as_str())
+                                .map(String::from),
                             attributes: o
                                 .get("attributes")
                                 .and_then(|v| v.as_object())
@@ -181,7 +194,11 @@ pub fn parse_entities_and_triples(
                 let target = o.get("target").or_else(|| o.get("object"));
                 let predicate = o.get("predicate").or_else(|| o.get("relation"));
                 if let (Some(s), Some(t), Some(p)) = (source, target, predicate) {
-                    relationships.push((value_to_string(s), value_to_string(p), value_to_string(t)));
+                    relationships.push((
+                        value_to_string(s),
+                        value_to_string(p),
+                        value_to_string(t),
+                    ));
                 }
             }
         }
@@ -190,7 +207,10 @@ pub fn parse_entities_and_triples(
     // Legacy fallback: the `entities_and_triples` list with `[N]` ID markers.
     // One `[N]` → entity; two → relationship.
     if entities.is_empty() {
-        if let Some(items) = json_data.get("entities_and_triples").and_then(|v| v.as_array()) {
+        if let Some(items) = json_data
+            .get("entities_and_triples")
+            .and_then(|v| v.as_array())
+        {
             let id_re = Regex::new(r"\[\d+\]").unwrap();
             for item in items {
                 let Some(item) = item.as_str() else { continue };
@@ -200,7 +220,10 @@ pub fn parse_entities_and_triples(
                         if let Some((id, label)) = item.split_once(", ") {
                             entities.insert(
                                 id.trim().to_string(),
-                                EntityInfo { label: label.trim().to_string(), ..Default::default() },
+                                EntityInfo {
+                                    label: label.trim().to_string(),
+                                    ..Default::default()
+                                },
                             );
                         }
                     }
@@ -214,7 +237,11 @@ pub fn parse_entities_and_triples(
                             .filter(|s| !s.is_empty())
                             .collect();
                         if between.len() == 1 {
-                            relationships.push((markers[0].to_string(), between[0].clone(), markers[1].to_string()));
+                            relationships.push((
+                                markers[0].to_string(),
+                                between[0].clone(),
+                                markers[1].to_string(),
+                            ));
                         }
                     }
                     _ => {}
@@ -228,10 +255,16 @@ pub fn parse_entities_and_triples(
 
 /// Build [`Entity`] objects from parsed entity-info (ported from
 /// `create_entities_from_parsed`, including the heuristic type fallback).
-pub fn create_entities_from_parsed(entities: &HashMap<String, EntityInfo>) -> HashMap<String, Entity> {
+pub fn create_entities_from_parsed(
+    entities: &HashMap<String, EntityInfo>,
+) -> HashMap<String, Entity> {
     let mut result = HashMap::new();
     for (id, data) in entities {
-        let label = if data.label.is_empty() { id.clone() } else { data.label.clone() };
+        let label = if data.label.is_empty() {
+            id.clone()
+        } else {
+            data.label.clone()
+        };
 
         let entity_type = if let Some(type_str) = &data.r#type {
             EntityType::from_loose(type_str)
@@ -335,10 +368,20 @@ mod tests {
         let (entities, rels) = parse_entities_and_triples(&json);
         assert_eq!(entities.len(), 2);
         assert_eq!(entities["[1]"].label, "OpenAI");
-        assert_eq!(rels, vec![("[1]".to_string(), "developed_by".to_string(), "[2]".to_string())]);
+        assert_eq!(
+            rels,
+            vec![(
+                "[1]".to_string(),
+                "developed_by".to_string(),
+                "[2]".to_string()
+            )]
+        );
         let built = create_entities_from_parsed(&entities);
         let triples = create_triples_from_parsed(&rels, &built);
         assert_eq!(triples.len(), 1);
-        assert_eq!(triples[0].predicate.predicate_type, PredicateType::DevelopedBy);
+        assert_eq!(
+            triples[0].predicate.predicate_type,
+            PredicateType::DevelopedBy
+        );
     }
 }

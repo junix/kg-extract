@@ -20,7 +20,12 @@ pub struct Segment {
 /// Segment `text` according to `strategy`. `segment_size`/`overlap` are used by
 /// `Char` and `Token`; `Recursive` uses chonkie's default recursive rules sized
 /// to `segment_size`.
-pub fn segment(text: &str, strategy: ChunkStrategy, segment_size: usize, overlap: usize) -> Vec<Segment> {
+pub fn segment(
+    text: &str,
+    strategy: ChunkStrategy,
+    segment_size: usize,
+    overlap: usize,
+) -> Vec<Segment> {
     let chunks = match strategy {
         ChunkStrategy::Char => CharChunker::new(segment_size, overlap).chunk(text),
         ChunkStrategy::Token => {
@@ -30,7 +35,11 @@ pub fn segment(text: &str, strategy: ChunkStrategy, segment_size: usize, overlap
             // Honor the caller's segment_size (chonkie's default is 2048 tokens,
             // which would ignore the configured size). Recursive has no overlap
             // knob — it merges splits up to chunk_size.
-            RecursiveChunker { chunk_size: segment_size, ..RecursiveChunker::default() }.chunk(text)
+            RecursiveChunker {
+                chunk_size: segment_size,
+                ..RecursiveChunker::default()
+            }
+            .chunk(text)
         }
     };
     chunks
@@ -72,6 +81,10 @@ mod tests {
     fn char_segment_size_splits() {
         let text = "x".repeat(1000);
         let segs = segment(&text, ChunkStrategy::Char, 100, 0);
-        assert!(segs.len() >= 10, "char chunker splits by size, got {}", segs.len());
+        assert!(
+            segs.len() >= 10,
+            "char chunker splits by size, got {}",
+            segs.len()
+        );
     }
 }

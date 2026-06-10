@@ -11,7 +11,18 @@ use strum_macros::{AsRefStr, Display, EnumIter, EnumString};
 
 /// Enumeration of all supported entity types for NER and knowledge extraction.
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Display, EnumString, EnumIter, AsRefStr,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    Serialize,
+    Deserialize,
+    Display,
+    EnumString,
+    EnumIter,
+    AsRefStr,
 )]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
@@ -263,7 +274,10 @@ mod tests {
         assert_eq!(EntityType::from_loose("model"), EntityType::Model);
         // Alias path only fires when there is no exact variant (METHOD is not one).
         assert_eq!(EntityType::from_loose("method"), EntityType::Technology);
-        assert_eq!(EntityType::from_loose("research group"), EntityType::Organization);
+        assert_eq!(
+            EntityType::from_loose("research group"),
+            EntityType::Organization
+        );
         assert_eq!(EntityType::from_loose("totally unknown"), EntityType::Other);
         assert_eq!(EntityType::from_loose("Person"), EntityType::Person);
     }

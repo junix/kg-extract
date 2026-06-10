@@ -32,7 +32,12 @@ fn render_fields(heading: &str, intro: &str, fields: &[Field], lang: &str, out: 
     out.push('\n');
 }
 
-fn render_rules(heading: &str, rules: &Option<super::model::Localized>, lang: &str, out: &mut String) {
+fn render_rules(
+    heading: &str,
+    rules: &Option<super::model::Localized>,
+    lang: &str,
+    out: &mut String,
+) {
     if let Some(r) = rules {
         let body = r.resolve(lang);
         if !body.trim().is_empty() {
