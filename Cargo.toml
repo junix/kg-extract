@@ -30,6 +30,9 @@ default = []
 llms-backend = ["dep:llms"]
 # Build the `kg-extract-mcp` stdio MCP server (rmcp SDK + schemars).
 mcp = ["dep:rmcp", "dep:schemars"]
+# Stamp every extracted entity/triple with provenance citations
+# ({doc, line range}, computed code-side from chunk offsets — never by the model).
+citations = []
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

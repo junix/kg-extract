@@ -29,14 +29,18 @@ use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
 use claude_agent_sdk_rs::types::SystemPrompt;
-use claude_agent_sdk_rs::{ClaudeAgentOptions, ClaudeSdkClient, ContentBlock, Message as SdkMessage, PermissionMode};
+use claude_agent_sdk_rs::{
+    ClaudeAgentOptions, ClaudeSdkClient, ContentBlock, Message as SdkMessage, PermissionMode,
+};
 use futures::StreamExt;
 
 use super::{validate_input, Extractor, SchemaMode};
 use crate::backend::sdk_agent::provider_env;
 use crate::chunking::segment;
 use crate::extractor::simple::{entity_type_tokens, parse_output, parse_relations_against};
-use crate::types::{Entity, ExtractionConfig, ExtractionResponse, KnowledgeGraph, ParsedResult, Schema, Triple};
+use crate::types::{
+    Entity, ExtractionConfig, ExtractionResponse, KnowledgeGraph, ParsedResult, Schema, Triple,
+};
 
 const SYSTEM_PROMPT: &str = r#"You extract a knowledge graph (entities + relationships) from ONE document, slice by slice, across multiple turns.
 
@@ -47,6 +51,8 @@ Across turns, REUSE the exact same entity_name for an entity you have already re
 Output a single `##`-separated list, each record in EXACTLY one of these forms:
 (entity<|>entity_name<|>entity_type<|>a 10-20 word description<|>attributes)
 (relationship<|>source_entity<|>target_entity<|>relationship_type<|>why they are related<|>strength_0_to_1)
+
+DIRECTION RULE: a relationship must read left-to-right as a TRUE sentence: "source_entity relationship_type target_entity". EVERY type ending in _BY (FOUNDED_BY, DEVELOPED_BY, CREATED_BY, INVENTED_BY, PUBLISHED_BY, OWNED_BY, ...) is passive: the source is the thing acted on, the target is the doer — (relationship<|>Anthropic<|>Dario Amodei<|>FOUNDED_BY<|>...) is correct because "Anthropic [was] FOUNDED_BY Dario Amodei"; (relationship<|>Dario Amodei<|>Anthropic<|>FOUNDED_BY<|>...) is reversed and WRONG. A person is never the source of a *_BY relationship to their own work — for "X invented/created/wrote W" emit (W<|>X<|>INVENTED_BY) or the active (X<|>W<|>CREATED). Active types (FOUNDED, DEVELOPED, USES) point from the doer to the thing. Before emitting each relationship, read it aloud as a sentence; if it is false as written, swap source and target or pick the opposite-voice type.
 
 Entity names capitalised, in the document's language. Output ONLY the records — no prose, no preamble.
 
@@ -94,7 +100,24 @@ Relationship types to prefer: {relationship_types}
 
 Output ONLY relationships, `##`-separated, each as:
 (relationship<|>source_entity<|>target_entity<|>relationship_type<|>why they are related<|>strength_0_to_1)
+Each must read left-to-right as a true sentence ("source relationship_type target"); _BY types point from the thing acted on to the doer.
 If none have any relationship, answer just: NO"#;
+
+/// Merge one slice's entity into the running entity table. First occurrence
+/// wins (the prompt asks the model to only add what is NEW each turn); under
+/// the `citations` feature a repeat occurrence still contributes its
+/// provenance, so an entity mentioned in several slices cites all of them.
+fn merge_slice_entity(all: &mut HashMap<String, Entity>, id: &str, e: &Entity) {
+    match all.entry(id.to_string()) {
+        std::collections::hash_map::Entry::Occupied(mut _o) => {
+            #[cfg(feature = "citations")]
+            crate::citation::union_citations(&mut _o.get_mut().metadata, &e.metadata);
+        }
+        std::collections::hash_map::Entry::Vacant(v) => {
+            v.insert(e.clone());
+        }
+    }
+}
 
 /// Experimental single-session, sandboxed, multi-turn extractor.
 pub struct AgenticExtractor {
@@ -129,7 +152,12 @@ impl AgenticExtractor {
     }
 
     pub fn with_config(agent: &str, config: ExtractionConfig) -> Self {
-        AgenticExtractor { config, agent: agent.to_string(), max_relation_gleanings: 0, quiet: false }
+        AgenticExtractor {
+            config,
+            agent: agent.to_string(),
+            max_relation_gleanings: 0,
+            quiet: false,
+        }
     }
 
     /// Enable whole-graph relation-gleaning with `n` rounds (builder style).
@@ -151,17 +179,24 @@ impl AgenticExtractor {
 
     /// Slice the text the same way the Simple engine does: a single slice when
     /// the text fits in `segment_size`, otherwise segmented (dropping a tiny
-    /// trailing fragment).
-    fn slices(&self, text: &str) -> Vec<String> {
+    /// trailing fragment). Each slice keeps its char offsets so provenance can
+    /// be line-mapped.
+    fn slices(&self, text: &str) -> Vec<(String, usize, usize)> {
         if text.chars().count() > self.config.segment_size {
-            segment(text, self.config.chunker, self.config.segment_size, self.config.overlap)
-                .into_iter()
-                .enumerate()
-                .filter(|(i, s)| !(s.content.chars().count() < self.config.min_segment_size && *i > 0))
-                .map(|(_, s)| s.content)
-                .collect()
+            segment(
+                text,
+                self.config.chunker,
+                self.config.segment_size,
+                self.config.overlap,
+            )
+            .into_iter()
+            .enumerate()
+            .filter(|(i, s)| !(s.content.chars().count() < self.config.min_segment_size && *i > 0))
+            .map(|(_, s)| (s.content, s.start, s.end))
+            .collect()
         } else {
-            vec![text.to_string()]
+            let len = text.chars().count();
+            vec![(text.to_string(), 0, len)]
         }
     }
 
@@ -350,7 +385,12 @@ impl SchemaFilter {
             }
         }
 
-        SliceFilter { kept_entities, kept_triples, dropped_types, dropped_records }
+        SliceFilter {
+            kept_entities,
+            kept_triples,
+            dropped_types,
+            dropped_records,
+        }
     }
 }
 
@@ -368,12 +408,12 @@ impl SchemaPolicy {
     fn for_mode(mode: SchemaMode, schema: &Schema) -> Self {
         match mode {
             SchemaMode::Open => SchemaPolicy::Off,
-            SchemaMode::Fixed => {
-                SchemaFilter::build(schema).map(SchemaPolicy::Fixed).unwrap_or(SchemaPolicy::Off)
-            }
-            SchemaMode::Evolving => {
-                SchemaFilter::build(schema).map(SchemaPolicy::Evolving).unwrap_or(SchemaPolicy::Off)
-            }
+            SchemaMode::Fixed => SchemaFilter::build(schema)
+                .map(SchemaPolicy::Fixed)
+                .unwrap_or(SchemaPolicy::Off),
+            SchemaMode::Evolving => SchemaFilter::build(schema)
+                .map(SchemaPolicy::Evolving)
+                .unwrap_or(SchemaPolicy::Off),
         }
     }
 }
@@ -385,7 +425,8 @@ impl Extractor for AgenticExtractor {
 
         // 1. Isolated read-only workspace with the full document on disk.
         let (agent, env) = provider_env(&self.agent)?;
-        let workdir: PathBuf = std::env::temp_dir().join(format!("kg-extract-{}", nanoid::nanoid!()));
+        let workdir: PathBuf =
+            std::env::temp_dir().join(format!("kg-extract-{}", nanoid::nanoid!()));
         std::fs::create_dir_all(&workdir)
             .map_err(|e| anyhow::anyhow!("creating workspace {}: {e}", workdir.display()))?;
         let doc_path = workdir.join("document.md");
@@ -440,8 +481,12 @@ impl AgenticExtractor {
         opts.system_prompt = Some(SystemPrompt::Text(system));
         // Read-only sandbox: the agent may pull context but cannot mutate.
         opts.allowed_tools = vec!["Read".into(), "Grep".into(), "Glob".into()];
-        opts.disallowed_tools =
-            vec!["Write".into(), "Edit".into(), "NotebookEdit".into(), "Bash".into()];
+        opts.disallowed_tools = vec![
+            "Write".into(),
+            "Edit".into(),
+            "NotebookEdit".into(),
+            "Bash".into(),
+        ];
         opts.permission_mode = Some(PermissionMode::BypassPermissions);
 
         let mut client = ClaudeSdkClient::new(opts);
@@ -452,6 +497,8 @@ impl AgenticExtractor {
 
         let slices = self.slices(text);
         let n = slices.len();
+        #[cfg(feature = "citations")]
+        let line_index = crate::citation::LineIndex::new(text);
         let mut all_entities: HashMap<String, Entity> = HashMap::new();
         let mut all_triples: Vec<Triple> = Vec::new();
         let mut parsed_results: Vec<ParsedResult> = Vec::new();
@@ -464,7 +511,7 @@ impl AgenticExtractor {
         let mut new_relations: BTreeSet<String> = BTreeSet::new();
 
         // 2. Feed each slice as a turn in the same conversation.
-        'slices: for (i, slice) in slices.iter().enumerate() {
+        'slices: for (i, (slice, _slice_start, _slice_end)) in slices.iter().enumerate() {
             let base_prompt = SLICE_PROMPT
                 .replace("{i}", &(i + 1).to_string())
                 .replace("{n}", &n.to_string())
@@ -501,13 +548,35 @@ impl AgenticExtractor {
                 if output.is_empty() {
                     continue 'slices;
                 }
-                let parsed = parse_output(&output, &self.config);
+                #[allow(unused_mut)]
+                let mut parsed = parse_output(&output, &self.config);
+                #[cfg(feature = "citations")]
+                {
+                    let (start_line, end_line) = line_index.line_range(*_slice_start, *_slice_end);
+                    let cite = crate::citation::Citation::new(
+                        self.config.source_doc.clone(),
+                        start_line,
+                        end_line,
+                    );
+                    for e in parsed.entities.values_mut() {
+                        crate::citation::attach_citation(&mut e.metadata, &cite);
+                    }
+                    // Endpoint snapshots too: `add_triple` re-inserts them into
+                    // the entity table, where an unstamped copy would erase the
+                    // entity's provenance (it unions, but only what's present).
+                    for t in parsed.triples.iter_mut() {
+                        crate::citation::attach_citation(&mut t.metadata, &cite);
+                        crate::citation::attach_citation(&mut t.subject.metadata, &cite);
+                        crate::citation::attach_citation(&mut t.object.metadata, &cite);
+                    }
+                }
+                let parsed = parsed;
 
                 let f = match &policy {
                     SchemaPolicy::Off => {
                         // Unconstrained (Open / empty schema): merge as-is.
                         for (id, e) in &parsed.entities {
-                            all_entities.entry(id.clone()).or_insert_with(|| e.clone());
+                            merge_slice_entity(&mut all_entities, id, e);
                         }
                         all_triples.extend(parsed.triples.clone());
                         parsed_results.push(parsed);
@@ -519,8 +588,12 @@ impl AgenticExtractor {
                         let tokens = entity_type_tokens(&output);
                         let (nn, nr) = f.new_types(&parsed.entities, &parsed.triples, &tokens);
                         if !self.quiet && (!nn.is_empty() || !nr.is_empty()) {
-                            let csv =
-                                nn.iter().chain(nr.iter()).cloned().collect::<Vec<_>>().join(", ");
+                            let csv = nn
+                                .iter()
+                                .chain(nr.iter())
+                                .cloned()
+                                .collect::<Vec<_>>()
+                                .join(", ");
                             eprintln!(
                                 "  [schema] slice {} proposed {} new type(s): {csv}",
                                 i + 1,
@@ -530,7 +603,7 @@ impl AgenticExtractor {
                         new_nodes.extend(nn);
                         new_relations.extend(nr);
                         for (id, e) in &parsed.entities {
-                            all_entities.entry(id.clone()).or_insert_with(|| e.clone());
+                            merge_slice_entity(&mut all_entities, id, e);
                         }
                         all_triples.extend(parsed.triples.clone());
                         parsed_results.push(parsed);
@@ -547,7 +620,10 @@ impl AgenticExtractor {
                 if sf.all_dropped() && redo_left > 0 {
                     redo_left -= 1;
                     if !self.quiet {
-                        eprintln!("  [schema] slice {} entirely out-of-schema — redoing", i + 1);
+                        eprintln!(
+                            "  [schema] slice {} entirely out-of-schema — redoing",
+                            i + 1
+                        );
                     }
                     prompt = SCHEMA_REDO_PROMPT
                         .replace("{entity_types}", &entity_types)
@@ -557,15 +633,19 @@ impl AgenticExtractor {
 
                 // Commit the in-schema records.
                 for (id, e) in sf.kept_entities {
-                    all_entities.entry(id).or_insert(e);
+                    merge_slice_entity(&mut all_entities, &id, &e);
                 }
                 all_triples.extend(sf.kept_triples);
 
                 if sf.dropped_records > 0 {
                     total_dropped += sf.dropped_records;
                     all_dropped_types.extend(sf.dropped_types.iter().cloned());
-                    let types_csv =
-                        sf.dropped_types.iter().cloned().collect::<Vec<_>>().join(", ");
+                    let types_csv = sf
+                        .dropped_types
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ");
                     if !self.quiet {
                         eprintln!(
                             "  [schema] slice {} dropped {} out-of-schema record(s){}",
@@ -602,13 +682,18 @@ impl AgenticExtractor {
                 .iter()
                 .flat_map(|t| [t.subject.id.as_str(), t.object.id.as_str()])
                 .collect();
-            let orphans: Vec<&Entity> =
-                all_entities.values().filter(|e| !linked.contains(e.id.as_str())).collect();
+            let orphans: Vec<&Entity> = all_entities
+                .values()
+                .filter(|e| !linked.contains(e.id.as_str()))
+                .collect();
             if orphans.is_empty() {
                 break;
             }
-            let orphan_list =
-                orphans.iter().map(|e| format!("- {}", e.label)).collect::<Vec<_>>().join("\n");
+            let orphan_list = orphans
+                .iter()
+                .map(|e| format!("- {}", e.label))
+                .collect::<Vec<_>>()
+                .join("\n");
             let prompt = RELATION_GLEANING_PROMPT
                 .replace("{orphans}", &orphan_list)
                 .replace("{relationship_types}", &rel_types);
@@ -662,6 +747,21 @@ impl AgenticExtractor {
             if rescued.is_empty() {
                 break;
             }
+            // Gleaned relations come from a whole-document pass, so they cite
+            // the full document rather than one slice.
+            #[cfg(feature = "citations")]
+            let rescued = {
+                let mut rescued = rescued;
+                let cite = crate::citation::Citation::new(
+                    self.config.source_doc.clone(),
+                    1,
+                    line_index.total_lines(),
+                );
+                for t in rescued.iter_mut() {
+                    crate::citation::attach_citation(&mut t.metadata, &cite);
+                }
+                rescued
+            };
             all_triples.extend(rescued);
         }
 
@@ -693,12 +793,18 @@ impl AgenticExtractor {
         let mut resp = ExtractionResponse::new(kg);
         resp.parsed_results = parsed_results;
         resp.config = Some(self.config.clone());
-        resp.metadata.insert("tool_uses".into(), serde_json::json!(total_tool_uses));
-        resp.metadata.insert("schema_mode".into(), serde_json::json!(self.config.spec.mode.as_str()));
+        resp.metadata
+            .insert("tool_uses".into(), serde_json::json!(total_tool_uses));
+        resp.metadata.insert(
+            "schema_mode".into(),
+            serde_json::json!(self.config.spec.mode.as_str()),
+        );
         match &policy {
             SchemaPolicy::Fixed(_) => {
-                resp.metadata
-                    .insert("schema_dropped_records".into(), serde_json::json!(total_dropped));
+                resp.metadata.insert(
+                    "schema_dropped_records".into(),
+                    serde_json::json!(total_dropped),
+                );
                 resp.metadata.insert(
                     "schema_dropped_types".into(),
                     serde_json::json!(all_dropped_types.into_iter().collect::<Vec<_>>()),
@@ -731,13 +837,19 @@ mod tests {
     }
 
     fn tokens(pairs: &[(&str, &str)]) -> HashMap<String, String> {
-        pairs.iter().map(|(n, t)| (n.to_lowercase(), t.to_string())).collect()
+        pairs
+            .iter()
+            .map(|(n, t)| (n.to_lowercase(), t.to_string()))
+            .collect()
     }
 
     #[test]
     fn policy_dispatch_by_mode_and_schema() {
         let schema = Schema::new(vec!["PRODUCT".into()], vec![], vec![]);
-        assert!(matches!(SchemaPolicy::for_mode(SchemaMode::Open, &schema), SchemaPolicy::Off));
+        assert!(matches!(
+            SchemaPolicy::for_mode(SchemaMode::Open, &schema),
+            SchemaPolicy::Off
+        ));
         assert!(matches!(
             SchemaPolicy::for_mode(SchemaMode::Fixed, &schema),
             SchemaPolicy::Fixed(_)
@@ -779,7 +891,10 @@ mod tests {
 
         assert_eq!(sf.kept_entities.len(), 1);
         assert!(sf.kept_entities.contains_key("p"));
-        assert!(sf.kept_triples.is_empty(), "relation to a dropped endpoint must be dropped");
+        assert!(
+            sf.kept_triples.is_empty(),
+            "relation to a dropped endpoint must be dropped"
+        );
         assert!(sf.dropped_types.contains("ORGANIZATION"));
         assert_eq!(sf.dropped_records, 2, "one entity + one relation");
         assert!(!sf.all_dropped(), "a product survived");
@@ -815,7 +930,11 @@ mod tests {
         entities.insert("g".into(), ent("g", "Widget X", EntityType::Other));
         let toks = tokens(&[("widget x", "GADGET")]);
         let sf = f.apply(entities, vec![], &toks);
-        assert_eq!(sf.kept_entities.len(), 1, "custom type must match by raw token");
+        assert_eq!(
+            sf.kept_entities.len(),
+            1,
+            "custom type must match by raw token"
+        );
         assert_eq!(sf.dropped_records, 0);
     }
 
@@ -847,9 +966,18 @@ mod tests {
         );
         let toks = tokens(&[("widget", "PRODUCT"), ("acme", "ORGANIZATION")]);
         let (nodes, relations) = f.new_types(&entities, &[t], &toks);
-        assert!(nodes.contains("ORGANIZATION"), "out-of-seed node must be proposed");
+        assert!(
+            nodes.contains("ORGANIZATION"),
+            "out-of-seed node must be proposed"
+        );
         assert!(!nodes.contains("PRODUCT"), "seed node is not a proposal");
-        assert!(relations.contains("DEPENDS_ON"), "out-of-seed relation must be proposed");
-        assert!(!relations.contains("USES"), "seed relation is not a proposal");
+        assert!(
+            relations.contains("DEPENDS_ON"),
+            "out-of-seed relation must be proposed"
+        );
+        assert!(
+            !relations.contains("USES"),
+            "seed relation is not a proposal"
+        );
     }
 }

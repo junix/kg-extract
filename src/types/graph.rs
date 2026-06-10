@@ -20,7 +20,13 @@ pub struct Triple {
 
 impl Triple {
     pub fn new(subject: Entity, predicate: Predicate, object: Entity) -> Self {
-        Triple { subject, predicate, object, confidence: None, metadata: HashMap::new() }
+        Triple {
+            subject,
+            predicate,
+            object,
+            confidence: None,
+            metadata: HashMap::new(),
+        }
     }
 
     /// `(subject_id, predicate_type_value, object_id)` — the dedup key.
@@ -67,9 +73,22 @@ impl KnowledgeGraph {
     }
 
     pub fn add_triple(&mut self, triple: Triple) {
-        self.add_entity(triple.subject.clone());
-        self.add_entity(triple.object.clone());
+        self.upsert_endpoint(triple.subject.clone());
+        self.upsert_endpoint(triple.object.clone());
         self.triples.push(triple);
+    }
+
+    /// Insert a triple endpoint, keeping the historical replace semantics but
+    /// never losing provenance: citations already recorded on the stored
+    /// entity are unioned into the incoming snapshot before it overwrites.
+    fn upsert_endpoint(&mut self, entity: Entity) {
+        #[allow(unused_mut)]
+        let mut entity = entity;
+        #[cfg(feature = "citations")]
+        if let Some(existing) = self.entities.get(&entity.id) {
+            crate::citation::union_citations(&mut entity.metadata, &existing.metadata);
+        }
+        self.add_entity(entity);
     }
 
     pub fn get_entity(&self, id: &str) -> Option<&Entity> {
@@ -77,7 +96,10 @@ impl KnowledgeGraph {
     }
 
     pub fn get_triples_by_predicate(&self, pt: PredicateType) -> Vec<&Triple> {
-        self.triples.iter().filter(|t| t.predicate.predicate_type == pt).collect()
+        self.triples
+            .iter()
+            .filter(|t| t.predicate.predicate_type == pt)
+            .collect()
     }
 
     /// Merge another graph into `self` (mirrors `KnowledgeGraph.merge`):
@@ -129,8 +151,19 @@ impl KnowledgeGraph {
                     .get(&triple.object.id)
                     .cloned()
                     .unwrap_or_else(|| triple.object.clone());
-                let Triple { predicate, confidence, metadata, .. } = triple;
-                self.triples.push(Triple { subject, object, predicate, confidence, metadata });
+                let Triple {
+                    predicate,
+                    confidence,
+                    metadata,
+                    ..
+                } = triple;
+                self.triples.push(Triple {
+                    subject,
+                    object,
+                    predicate,
+                    confidence,
+                    metadata,
+                });
             }
         }
         self
@@ -215,7 +248,9 @@ impl KnowledgeGraph {
         }
         let mut predicate_types: HashMap<String, usize> = HashMap::new();
         for t in &self.triples {
-            *predicate_types.entry(t.predicate.predicate_type.value()).or_insert(0) += 1;
+            *predicate_types
+                .entry(t.predicate.predicate_type.value())
+                .or_insert(0) += 1;
         }
         serde_json::json!({
             "num_entities": self.entities.len(),
@@ -281,7 +316,11 @@ mod tests {
 
         let mut g = KnowledgeGraph::new();
         g.merge(other);
-        assert_eq!(g.triples.len(), 1, "identical triples within `other` must dedup");
+        assert_eq!(
+            g.triples.len(),
+            1,
+            "identical triples within `other` must dedup"
+        );
     }
 
     #[test]
@@ -303,7 +342,11 @@ mod tests {
 
         g.merge(other);
         let x = g.get_entity("x").expect("x present");
-        assert_eq!(x.confidence, Some(0.9), "higher-confidence entity must survive");
+        assert_eq!(
+            x.confidence,
+            Some(0.9),
+            "higher-confidence entity must survive"
+        );
         assert_eq!(
             x.description.as_deref(),
             Some("rich"),
@@ -337,7 +380,10 @@ pub mod indexmap_lite {
 
     impl<K: Eq + Hash + Clone, V> Default for OrderedMap<K, V> {
         fn default() -> Self {
-            OrderedMap { order: Vec::new(), map: HashMap::new() }
+            OrderedMap {
+                order: Vec::new(),
+                map: HashMap::new(),
+            }
         }
     }
 
@@ -379,10 +425,16 @@ pub mod indexmap_lite {
             self.order.is_empty()
         }
         pub fn iter(&self) -> impl Iterator<Item = (&K, &V)> {
-            self.order.iter().map(move |k| (k, self.map.get(k).unwrap()))
+            self.order
+                .iter()
+                .map(move |k| (k, self.map.get(k).unwrap()))
         }
         pub fn values(&self) -> impl Iterator<Item = &V> {
             self.order.iter().map(move |k| self.map.get(k).unwrap())
+        }
+        /// Mutable access to every value (iteration order unspecified).
+        pub fn values_mut(&mut self) -> impl Iterator<Item = &mut V> {
+            self.map.values_mut()
         }
         pub fn keys(&self) -> impl Iterator<Item = &K> {
             self.order.iter()

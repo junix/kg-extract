@@ -220,6 +220,33 @@ let extractor = ToolCallExtractor::new(backend);          // single-round, qwen-
 let response = extractor.extract("OpenAI built GPT-4.").await?;
 ```
 
+## Provenance citations (feature `citations`)
+
+Built with `--features citations`, every extracted entity and triple carries
+**where it came from**: a `citations` array in its `metadata`, each entry
+`{"doc": <name|null>, "lines": [start, end]}` (1-based, inclusive).
+
+```bash
+cargo build --release --features citations
+kg-extract -e agentic --agent minimaxcc -f doc.md -o json   # records now carry metadata.citations
+```
+
+Line ranges are computed **by the code, never by the model**: the chunker
+already tracks each chunk/slice's char offsets, and a per-document line index
+maps offsets to lines — so citations cannot be hallucinated. Granularity
+follows the engine: `simple`/`agentic` cite the chunk/slice containing the
+mention (agentic relation-gleaning records, which look at the whole document,
+cite the full range); single-shot `schema-json`/`toolcall` cite the whole
+document. The CLI sets the doc name from `-f` (stdin → `null`); library users
+set `config.source_doc`.
+
+A record seen in several places accumulates **multiple citations**: slice-level
+recurrences union within the agentic session, and every dedup/merge path
+(`merger`, all `MergeStrategy` variants, duplicate-triple drops) unions the two
+sides' citations — so merging graphs from different documents yields entities
+citing every document they appeared in. Without the feature, output is
+byte-for-byte unchanged and the bookkeeping is compiled out.
+
 ## Types
 
 `EntityType` (122 variants) and `PredicateType` (108 variants) are enums whose

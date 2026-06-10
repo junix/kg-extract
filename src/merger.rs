@@ -9,7 +9,7 @@
 use crate::backend::{CompletionOptions, LlmBackend};
 use crate::types::{Entity, EntityType, KnowledgeGraph, MergeStrategy, Triple};
 use regex::Regex;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Merge `graph2` into `graph1` with the historical `KeepExisting` strategy.
@@ -20,7 +20,12 @@ pub fn merge_knowledge_graphs(
     graph2: KnowledgeGraph,
     merge_duplicates: bool,
 ) -> KnowledgeGraph {
-    merge_knowledge_graphs_with(graph1, graph2, merge_duplicates, MergeStrategy::KeepExisting)
+    merge_knowledge_graphs_with(
+        graph1,
+        graph2,
+        merge_duplicates,
+        MergeStrategy::KeepExisting,
+    )
 }
 
 /// Merge `graph2` into `graph1`, combining label-duplicates per `strategy`.
@@ -66,16 +71,29 @@ pub fn merge_with_deduplication_strategy(
         let label_lower = entity.label.to_lowercase();
         if let Some(existing_id) = label_to_id.get(&label_lower).cloned() {
             // Same label → combine into the entity already present (KeepExisting
-            // leaves it untouched, preserving the historical behaviour exactly).
+            // leaves it untouched, preserving the historical behaviour exactly —
+            // except provenance, which always survives from both sides).
             if strategy != MergeStrategy::KeepExisting {
                 if let Some(existing) = g1.entities.get(&existing_id).cloned() {
                     let merged = combine_entities(strategy, &existing, entity, None);
                     g1.entities.insert(existing_id.clone(), merged);
                 }
+            } else {
+                #[cfg(feature = "citations")]
+                if let Some(existing) = g1.entities.get_mut(&existing_id) {
+                    crate::citation::union_citations(&mut existing.metadata, &entity.metadata);
+                }
             }
             id_mapping.insert(id.clone(), existing_id);
         } else {
-            add_nonmatching_entity(&mut g1, &mut label_to_id, &mut id_mapping, id, label_lower, entity);
+            add_nonmatching_entity(
+                &mut g1,
+                &mut label_to_id,
+                &mut id_mapping,
+                id,
+                label_lower,
+                entity,
+            );
         }
     }
 
@@ -108,7 +126,14 @@ pub async fn merge_knowledge_graphs_llm(
             }
             id_mapping.insert(id.clone(), existing_id);
         } else {
-            add_nonmatching_entity(&mut g1, &mut label_to_id, &mut id_mapping, id, label_lower, entity);
+            add_nonmatching_entity(
+                &mut g1,
+                &mut label_to_id,
+                &mut id_mapping,
+                id,
+                label_lower,
+                entity,
+            );
         }
     }
 
@@ -155,7 +180,8 @@ pub fn combine_entities(
     incoming: &Entity,
     llm_desc: Option<String>,
 ) -> Entity {
-    match strategy {
+    #[allow(unused_mut)]
+    let mut merged = match strategy {
         MergeStrategy::KeepExisting => existing.clone(),
         MergeStrategy::KeepIncoming => {
             let mut e = incoming.clone();
@@ -172,7 +198,9 @@ pub fn combine_entities(
                 .filter(|s| !s.trim().is_empty())
                 .or_else(|| richer_description(&existing.description, &incoming.description));
             // A specific type wins over a generic `Other`.
-            if existing.entity_type == EntityType::Other && incoming.entity_type != EntityType::Other {
+            if existing.entity_type == EntityType::Other
+                && incoming.entity_type != EntityType::Other
+            {
                 e.entity_type = incoming.entity_type;
             }
             // Union metadata; existing keys win on conflict.
@@ -181,14 +209,26 @@ pub fn combine_entities(
             }
             e
         }
+    };
+    // Whatever the strategy keeps, provenance from BOTH sides survives: the
+    // merged entity was seen everywhere either duplicate was seen.
+    #[cfg(feature = "citations")]
+    {
+        crate::citation::union_citations(&mut merged.metadata, &existing.metadata);
+        crate::citation::union_citations(&mut merged.metadata, &incoming.metadata);
     }
+    merged
 }
 
 /// The longer (more informative) of two optional descriptions.
 fn richer_description(a: &Option<String>, b: &Option<String>) -> Option<String> {
     match (a.as_deref(), b.as_deref()) {
         (Some(x), Some(y)) => {
-            let pick = if y.trim().chars().count() > x.trim().chars().count() { y } else { x };
+            let pick = if y.trim().chars().count() > x.trim().chars().count() {
+                y
+            } else {
+                x
+            };
             Some(pick.to_string())
         }
         (Some(x), None) => Some(x.to_string()),
@@ -260,16 +300,27 @@ fn remap_triples(
     g2_triples: Vec<Triple>,
     id_mapping: &HashMap<String, String>,
 ) {
-    let mut existing: HashSet<(String, String, String)> =
-        g1.triples.iter().map(|t| t.to_tuple()).collect();
+    // key -> index into g1.triples, so a dropped duplicate can still hand its
+    // provenance to the kept triple.
+    let mut existing: HashMap<(String, String, String), usize> = g1
+        .triples
+        .iter()
+        .enumerate()
+        .map(|(i, t)| (t.to_tuple(), i))
+        .collect();
     for triple in g2_triples {
-        let subj_id =
-            id_mapping.get(&triple.subject.id).cloned().unwrap_or_else(|| triple.subject.id.clone());
-        let obj_id =
-            id_mapping.get(&triple.object.id).cloned().unwrap_or_else(|| triple.object.id.clone());
-        let (Some(subj), Some(obj)) =
-            (g1.entities.get(&subj_id).cloned(), g1.entities.get(&obj_id).cloned())
-        else {
+        let subj_id = id_mapping
+            .get(&triple.subject.id)
+            .cloned()
+            .unwrap_or_else(|| triple.subject.id.clone());
+        let obj_id = id_mapping
+            .get(&triple.object.id)
+            .cloned()
+            .unwrap_or_else(|| triple.object.id.clone());
+        let (Some(subj), Some(obj)) = (
+            g1.entities.get(&subj_id).cloned(),
+            g1.entities.get(&obj_id).cloned(),
+        ) else {
             continue;
         };
         let remapped = Triple {
@@ -280,8 +331,18 @@ fn remap_triples(
             metadata: triple.metadata,
         };
         let key = remapped.to_tuple();
-        if existing.insert(key) {
-            g1.triples.push(remapped);
+        match existing.get(&key) {
+            Some(&_kept_idx) => {
+                #[cfg(feature = "citations")]
+                crate::citation::union_citations(
+                    &mut g1.triples[_kept_idx].metadata,
+                    &remapped.metadata,
+                );
+            }
+            None => {
+                existing.insert(key, g1.triples.len());
+                g1.triples.push(remapped);
+            }
         }
     }
 }
@@ -342,13 +403,21 @@ mod tests {
         let mut g2 = KnowledgeGraph::new();
         g2.add_entity(bob.clone());
         g2.add_entity(paris.clone());
-        g2.add_triple(Triple::new(bob.clone(), Predicate::new(PredicateType::LocatedIn), paris));
+        g2.add_triple(Triple::new(
+            bob.clone(),
+            Predicate::new(PredicateType::LocatedIn),
+            paris,
+        ));
 
         let merged = merge_with_deduplication(g1, g2);
 
         // Table key and entity.id must agree for every entity.
         for (key, e) in merged.entities.iter() {
-            assert_eq!(&e.id, key, "entity '{}' stored under key '{}' has stale id", e.label, key);
+            assert_eq!(
+                &e.id, key,
+                "entity '{}' stored under key '{}' has stale id",
+                e.label, key
+            );
         }
         let bob_key = merged
             .entities
@@ -358,8 +427,15 @@ mod tests {
             .expect("Bob present");
         assert_ne!(bob_key, "e1", "Bob must get a fresh id, not Alice's e1");
         // The Bob->Paris triple endpoint must carry Bob's fresh id.
-        let t = merged.triples.iter().find(|t| t.subject.label == "Bob").expect("Bob relation kept");
-        assert_eq!(t.subject.id, bob_key, "triple subject id must match Bob's table key");
+        let t = merged
+            .triples
+            .iter()
+            .find(|t| t.subject.label == "Bob")
+            .expect("Bob relation kept");
+        assert_eq!(
+            t.subject.id, bob_key,
+            "triple subject id must match Bob's table key"
+        );
     }
 
     #[test]
@@ -375,10 +451,21 @@ mod tests {
 
         let merged = combine_entities(MergeStrategy::FieldUnion, &a, &b, None);
         assert_eq!(merged.id, "e1", "must keep the canonical (existing) id");
-        assert_eq!(merged.description.as_deref(), Some("a much longer, richer description"));
-        assert_eq!(merged.confidence, Some(0.9), "confidence is the max of both");
+        assert_eq!(
+            merged.description.as_deref(),
+            Some("a much longer, richer description")
+        );
+        assert_eq!(
+            merged.confidence,
+            Some(0.9),
+            "confidence is the max of both"
+        );
         assert!(merged.metadata.contains_key("x") && merged.metadata.contains_key("y"));
-        assert_eq!(merged.entity_type, EntityType::Organization, "specific type beats Other");
+        assert_eq!(
+            merged.entity_type,
+            EntityType::Organization,
+            "specific type beats Other"
+        );
     }
 
     #[test]
@@ -406,7 +493,10 @@ mod tests {
         let merged = merge_with_deduplication_strategy(g1, g2, MergeStrategy::FieldUnion);
         assert_eq!(merged.entities.len(), 1, "same-label entities collapse");
         let e = merged.entities.values().next().unwrap();
-        assert_eq!(e.description.as_deref(), Some("a global manufacturing company"));
+        assert_eq!(
+            e.description.as_deref(),
+            Some("a global manufacturing company")
+        );
     }
 
     #[tokio::test]

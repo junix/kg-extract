@@ -43,6 +43,7 @@ For each pair of related entities, extract the following information:
 - relationship_type: type of relationship from the schema (one of: {relationship_types})
 - relationship_description: explanation as to why you think the source entity and the target entity are related to each other in language of 'Text'
 - relationship_strength: a numeric score indicating strength of the relationship between the source entity and target entity
+- direction: the triple must read left-to-right as a TRUE sentence: "source_entity relationship_type target_entity". EVERY type ending in _BY (FOUNDED_BY, DEVELOPED_BY, CREATED_BY, INVENTED_BY, PUBLISHED_BY, ...) is passive — the source is the thing acted on, the target is the doer ("Anthropic FOUNDED_BY Dario Amodei", never "Dario Amodei FOUNDED_BY Anthropic"); a person is never the source of a *_BY relationship to their own work. Active types (FOUNDED, DEVELOPED, USES) point from the doer to the thing. If the sentence is false as written, swap source and target or pick the opposite-voice type.
 Format each relationship as (relationship<|>source_entity<|>target_entity<|>relationship_type<|>relationship_description<|>relationship_strength)
 
 3. Return output as a single list of all the entities and relationships identified in steps 1 and 2. Use `##` as the list delimiter.
@@ -96,6 +97,7 @@ Relationship Types to prefer: {relationship_types}
 
 Output ONLY relationships, `##`-separated, each in EXACTLY this format:
 (relationship<|>source_entity<|>target_entity<|>relationship_type<|>why they are related<|>strength_0_to_1)
+Each must read left-to-right as a true sentence ("source relationship_type target"); _BY types point from the thing acted on to the doer.
 
 If none of these entities has any relationship in the text, answer just: NO
 Output:
@@ -194,9 +196,11 @@ impl SimpleExtractor {
         let mut session: Box<dyn ChatSession> =
             match self.backend.open_session(Some(system.clone()), &opts).await {
                 Ok(Some(s)) => s,
-                Ok(None) => {
-                    Box::new(ReplaySession::new(self.backend.clone(), Some(system), opts.clone()))
-                }
+                Ok(None) => Box::new(ReplaySession::new(
+                    self.backend.clone(),
+                    Some(system),
+                    opts.clone(),
+                )),
                 Err(e) => {
                     if !self.quiet {
                         eprintln!("Session open error: {e}");
@@ -211,7 +215,11 @@ impl SimpleExtractor {
 
         // Entity gleaning: the extraction turn, then "what did you miss?" turns.
         for i in 0..=self.max_gleanings {
-            let prompt: &str = if i == 0 { &extraction_prompt } else { CONTINUE_PROMPT };
+            let prompt: &str = if i == 0 {
+                &extraction_prompt
+            } else {
+                CONTINUE_PROMPT
+            };
             let output = match session.send(prompt).await {
                 Ok(o) => o.trim().to_string(),
                 Err(e) => {
@@ -254,13 +262,18 @@ impl SimpleExtractor {
                 .iter()
                 .flat_map(|t| [t.subject.id.as_str(), t.object.id.as_str()])
                 .collect();
-            let orphans: Vec<&Entity> =
-                all_entities.values().filter(|e| !linked.contains(e.id.as_str())).collect();
+            let orphans: Vec<&Entity> = all_entities
+                .values()
+                .filter(|e| !linked.contains(e.id.as_str()))
+                .collect();
             if orphans.is_empty() {
                 break;
             }
-            let orphan_list =
-                orphans.iter().map(|e| format!("- {}", e.label)).collect::<Vec<_>>().join("\n");
+            let orphan_list = orphans
+                .iter()
+                .map(|e| format!("- {}", e.label))
+                .collect::<Vec<_>>()
+                .join("\n");
             let prompt = RELATION_GLEANING_PROMPT
                 .replace("{orphans}", &orphan_list)
                 .replace("{relationship_types}", &rescue_rel_types);
@@ -313,9 +326,14 @@ impl SimpleExtractor {
 /// it does not require the entities to be re-declared in this response — the
 /// rescue round emits relationships only. Edges with an unknown endpoint are
 /// dropped (no dangling/hallucinated nodes).
-pub(crate) fn parse_relations_against(output: &str, known: &HashMap<String, Entity>) -> Vec<Triple> {
-    let id_map: HashMap<String, String> =
-        known.values().map(|e| (normalize_key(&e.label), e.id.clone())).collect();
+pub(crate) fn parse_relations_against(
+    output: &str,
+    known: &HashMap<String, Entity>,
+) -> Vec<Triple> {
+    let id_map: HashMap<String, String> = known
+        .values()
+        .map(|e| (normalize_key(&e.label), e.id.clone()))
+        .collect();
 
     let mut triples = Vec::new();
     for item in split_to_items(output) {
@@ -349,10 +367,14 @@ pub(crate) fn parse_relations_against(output: &str, known: &HashMap<String, Enti
         let predicate = Predicate::with_label(predicate_type, label);
         let mut t = Triple::new(s.clone(), predicate, o.clone());
         t.confidence = Some(rel.strength);
-        t.metadata.insert("description".into(), serde_json::json!(rel.description));
-        t.metadata.insert("source_name".into(), serde_json::json!(rel.source_name));
-        t.metadata.insert("target_name".into(), serde_json::json!(rel.target_name));
-        t.metadata.insert("relation_gleaned".into(), serde_json::json!(true));
+        t.metadata
+            .insert("description".into(), serde_json::json!(rel.description));
+        t.metadata
+            .insert("source_name".into(), serde_json::json!(rel.source_name));
+        t.metadata
+            .insert("target_name".into(), serde_json::json!(rel.target_name));
+        t.metadata
+            .insert("relation_gleaned".into(), serde_json::json!(true));
         triples.push(t);
     }
     triples
@@ -365,22 +387,50 @@ impl Extractor for SimpleExtractor {
 
         // Segment only when the text exceeds segment_size; otherwise a single
         // chunk preserves the original single-shot + gleaning behaviour exactly.
-        let chunks: Vec<String> = if text.chars().count() > self.config.segment_size {
-            segment(text, self.config.chunker, self.config.segment_size, self.config.overlap)
-                .into_iter()
-                .enumerate()
-                .filter(|(i, s)| !(s.content.chars().count() < self.config.min_segment_size && *i > 0))
-                .map(|(_, s)| s.content)
-                .collect()
+        // Each chunk keeps its char offsets so provenance can be line-mapped.
+        let chunks: Vec<(String, usize, usize)> = if text.chars().count() > self.config.segment_size
+        {
+            segment(
+                text,
+                self.config.chunker,
+                self.config.segment_size,
+                self.config.overlap,
+            )
+            .into_iter()
+            .enumerate()
+            .filter(|(i, s)| !(s.content.chars().count() < self.config.min_segment_size && *i > 0))
+            .map(|(_, s)| (s.content, s.start, s.end))
+            .collect()
         } else {
-            vec![text.to_string()]
+            let len = text.chars().count();
+            vec![(text.to_string(), 0, len)]
         };
+
+        #[cfg(feature = "citations")]
+        let line_index = crate::citation::LineIndex::new(text);
+        #[cfg(feature = "citations")]
+        let line_index = &line_index;
 
         // Extract chunks concurrently. LLM calls are I/O-bound, so `buffered`
         // runs up to `max_concurrency` in flight while preserving chunk order.
         let max_conc = self.config.max_concurrency.max(1);
         let per_chunk: Vec<(Vec<ParsedResult>, KnowledgeGraph)> = stream::iter(chunks)
-            .map(|chunk| async move { self.extract_chunk(&chunk).await })
+            .map(|(chunk, _start, _end)| async move {
+                let result = self.extract_chunk(&chunk).await;
+                #[cfg(feature = "citations")]
+                let result = {
+                    let (prs, mut kg) = result;
+                    let (start_line, end_line) = line_index.line_range(_start, _end);
+                    let cite = crate::citation::Citation::new(
+                        self.config.source_doc.clone(),
+                        start_line,
+                        end_line,
+                    );
+                    crate::citation::stamp_graph(&mut kg, &cite);
+                    (prs, kg)
+                };
+                result
+            })
             .buffered(max_conc)
             .collect()
             .await;
@@ -457,7 +507,8 @@ pub(crate) fn parse_output(output: &str, _config: &ExtractionConfig) -> ParsedRe
 
     let mut triples = Vec::new();
     for rel in &relationships {
-        let (Some(s), Some(o)) = (entities.get(&rel.source_id), entities.get(&rel.target_id)) else {
+        let (Some(s), Some(o)) = (entities.get(&rel.source_id), entities.get(&rel.target_id))
+        else {
             continue;
         };
         let predicate_type = infer_predicate_type(&rel.description);
@@ -465,9 +516,12 @@ pub(crate) fn parse_output(output: &str, _config: &ExtractionConfig) -> ParsedRe
         let predicate = Predicate::with_label(predicate_type, label);
         let mut t = Triple::new(s.clone(), predicate, o.clone());
         t.confidence = Some(rel.strength);
-        t.metadata.insert("description".into(), serde_json::json!(rel.description));
-        t.metadata.insert("source_name".into(), serde_json::json!(rel.source_name));
-        t.metadata.insert("target_name".into(), serde_json::json!(rel.target_name));
+        t.metadata
+            .insert("description".into(), serde_json::json!(rel.description));
+        t.metadata
+            .insert("source_name".into(), serde_json::json!(rel.source_name));
+        t.metadata
+            .insert("target_name".into(), serde_json::json!(rel.target_name));
         triples.push(t);
     }
 
@@ -509,7 +563,10 @@ pub(crate) fn entity_type_tokens(output: &str) -> HashMap<String, String> {
         if name.is_empty() {
             continue;
         }
-        let type_token = parts[2].trim().trim_matches(|c| "<> \"*#".contains(c)).to_string();
+        let type_token = parts[2]
+            .trim()
+            .trim_matches(|c| "<> \"*#".contains(c))
+            .to_string();
         out.insert(normalize_key(&name), type_token);
     }
     out
@@ -576,7 +633,10 @@ fn parse_entity_item(item: &str) -> Option<Entity> {
     if name.is_empty() {
         return None;
     }
-    let type_clean = type_str.trim().trim_matches(|c| "<> \"*#".contains(c)).to_lowercase();
+    let type_clean = type_str
+        .trim()
+        .trim_matches(|c| "<> \"*#".contains(c))
+        .to_lowercase();
     let description = clean_description(description);
     let metadata = parse_attributes_string(attrs);
 
@@ -611,8 +671,14 @@ fn parse_relationship_item(item: &str, id_map: &HashMap<String, String>) -> Opti
     let strength = components
         .get(3)
         .map(|s| {
-            let digits: String = s.chars().filter(|c| c.is_ascii_digit() || *c == '.').collect();
-            digits.parse::<f64>().map(|f| f.clamp(0.0, 1.0)).unwrap_or(0.8)
+            let digits: String = s
+                .chars()
+                .filter(|c| c.is_ascii_digit() || *c == '.')
+                .collect();
+            digits
+                .parse::<f64>()
+                .map(|f| f.clamp(0.0, 1.0))
+                .unwrap_or(0.8)
         })
         .unwrap_or(0.8);
 
@@ -650,7 +716,9 @@ fn resolve_entity_id(name: &str, id_map: &HashMap<String, String>) -> String {
 fn clean_entity_name(name: &str) -> String {
     let name = name.trim_matches(|c| "<> \"'".contains(c));
     let no_quotes = Regex::new(r#"["'`]"#).unwrap().replace_all(name, "");
-    let collapsed = Regex::new(r"\s+").unwrap().replace_all(no_quotes.trim(), " ");
+    let collapsed = Regex::new(r"\s+")
+        .unwrap()
+        .replace_all(no_quotes.trim(), " ");
     title_case(collapsed.trim())
 }
 
@@ -660,7 +728,9 @@ fn clean_description(desc: &str) -> String {
     }
     let d = desc.trim_matches(|c| "<> \"'".contains(c));
     let d = Regex::new(r#"["'<>]"#).unwrap().replace_all(d, "");
-    let d = Regex::new(r"\)\*\*|\*\*|\*\*##|\)").unwrap().replace_all(d.trim(), "");
+    let d = Regex::new(r"\)\*\*|\*\*|\*\*##|\)")
+        .unwrap()
+        .replace_all(d.trim(), "");
     let d = Regex::new(r"\s+").unwrap().replace_all(d.trim(), " ");
     let out = d.trim().to_string();
     if out.is_empty() {
@@ -675,7 +745,10 @@ fn title_case(s: &str) -> String {
         .map(|w| {
             let mut chars = w.chars();
             match chars.next() {
-                Some(c) => c.to_uppercase().chain(chars.flat_map(|c| c.to_lowercase())).collect(),
+                Some(c) => c
+                    .to_uppercase()
+                    .chain(chars.flat_map(|c| c.to_lowercase()))
+                    .collect(),
                 None => String::new(),
             }
         })
@@ -783,7 +856,10 @@ mod tests {
         let out = ex.extract("OpenAI developed GPT-4.").await.unwrap();
         assert_eq!(out.num_entities(), 2);
         assert_eq!(out.num_triples(), 1);
-        assert_eq!(out.knowledge_graph.triples[0].predicate.predicate_type, PredicateType::Uses);
+        assert_eq!(
+            out.knowledge_graph.triples[0].predicate.predicate_type,
+            PredicateType::Uses
+        );
     }
 
     #[tokio::test]
@@ -801,10 +877,17 @@ mod tests {
 
         let out = ex.extract("OpenAI developed GPT-4.").await.unwrap();
         assert_eq!(out.num_entities(), 2);
-        assert_eq!(out.num_triples(), 1, "the orphan rescue round should add the edge");
+        assert_eq!(
+            out.num_triples(),
+            1,
+            "the orphan rescue round should add the edge"
+        );
         let t = &out.knowledge_graph.triples[0];
         assert_eq!(t.predicate.predicate_type, PredicateType::Uses);
-        assert_eq!(t.metadata.get("relation_gleaned"), Some(&serde_json::json!(true)));
+        assert_eq!(
+            t.metadata.get("relation_gleaned"),
+            Some(&serde_json::json!(true))
+        );
     }
 
     #[tokio::test]
@@ -828,7 +911,10 @@ mod tests {
             (entity<|>GPT-4<|>technology<|>A model.<|>)##\
             (relationship<|>OpenAI<|>GPT-4<|>uses<|>OpenAI is the parent entity of GPT-4.<|>0.9)##";
         let backend = Arc::new(MockBackend::new(vec![resp.into(), String::new()]));
-        let out = SimpleExtractor::new(backend).extract("OpenAI and GPT-4.").await.unwrap();
+        let out = SimpleExtractor::new(backend)
+            .extract("OpenAI and GPT-4.")
+            .await
+            .unwrap();
         assert_eq!(out.num_entities(), 2);
         assert_eq!(
             out.num_triples(),
@@ -842,8 +928,14 @@ mod tests {
         // A stray `]` previously drove the depth counter negative, suppressing
         // every comma split so the whole attribute set was lost.
         let attrs = parse_attributes_string("role: lead], team: platform");
-        assert!(attrs.contains_key("role"), "first attribute must survive: {attrs:?}");
-        assert!(attrs.contains_key("team"), "later attribute must survive: {attrs:?}");
+        assert!(
+            attrs.contains_key("role"),
+            "first attribute must survive: {attrs:?}"
+        );
+        assert!(
+            attrs.contains_key("team"),
+            "later attribute must survive: {attrs:?}"
+        );
     }
 
     #[test]
@@ -875,11 +967,86 @@ mod tests {
         let text = "a".repeat(20) + &"b".repeat(20);
         let out = ex.extract(&text).await.unwrap();
 
-        let labels: Vec<&str> =
-            out.knowledge_graph.entities.values().map(|e| e.label.as_str()).collect();
-        assert!(labels.contains(&"Alpha"), "chunk 0 entity must be present: {labels:?}");
-        assert!(labels.contains(&"Beta"), "chunk 1 entity must be present: {labels:?}");
+        let labels: Vec<&str> = out
+            .knowledge_graph
+            .entities
+            .values()
+            .map(|e| e.label.as_str())
+            .collect();
+        assert!(
+            labels.contains(&"Alpha"),
+            "chunk 0 entity must be present: {labels:?}"
+        );
+        assert!(
+            labels.contains(&"Beta"),
+            "chunk 1 entity must be present: {labels:?}"
+        );
         assert_eq!(out.num_entities(), 2);
+    }
+
+    /// End-to-end provenance: chunked extraction stamps every record with the
+    /// chunk's doc + line range, and merging a duplicate entity unions the
+    /// citations from both chunks.
+    #[cfg(feature = "citations")]
+    #[tokio::test]
+    async fn citations_stamp_chunk_line_ranges_and_union_on_merge() {
+        use crate::citation::CITATIONS_KEY;
+        use crate::types::ChunkStrategy;
+
+        // Both chunks mention Alpha → after dedup its citations must cover both
+        // chunk ranges; Beta appears only in chunk 1.
+        let r0 = "(entity<|>Alpha<|>organization<|>First chunk entity.<|>)##";
+        let r1 = "(entity<|>Alpha<|>organization<|>Also here.<|>)##\
+            (entity<|>Beta<|>organization<|>Second chunk entity.<|>)##";
+        let backend = Arc::new(MockBackend::new(vec![r0.into(), r1.into()]));
+
+        let mut cfg = SimpleExtractor::default_config();
+        cfg.segment_size = 20;
+        cfg.overlap = 0;
+        cfg.min_segment_size = 1;
+        cfg.chunker = ChunkStrategy::Char;
+        cfg.max_concurrency = 1; // sequential → deterministic response order
+        cfg.source_doc = Some("doc.md".into());
+        let mut ex = SimpleExtractor::with_config(backend, cfg);
+        ex.max_gleanings = 0;
+
+        // 4 lines of 10 chars each ("aaaaaaaaa\n" ×2 + "bbbbbbbbb\n" ×2) → two
+        // 20-char Char chunks: chunk 0 = lines 1-2, chunk 1 = lines 3-4.
+        let text = format!(
+            "{}\n{}\n{}\n{}\n",
+            "a".repeat(9),
+            "a".repeat(9),
+            "b".repeat(9),
+            "b".repeat(9)
+        );
+        let out = ex.extract(&text).await.unwrap();
+
+        let by_label = |label: &str| {
+            out.knowledge_graph
+                .entities
+                .values()
+                .find(|e| e.label == label)
+                .unwrap_or_else(|| panic!("{label} missing"))
+                .metadata
+                .get(CITATIONS_KEY)
+                .and_then(|v| v.as_array())
+                .unwrap_or_else(|| panic!("{label} has no citations"))
+                .clone()
+        };
+
+        let alpha = by_label("Alpha");
+        assert_eq!(
+            alpha.len(),
+            2,
+            "Alpha in both chunks must cite both: {alpha:?}"
+        );
+        assert_eq!(alpha[0]["doc"], "doc.md");
+        assert_eq!(alpha[0]["lines"], serde_json::json!([1, 2]));
+        assert_eq!(alpha[1]["lines"], serde_json::json!([3, 4]));
+
+        let beta = by_label("Beta");
+        assert_eq!(beta.len(), 1);
+        assert_eq!(beta[0]["lines"], serde_json::json!([3, 4]));
     }
 
     #[test]
@@ -891,7 +1058,10 @@ mod tests {
             (entity<|>Widget X<|>GADGET<|>A custom thing.<|>)##\
             (relationship<|>OpenAI<|>Widget X<|>builds<|>they build it<|>0.9)";
         let tokens = entity_type_tokens(output);
-        assert_eq!(tokens.get("openai").map(String::as_str), Some("organization"));
+        assert_eq!(
+            tokens.get("openai").map(String::as_str),
+            Some("organization")
+        );
         assert_eq!(tokens.get("widget x").map(String::as_str), Some("GADGET"));
         assert_eq!(tokens.len(), 2, "relationship record must not appear");
     }

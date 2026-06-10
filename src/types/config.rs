@@ -42,6 +42,10 @@ pub struct ExtractionConfig {
     /// cooperative concurrency (not CPU parallelism). `1` = sequential.
     #[serde(default = "default_max_concurrency")]
     pub max_concurrency: usize,
+    /// Document name recorded in provenance citations (only consulted when
+    /// built with the `citations` feature; the CLI sets it from `-f`).
+    #[serde(default)]
+    pub source_doc: Option<String>,
 }
 
 fn default_max_concurrency() -> usize {
@@ -57,13 +61,17 @@ impl Default for ExtractionConfig {
             Vec::new(),
         );
         ExtractionConfig {
-            spec: ExtractionSpec { schema, ..Default::default() },
+            spec: ExtractionSpec {
+                schema,
+                ..Default::default()
+            },
             segment_size: 3000,
             overlap: 200,
             model_name: "qwen-max".to_string(),
             min_segment_size: 100,
             chunker: ChunkStrategy::default(),
             max_concurrency: default_max_concurrency(),
+            source_doc: None,
         }
     }
 }
@@ -72,7 +80,13 @@ impl ExtractionConfig {
     /// Build from an explicit schema (the empty schema is left as-is rather than
     /// seeded with defaults — mirrors `ExtractionConfig.from_schema`).
     pub fn from_schema(schema: Schema) -> Self {
-        ExtractionConfig { spec: ExtractionSpec { schema, ..Default::default() }, ..Default::default() }
+        ExtractionConfig {
+            spec: ExtractionSpec {
+                schema,
+                ..Default::default()
+            },
+            ..Default::default()
+        }
     }
 
     /// Build from legacy entity/predicate string lists (`from_legacy`).
@@ -82,7 +96,10 @@ impl ExtractionConfig {
 
     /// Build with the given declarative spec and default execution params.
     pub fn from_spec(spec: ExtractionSpec) -> Self {
-        ExtractionConfig { spec, ..Default::default() }
+        ExtractionConfig {
+            spec,
+            ..Default::default()
+        }
     }
 
     pub fn entity_types_list(&self) -> &[String] {
@@ -106,7 +123,11 @@ pub struct ExtractionRequest {
 
 impl ExtractionRequest {
     pub fn new(text: impl Into<String>, config: ExtractionConfig) -> Self {
-        ExtractionRequest { text: text.into(), config, metadata: HashMap::new() }
+        ExtractionRequest {
+            text: text.into(),
+            config,
+            metadata: HashMap::new(),
+        }
     }
 }
 

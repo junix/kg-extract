@@ -7,11 +7,20 @@ use crate::backend::{CompletionOptions, LlmBackend, Message};
 use crate::graph_build::GraphBuilder;
 use crate::parser::extract_json_from_response;
 use crate::types::{
-    EntityType, ExtractionConfig, ExtractionResponse, ExtractionSpec, KnowledgeGraph, MergeStrategy,
-    Predicate, PredicateType, Schema,
+    EntityType, ExtractionConfig, ExtractionResponse, ExtractionSpec, KnowledgeGraph,
+    MergeStrategy, Predicate, PredicateType, Schema,
 };
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
+
+/// Direction rule shared by every schema-json system prompt: triples must read
+/// left-to-right as a true sentence, so passive `*_BY` predicates are not
+/// emitted reversed ("Dario Amodei FOUNDED_BY Anthropic").
+const DIRECTION_RULE: &str = "Direction rule: each [\"subject\", \"predicate\", \"object\"] triple must read left-to-right as a TRUE sentence. \
+EVERY predicate ending in _BY (FOUNDED_BY, DEVELOPED_BY, CREATED_BY, INVENTED_BY, PUBLISHED_BY, ...) is passive: the subject is the thing acted on, the object is the doer \
+([\"Anthropic\", \"FOUNDED_BY\", \"Dario Amodei\"], never [\"Dario Amodei\", \"FOUNDED_BY\", \"Anthropic\"]); a person is never the subject of a *_BY triple about their own work. \
+Active predicates (FOUNDED, DEVELOPED, USES) point from the doer to the thing. \
+If the sentence is false as written, swap subject and object or pick the opposite-voice predicate.";
 
 /// Schema-based knowledge graph extractor.
 pub struct SchemaJsonExtractor {
@@ -39,7 +48,10 @@ impl SchemaJsonExtractor {
     pub fn default_config() -> ExtractionConfig {
         // SchemaJson base config starts from an EMPTY schema (no default seeding).
         ExtractionConfig {
-            spec: ExtractionSpec { schema: Schema::default(), ..Default::default() },
+            spec: ExtractionSpec {
+                schema: Schema::default(),
+                ..Default::default()
+            },
             model_name: "qwen-max".into(),
             segment_size: 3000,
             min_segment_size: 100,
@@ -48,11 +60,19 @@ impl SchemaJsonExtractor {
     }
 
     pub fn new(backend: Arc<dyn LlmBackend>) -> Self {
-        SchemaJsonExtractor { backend, config: Self::default_config(), quiet: false }
+        SchemaJsonExtractor {
+            backend,
+            config: Self::default_config(),
+            quiet: false,
+        }
     }
 
     pub fn with_config(backend: Arc<dyn LlmBackend>, config: ExtractionConfig) -> Self {
-        SchemaJsonExtractor { backend, config, quiet: false }
+        SchemaJsonExtractor {
+            backend,
+            config,
+            quiet: false,
+        }
     }
 
     /// Build from a declarative [`ExtractionSpec`] with SchemaJson's default execution
@@ -86,13 +106,16 @@ impl SchemaJsonExtractor {
         let schema_json = serde_json::to_string(&schema).unwrap_or_default();
 
         match self.config.spec.mode {
-            SchemaMode::Open => "Extract entities and relationships from the user's text.\n\
+            SchemaMode::Open => format!(
+                "Extract entities and relationships from the user's text.\n\
 No predefined schema is given — infer suitable entity types and relation types from the content.\n\n\
 Output JSON with:\n\
-1. \"entities\": {\"entity_name\": {\"type\": \"EntityType\", \"attributes\": {\"attr\": \"value\"}}}\n\
+1. \"entities\": {{\"entity_name\": {{\"type\": \"EntityType\", \"attributes\": {{\"attr\": \"value\"}}}}}}\n\
 2. \"relationships\": [[\"subject\", \"predicate\", \"object\"]]\n\
-3. \"entity_types\": {\"entity_name\": \"type\"} (map entities to their types)\n\n\
-Ensure valid JSON output.".to_string(),
+3. \"entity_types\": {{\"entity_name\": \"type\"}} (map entities to their types)\n\n\
+{DIRECTION_RULE}\n\
+Ensure valid JSON output."
+            ),
             SchemaMode::Fixed => format!(
                 "Extract entities and relationships from the user's text using the provided schema.\n\n\
 Schema:\n{schema_json}\n\n\
@@ -101,6 +124,7 @@ Output JSON with:\n\
 2. \"relationships\": [[\"subject\", \"predicate\", \"object\"]]\n\
 3. \"entity_types\": {{\"entity_name\": \"type\"}} (map entities to their types)\n\n\
 Use only the entity types and relations from the schema.\n\
+{DIRECTION_RULE}\n\
 Ensure valid JSON output."
             ),
             SchemaMode::Evolving => format!(
@@ -112,6 +136,7 @@ Output JSON with:\n\
 2. \"relationships\": [[\"subject\", \"predicate\", \"object\"]]\n\
 3. \"entity_types\": {{\"entity_name\": \"type\"}} (map entities to their types)\n\
 4. \"new_schema_types\": {{\"nodes\": [], \"relations\": [], \"attributes\": []}} (if suggesting new types)\n\n\
+{DIRECTION_RULE}\n\
 Ensure valid JSON output."
             ),
         }
@@ -165,8 +190,10 @@ Ensure valid JSON output."
                     .replace([' ', '-'], "_")
                     .parse::<EntityType>()
                     .unwrap_or(EntityType::PhysicalObject);
-                let description =
-                    attributes.get("description").and_then(|v| v.as_str()).map(String::from);
+                let description = attributes
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .map(String::from);
                 // GraphBuilder keys by lowercased name, so a relationship that
                 // references the entity with different casing still resolves.
                 gb.add_entity(name, entity_type, description, attributes);
@@ -208,10 +235,18 @@ Ensure valid JSON output."
     /// node or no relation types) leaves that half unconstrained. Returns the
     /// pruned data and what was removed.
     fn enforce_fixed(&self, data: &serde_json::Value) -> (serde_json::Value, FixedDrops) {
-        let nodes: HashSet<String> =
-            self.config.entity_types_list().iter().map(|s| norm_type(s)).collect();
-        let rels: HashSet<String> =
-            self.config.predicates_list().iter().map(|s| norm_type(s)).collect();
+        let nodes: HashSet<String> = self
+            .config
+            .entity_types_list()
+            .iter()
+            .map(|s| norm_type(s))
+            .collect();
+        let rels: HashSet<String> = self
+            .config
+            .predicates_list()
+            .iter()
+            .map(|s| norm_type(s))
+            .collect();
         let entity_types = data.get("entity_types").and_then(|v| v.as_object());
         let mut drops = FixedDrops::default();
 
@@ -311,8 +346,10 @@ impl Extractor for SchemaJsonExtractor {
             let prompt = crate::template::render_prompt(tpl, &lang, text);
             self.backend.complete_prompt(&prompt, &opts).await
         } else {
-            let messages =
-                [Message::system(self.build_system_prompt()), Message::user(format!("Text:\n{text}"))];
+            let messages = [
+                Message::system(self.build_system_prompt()),
+                Message::user(format!("Text:\n{text}")),
+            ];
             self.backend.complete(&messages, &opts).await
         };
         let response = match call {
@@ -331,24 +368,37 @@ impl Extractor for SchemaJsonExtractor {
         // Fixed mode is now hard: drop whatever the model emitted outside the
         // schema instead of only asking it to comply. No-op for Open/Evolving,
         // or when the schema is empty (e.g. a template-driven Fixed run).
-        let fixed_drops = if self.config.spec.mode == SchemaMode::Fixed
-            && !self.config.spec.schema.is_empty()
-        {
-            Some(self.enforce_fixed(&data))
-        } else {
-            None
-        };
+        let fixed_drops =
+            if self.config.spec.mode == SchemaMode::Fixed && !self.config.spec.schema.is_empty() {
+                Some(self.enforce_fixed(&data))
+            } else {
+                None
+            };
         let data = match &fixed_drops {
             Some((filtered, _)) => filtered,
             None => &data,
         };
 
-        let kg = self.build_graph(data);
+        #[allow(unused_mut)]
+        let mut kg = self.build_graph(data);
+        // Single-shot over the whole text, so provenance is whole-document.
+        #[cfg(feature = "citations")]
+        {
+            let li = crate::citation::LineIndex::new(text);
+            let cite =
+                crate::citation::Citation::new(self.config.source_doc.clone(), 1, li.total_lines());
+            crate::citation::stamp_graph(&mut kg, &cite);
+        }
 
         let mut resp = ExtractionResponse::new(kg);
-        resp.metadata.insert("model".into(), serde_json::json!(self.config.model_name));
-        resp.metadata.insert("mode".into(), serde_json::json!("schema_json"));
-        resp.metadata.insert("schema_mode".into(), serde_json::json!(self.config.spec.mode.as_str()));
+        resp.metadata
+            .insert("model".into(), serde_json::json!(self.config.model_name));
+        resp.metadata
+            .insert("mode".into(), serde_json::json!("schema_json"));
+        resp.metadata.insert(
+            "schema_mode".into(),
+            serde_json::json!(self.config.spec.mode.as_str()),
+        );
         resp.metadata.insert(
             "schema_used".into(),
             serde_json::json!({
@@ -358,7 +408,8 @@ impl Extractor for SchemaJsonExtractor {
             }),
         );
         if let Some(new_schema) = data.get("new_schema_types") {
-            resp.metadata.insert("new_schema_types".into(), new_schema.clone());
+            resp.metadata
+                .insert("new_schema_types".into(), new_schema.clone());
         }
         if let Some((_, drops)) = &fixed_drops {
             if !self.quiet && drops.records > 0 {
@@ -366,10 +417,17 @@ impl Extractor for SchemaJsonExtractor {
                 eprintln!(
                     "schema-json: dropped {} out-of-schema record(s){}",
                     drops.records,
-                    if csv.is_empty() { String::new() } else { format!(": {csv}") }
+                    if csv.is_empty() {
+                        String::new()
+                    } else {
+                        format!(": {csv}")
+                    }
                 );
             }
-            resp.metadata.insert("schema_dropped_records".into(), serde_json::json!(drops.records));
+            resp.metadata.insert(
+                "schema_dropped_records".into(),
+                serde_json::json!(drops.records),
+            );
             resp.metadata.insert(
                 "schema_dropped_types".into(),
                 serde_json::json!(drops.types.iter().cloned().collect::<Vec<_>>()),
@@ -408,7 +466,13 @@ mod tests {
             "openai": {"type": "ORGANIZATION", "attributes": {"description": "second"}}
         }, "relationships": []}"#;
         let desc_of = |r: &ExtractionResponse| {
-            r.knowledge_graph.entities.values().next().unwrap().description.clone()
+            r.knowledge_graph
+                .entities
+                .values()
+                .next()
+                .unwrap()
+                .description
+                .clone()
         };
 
         // Default KeepExisting: first occurrence wins (historical behaviour).
@@ -421,7 +485,10 @@ mod tests {
 
         // KeepIncoming: the later duplicate's data must replace it — proving the
         // strategy is actually applied in the schema-json path.
-        let spec = ExtractionSpec { merge_strategy: MergeStrategy::KeepIncoming, ..Default::default() };
+        let spec = ExtractionSpec {
+            merge_strategy: MergeStrategy::KeepIncoming,
+            ..Default::default()
+        };
         let inc = SchemaJsonExtractor::with_spec(Arc::new(MockBackend::single(json)), spec)
             .extract("OpenAI")
             .await
@@ -462,7 +529,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.num_entities(), 2);
-        assert_eq!(out.num_triples(), 1, "relationship must resolve despite case mismatch");
+        assert_eq!(
+            out.num_triples(),
+            1,
+            "relationship must resolve despite case mismatch"
+        );
     }
 
     #[tokio::test]
@@ -478,7 +549,10 @@ mod tests {
             .unwrap();
         let ka: Vec<&String> = a.knowledge_graph.entities.keys().collect();
         let kb: Vec<&String> = b.knowledge_graph.entities.keys().collect();
-        assert_eq!(ka, kb, "SchemaJson entity ids must be deterministic across runs");
+        assert_eq!(
+            ka, kb,
+            "SchemaJson entity ids must be deterministic across runs"
+        );
         let expected = entity_id("OpenAI");
         assert!(
             a.knowledge_graph.entities.contains_key(&expected),
@@ -540,8 +614,16 @@ mod tests {
             .extract("text")
             .await
             .unwrap();
-        assert_eq!(out.num_entities(), 1, "only the ORGANIZATION entity survives");
-        assert_eq!(out.num_triples(), 0, "USES is out-of-schema; DEVELOPED_BY loses its endpoint");
+        assert_eq!(
+            out.num_entities(),
+            1,
+            "only the ORGANIZATION entity survives"
+        );
+        assert_eq!(
+            out.num_triples(),
+            0,
+            "USES is out-of-schema; DEVELOPED_BY loses its endpoint"
+        );
         // 1 entity (TECHNOLOGY) + 2 relations (USES type, DEVELOPED_BY endpoint).
         assert_eq!(out.metadata["schema_dropped_records"], serde_json::json!(3));
         let dropped = out.metadata["schema_dropped_types"].as_array().unwrap();
@@ -599,13 +681,25 @@ mod tests {
         // A single declarative spec configures either mechanism (with_spec) —
         // the spec/execution split: define the contract once, pick the executor.
         let spec = ExtractionSpec::new(
-            Schema::new(vec!["ORGANIZATION".into()], vec!["DEVELOPED_BY".into()], vec![]),
+            Schema::new(
+                vec!["ORGANIZATION".into()],
+                vec!["DEVELOPED_BY".into()],
+                vec![],
+            ),
             SchemaMode::Fixed,
         );
         let sj = SchemaJsonExtractor::with_spec(Arc::new(MockBackend::single("{}")), spec.clone());
         let tool = ToolCallExtractor::with_spec(Arc::new(MockBackend::single("{}")), spec.clone());
-        assert_eq!(sj.config().spec, spec, "SchemaJson must carry the spec verbatim");
-        assert_eq!(tool.config().spec, spec, "ToolCall must carry the same spec");
+        assert_eq!(
+            sj.config().spec,
+            spec,
+            "SchemaJson must carry the spec verbatim"
+        );
+        assert_eq!(
+            tool.config().spec,
+            spec,
+            "ToolCall must carry the same spec"
+        );
         // Execution params stay engine-specific (both default to qwen-max here,
         // but the segment sizes differ: 3000 vs 5000).
         assert_eq!(sj.config().segment_size, 3000);

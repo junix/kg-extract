@@ -18,9 +18,7 @@
 //! `list_entities`) are fed back so the model can avoid dangling relations.
 
 use super::{validate_input, Extractor, SchemaMode};
-use crate::backend::{
-    CompletionOptions, LlmBackend, Message, ToolInvocation, ToolSpec,
-};
+use crate::backend::{CompletionOptions, LlmBackend, Message, ToolInvocation, ToolSpec};
 use crate::graph_build::{build_predicate, parse_entity_type, GraphBuilder};
 use crate::merger::dedup_graph;
 use crate::types::{
@@ -46,7 +44,10 @@ impl ToolCallExtractor {
         // default `Open` mode applies no enum constraints, and `Fixed`/`Evolving`
         // take an explicit schema.
         ExtractionConfig {
-            spec: ExtractionSpec { schema: Schema::default(), ..Default::default() },
+            spec: ExtractionSpec {
+                schema: Schema::default(),
+                ..Default::default()
+            },
             model_name: "qwen-max".into(),
             segment_size: 5000,
             min_segment_size: 100,
@@ -55,11 +56,21 @@ impl ToolCallExtractor {
     }
 
     pub fn new(backend: Arc<dyn LlmBackend>) -> Self {
-        ToolCallExtractor { backend, config: Self::default_config(), max_rounds: 1, quiet: false }
+        ToolCallExtractor {
+            backend,
+            config: Self::default_config(),
+            max_rounds: 1,
+            quiet: false,
+        }
     }
 
     pub fn with_config(backend: Arc<dyn LlmBackend>, config: ExtractionConfig) -> Self {
-        ToolCallExtractor { backend, config, max_rounds: 1, quiet: false }
+        ToolCallExtractor {
+            backend,
+            config,
+            max_rounds: 1,
+            quiet: false,
+        }
     }
 
     /// Build from a declarative [`ExtractionSpec`] with ToolCall's default
@@ -147,13 +158,13 @@ impl ToolCallExtractor {
             },
             ToolSpec {
                 name: "add_relation".into(),
-                description: "Record a relationship between two entities (call add_entity for both first).".into(),
+                description: "Record a relationship between two entities (call add_entity for both first). Direction rule: \"source predicate target\" must read as a TRUE sentence — EVERY predicate ending in _BY (FOUNDED_BY, DEVELOPED_BY, CREATED_BY, INVENTED_BY, PUBLISHED_BY, ...) is passive and points from the thing acted on to the doer (source=Anthropic, predicate=FOUNDED_BY, target=Dario Amodei); a person is never the source of a *_BY relation about their own work. Active predicates point from the doer to the thing. If the sentence is false as written, swap source and target or pick the opposite-voice predicate.".into(),
                 parameters: serde_json::json!({
                     "type": "object",
                     "properties": {
-                        "source": {"type": "string", "description": "Source entity name"},
+                        "source": {"type": "string", "description": "Source entity name. For *_BY predicates this is the thing acted on, not the doer."},
                         "predicate": predicate_schema,
-                        "target": {"type": "string", "description": "Target entity name"},
+                        "target": {"type": "string", "description": "Target entity name. For *_BY predicates this is the doer."},
                         "description": {"type": "string"},
                         "strength": {"type": "number", "description": "Confidence 0..1"}
                     },
@@ -282,12 +293,17 @@ impl ToolCallExtractor {
                 "ok: relation recorded".into()
             }
             "add_attribute" => {
-                let (Some(entity), Some(key)) =
-                    (arg_str(&call.arguments, "entity"), arg_str(&call.arguments, "key"))
-                else {
+                let (Some(entity), Some(key)) = (
+                    arg_str(&call.arguments, "entity"),
+                    arg_str(&call.arguments, "key"),
+                ) else {
                     return "error: entity/key required".into();
                 };
-                let value = call.arguments.get("value").cloned().unwrap_or(serde_json::Value::Null);
+                let value = call
+                    .arguments
+                    .get("value")
+                    .cloned()
+                    .unwrap_or(serde_json::Value::Null);
                 acc.attributes.push((entity, key, value));
                 "ok: attribute recorded".into()
             }
@@ -340,12 +356,18 @@ impl ToolCallExtractor {
         // confidence/description. Before attributes, since add_triple re-inserts
         // its endpoint entities and would otherwise clobber enriched copies.
         for rel in &acc.relations {
-            gb.add_relation(&rel.source, build_predicate(&rel.predicate), &rel.target, |t| {
-                t.confidence = Some(rel.strength);
-                if let Some(d) = &rel.description {
-                    t.metadata.insert("description".into(), serde_json::json!(d));
-                }
-            });
+            gb.add_relation(
+                &rel.source,
+                build_predicate(&rel.predicate),
+                &rel.target,
+                |t| {
+                    t.confidence = Some(rel.strength);
+                    if let Some(d) = &rel.description {
+                        t.metadata
+                            .insert("description".into(), serde_json::json!(d));
+                    }
+                },
+            );
         }
 
         // Standalone attributes last so they survive add_triple re-inserts.
@@ -381,12 +403,17 @@ impl Extractor for ToolCallExtractor {
             max_tokens: 4000,
         };
         // Schema lives in the system prompt; the user turn carries only the text.
-        let user = format!("Extract a knowledge graph from the text below using the tools.\n\nText:\n{text}");
+        let user = format!(
+            "Extract a knowledge graph from the text below using the tools.\n\nText:\n{text}"
+        );
         let mut messages = vec![Message::system(self.system_prompt()), Message::user(user)];
 
         let mut acc = Accumulator::default();
         for _ in 0..self.max_rounds {
-            let resp = self.backend.complete_with_tools(&messages, &tools, &opts).await?;
+            let resp = self
+                .backend
+                .complete_with_tools(&messages, &tools, &opts)
+                .await?;
             if resp.tool_calls.is_empty() {
                 break;
             }
@@ -394,7 +421,10 @@ impl Extractor for ToolCallExtractor {
             // Echo the assistant tool calls so multi-round context stays valid.
             let raw_calls: Vec<serde_json::Value> =
                 resp.tool_calls.iter().map(|c| c.to_openai_json()).collect();
-            messages.push(Message::assistant_with_tool_calls(resp.content.clone(), raw_calls));
+            messages.push(Message::assistant_with_tool_calls(
+                resp.content.clone(),
+                raw_calls,
+            ));
 
             for call in &resp.tool_calls {
                 let result = self.apply_call(&mut acc, call);
@@ -409,11 +439,27 @@ impl Extractor for ToolCallExtractor {
         if self.config.spec.merge_duplicates {
             kg = dedup_graph(kg, self.config.spec.merge_strategy, &self.backend, &opts).await;
         }
+        // Tool calls see the whole text at once, so provenance is whole-document.
+        #[cfg(feature = "citations")]
+        {
+            let li = crate::citation::LineIndex::new(text);
+            let cite =
+                crate::citation::Citation::new(self.config.source_doc.clone(), 1, li.total_lines());
+            crate::citation::stamp_graph(&mut kg, &cite);
+        }
         let mut response = ExtractionResponse::new(kg);
         response.config = Some(self.config.clone());
-        response.metadata.insert("mode".into(), serde_json::json!("toolcall"));
-        response.metadata.insert("schema_mode".into(), serde_json::json!(self.config.spec.mode.as_str()));
-        if !acc.new_nodes.is_empty() || !acc.new_relations.is_empty() || !acc.new_attributes.is_empty() {
+        response
+            .metadata
+            .insert("mode".into(), serde_json::json!("toolcall"));
+        response.metadata.insert(
+            "schema_mode".into(),
+            serde_json::json!(self.config.spec.mode.as_str()),
+        );
+        if !acc.new_nodes.is_empty()
+            || !acc.new_relations.is_empty()
+            || !acc.new_attributes.is_empty()
+        {
             response.metadata.insert(
                 "new_schema_types".into(),
                 serde_json::json!({
@@ -434,16 +480,32 @@ mod tests {
     use crate::types::PredicateType;
 
     fn call(name: &str, args: serde_json::Value) -> ToolInvocation {
-        ToolInvocation { id: format!("c_{name}"), name: name.into(), arguments: args }
+        ToolInvocation {
+            id: format!("c_{name}"),
+            name: name.into(),
+            arguments: args,
+        }
     }
 
     #[tokio::test]
     async fn single_round_collects_tool_calls() {
         let rounds = vec![vec![
-            call("add_entity", serde_json::json!({"name": "OpenAI", "type": "ORGANIZATION"})),
-            call("add_entity", serde_json::json!({"name": "GPT-4", "type": "TECHNOLOGY"})),
-            call("add_relation", serde_json::json!({"source": "OpenAI", "predicate": "DEVELOPED_BY", "target": "GPT-4", "strength": 0.9})),
-            call("add_attribute", serde_json::json!({"entity": "GPT-4", "key": "params", "value": "1.8T"})),
+            call(
+                "add_entity",
+                serde_json::json!({"name": "OpenAI", "type": "ORGANIZATION"}),
+            ),
+            call(
+                "add_entity",
+                serde_json::json!({"name": "GPT-4", "type": "TECHNOLOGY"}),
+            ),
+            call(
+                "add_relation",
+                serde_json::json!({"source": "OpenAI", "predicate": "DEVELOPED_BY", "target": "GPT-4", "strength": 0.9}),
+            ),
+            call(
+                "add_attribute",
+                serde_json::json!({"entity": "GPT-4", "key": "params", "value": "1.8T"}),
+            ),
             call("finish", serde_json::json!({})),
         ]];
         let backend = Arc::new(MockBackend::new(vec![]).with_tool_rounds(rounds));
@@ -451,31 +513,64 @@ mod tests {
         let out = ex.extract("OpenAI developed GPT-4.").await.unwrap();
         assert_eq!(out.num_entities(), 2);
         assert_eq!(out.num_triples(), 1);
-        assert_eq!(out.knowledge_graph.triples[0].predicate.predicate_type, PredicateType::DevelopedBy);
-        let gpt = out.knowledge_graph.entities.values().find(|e| e.label == "GPT-4").unwrap();
+        assert_eq!(
+            out.knowledge_graph.triples[0].predicate.predicate_type,
+            PredicateType::DevelopedBy
+        );
+        let gpt = out
+            .knowledge_graph
+            .entities
+            .values()
+            .find(|e| e.label == "GPT-4")
+            .unwrap();
         assert_eq!(gpt.metadata["params"], serde_json::json!("1.8T"));
     }
 
     #[tokio::test]
     async fn relation_strength_is_clamped() {
         let rounds = vec![vec![
-            call("add_entity", serde_json::json!({"name": "A", "type": "OTHER"})),
-            call("add_entity", serde_json::json!({"name": "B", "type": "OTHER"})),
-            call("add_relation", serde_json::json!({"source": "A", "predicate": "USES", "target": "B", "strength": 5.0})),
+            call(
+                "add_entity",
+                serde_json::json!({"name": "A", "type": "OTHER"}),
+            ),
+            call(
+                "add_entity",
+                serde_json::json!({"name": "B", "type": "OTHER"}),
+            ),
+            call(
+                "add_relation",
+                serde_json::json!({"source": "A", "predicate": "USES", "target": "B", "strength": 5.0}),
+            ),
         ]];
         let backend = Arc::new(MockBackend::new(vec![]).with_tool_rounds(rounds));
-        let out = ToolCallExtractor::new(backend).extract("text").await.unwrap();
-        assert_eq!(out.knowledge_graph.triples[0].confidence, Some(1.0), "strength clamps to 1.0");
+        let out = ToolCallExtractor::new(backend)
+            .extract("text")
+            .await
+            .unwrap();
+        assert_eq!(
+            out.knowledge_graph.triples[0].confidence,
+            Some(1.0),
+            "strength clamps to 1.0"
+        );
     }
 
     #[tokio::test]
     async fn dangling_relation_is_dropped() {
         let rounds = vec![vec![
-            call("add_entity", serde_json::json!({"name": "OpenAI", "type": "ORGANIZATION"})),
-            call("add_relation", serde_json::json!({"source": "OpenAI", "predicate": "USES", "target": "Nonexistent"})),
+            call(
+                "add_entity",
+                serde_json::json!({"name": "OpenAI", "type": "ORGANIZATION"}),
+            ),
+            call(
+                "add_relation",
+                serde_json::json!({"source": "OpenAI", "predicate": "USES", "target": "Nonexistent"}),
+            ),
         ]];
         let backend = Arc::new(MockBackend::new(vec![]).with_tool_rounds(rounds));
-        let out = ToolCallExtractor::new(backend).extract("text").await.unwrap();
+        let out = ToolCallExtractor::new(backend)
+            .extract("text")
+            .await
+            .unwrap();
         assert_eq!(out.num_entities(), 1);
         assert_eq!(out.num_triples(), 0);
     }
@@ -483,8 +578,14 @@ mod tests {
     #[tokio::test]
     async fn evolving_mode_records_proposed_types() {
         let rounds = vec![vec![
-            call("add_entity", serde_json::json!({"name": "Dune", "type": "WORK_OF_ART"})),
-            call("propose_schema_type", serde_json::json!({"kind": "node", "name": "Movie"})),
+            call(
+                "add_entity",
+                serde_json::json!({"name": "Dune", "type": "WORK_OF_ART"}),
+            ),
+            call(
+                "propose_schema_type",
+                serde_json::json!({"kind": "node", "name": "Movie"}),
+            ),
         ]];
         let backend = Arc::new(MockBackend::new(vec![]).with_tool_rounds(rounds));
         // Evolving requires a non-empty seed schema.
@@ -498,7 +599,10 @@ mod tests {
             .extract("text")
             .await
             .unwrap();
-        assert_eq!(out.metadata["new_schema_types"]["nodes"][0], serde_json::json!("Movie"));
+        assert_eq!(
+            out.metadata["new_schema_types"]["nodes"][0],
+            serde_json::json!("Movie")
+        );
         assert_eq!(out.metadata["schema_mode"], serde_json::json!("evolving"));
     }
 

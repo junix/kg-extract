@@ -35,6 +35,7 @@
 
 pub mod backend;
 pub mod chunking;
+pub mod citation;
 pub mod extractor;
 pub(crate) mod graph_build;
 pub mod mcp;

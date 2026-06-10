@@ -17,7 +17,8 @@ use serde::Deserialize;
 
 use kg_extract::backend::{LlmBackend, MockBackend, PiAgentBackend, SdkAgentBackend};
 use kg_extract::extractor::{
-    AgenticExtractor, Extractor, SchemaMode, SimpleExtractor, ToolCallExtractor, SchemaJsonExtractor,
+    AgenticExtractor, Extractor, SchemaJsonExtractor, SchemaMode, SimpleExtractor,
+    ToolCallExtractor,
 };
 use kg_extract::template::{gallery, TemplateCfg};
 use kg_extract::types::{ChunkStrategy, MergeStrategy, Schema};
@@ -342,8 +343,18 @@ fn resolve(m: &ArgMatches, args: &Args, cfg: FileConfig) -> Resolved {
         },
         max_rounds: pick(m, "max_rounds", args.max_rounds, cfg.max_rounds),
         merge_strategy: pick(m, "merge_strategy", args.merge_strategy, cfg.merge_strategy),
-        max_concurrency: pick(m, "max_concurrency", args.max_concurrency, cfg.max_concurrency),
-        relation_gleaning: pick(m, "relation_gleaning", args.relation_gleaning, cfg.relation_gleaning),
+        max_concurrency: pick(
+            m,
+            "max_concurrency",
+            args.max_concurrency,
+            cfg.max_concurrency,
+        ),
+        relation_gleaning: pick(
+            m,
+            "relation_gleaning",
+            args.relation_gleaning,
+            cfg.relation_gleaning,
+        ),
         output: pick(m, "output", args.output, cfg.output),
     }
 }
@@ -455,12 +466,16 @@ async fn main() -> anyhow::Result<()> {
     if text.trim().is_empty() {
         anyhow::bail!("no input text (provide --file or pipe via stdin)");
     }
+    // Document identity for provenance citations (feature `citations`):
+    // the input file path, or none when reading stdin.
+    let source_doc: Option<String> = args.file.as_ref().filter(|f| f.as_str() != "-").cloned();
     // The agentic engine drives the SDK client itself (cwd sandbox + one
     // long-lived session), so it bypasses `make_backend` and its `--backend`
     // value — the provider is chosen by `--agent`.
     let response = if matches!(cfg.engine, Engine::Agentic) {
         let mut c = AgenticExtractor::default_config();
         c.chunker = cfg.chunker.into();
+        c.source_doc = source_doc.clone();
         if let Some(m) = &cfg.model {
             c.model_name = m.clone();
         }
@@ -478,66 +493,75 @@ async fn main() -> anyhow::Result<()> {
     } else {
         let backend = make_backend(cfg.backend, &cfg.agent, args.mock_response.as_deref())?;
         match cfg.engine {
-        Engine::Simple => {
-            let mut c = SimpleExtractor::default_config();
-            c.chunker = cfg.chunker.into();
-            c.max_concurrency = cfg.max_concurrency;
-            c.spec.merge_strategy = cfg.merge_strategy.into();
-            if let Some(m) = &cfg.model {
-                c.model_name = m.clone();
+            Engine::Simple => {
+                let mut c = SimpleExtractor::default_config();
+                c.chunker = cfg.chunker.into();
+                c.source_doc = source_doc.clone();
+                c.max_concurrency = cfg.max_concurrency;
+                c.spec.merge_strategy = cfg.merge_strategy.into();
+                if let Some(m) = &cfg.model {
+                    c.model_name = m.clone();
+                }
+                SimpleExtractor::with_config(backend, c)
+                    .relation_gleanings(cfg.relation_gleaning)
+                    .extract(&text)
+                    .await?
             }
-            SimpleExtractor::with_config(backend, c)
-                .relation_gleanings(cfg.relation_gleaning)
-                .extract(&text)
-                .await?
-        }
-        Engine::SchemaJson => {
-            let mut c = SchemaJsonExtractor::default_config();
-            c.chunker = cfg.chunker.into();
-            c.spec.merge_strategy = cfg.merge_strategy.into();
-            if let Some(m) = &cfg.model {
-                c.model_name = m.clone();
+            Engine::SchemaJson => {
+                let mut c = SchemaJsonExtractor::default_config();
+                c.chunker = cfg.chunker.into();
+                c.source_doc = source_doc.clone();
+                c.spec.merge_strategy = cfg.merge_strategy.into();
+                if let Some(m) = &cfg.model {
+                    c.model_name = m.clone();
+                }
+                if let Some(path) = &cfg.schema {
+                    c.spec.schema = Schema::from_json_file(expand_tilde(path))
+                        .with_context(|| format!("loading --schema {path}"))?;
+                }
+                if let Some(tpl) = template {
+                    c.spec.language = cfg.lang.clone();
+                    c.spec.template = Some(tpl);
+                }
+                SchemaJsonExtractor::with_config(backend, c)
+                    .schema_mode(cfg.schema_mode.into())
+                    .extract(&text)
+                    .await?
             }
-            if let Some(path) = &cfg.schema {
-                c.spec.schema = Schema::from_json_file(expand_tilde(path))
-                    .with_context(|| format!("loading --schema {path}"))?;
+            Engine::Toolcall => {
+                let mut c = ToolCallExtractor::default_config();
+                c.chunker = cfg.chunker.into();
+                c.source_doc = source_doc.clone();
+                c.spec.merge_strategy = cfg.merge_strategy.into();
+                if let Some(m) = &cfg.model {
+                    c.model_name = m.clone();
+                }
+                if let Some(path) = &cfg.schema {
+                    c.spec.schema = Schema::from_json_file(expand_tilde(path))
+                        .with_context(|| format!("loading --schema {path}"))?;
+                }
+                ToolCallExtractor::with_config(backend, c)
+                    .schema_mode(cfg.schema_mode.into())
+                    .max_rounds(cfg.max_rounds)
+                    .extract(&text)
+                    .await?
             }
-            if let Some(tpl) = template {
-                c.spec.language = cfg.lang.clone();
-                c.spec.template = Some(tpl);
-            }
-            SchemaJsonExtractor::with_config(backend, c)
-                .schema_mode(cfg.schema_mode.into())
-                .extract(&text)
-                .await?
-        }
-        Engine::Toolcall => {
-            let mut c = ToolCallExtractor::default_config();
-            c.chunker = cfg.chunker.into();
-            c.spec.merge_strategy = cfg.merge_strategy.into();
-            if let Some(m) = &cfg.model {
-                c.model_name = m.clone();
-            }
-            if let Some(path) = &cfg.schema {
-                c.spec.schema = Schema::from_json_file(expand_tilde(path))
-                    .with_context(|| format!("loading --schema {path}"))?;
-            }
-            ToolCallExtractor::with_config(backend, c)
-                .schema_mode(cfg.schema_mode.into())
-                .max_rounds(cfg.max_rounds)
-                .extract(&text)
-                .await?
-        }
             Engine::Agentic => unreachable!("agentic handled above"),
         }
     };
 
     match cfg.output {
         OutFmt::Json => {
-            println!("{}", serde_json::to_string_pretty(&response.knowledge_graph.to_dict())?)
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&response.knowledge_graph.to_dict())?
+            )
         }
         OutFmt::NodeLink => {
-            println!("{}", serde_json::to_string_pretty(&response.knowledge_graph.to_node_link())?)
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&response.knowledge_graph.to_node_link())?
+            )
         }
         OutFmt::Mermaid => println!("{}", response.get_mermaid_code()),
         OutFmt::Stats => println!("{}", serde_json::to_string_pretty(&response.get_stats())?),
