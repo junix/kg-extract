@@ -50,8 +50,8 @@ impl Citation {
 
 /// Char-offset → line-number lookup for one document.
 ///
-/// Offsets are **char** indices (what chonkie's `start_index`/`end_index`
-/// carry), not bytes, so multibyte text maps correctly.
+/// Offsets are **char** indices (what chonkie's `range.char_span`
+/// carries), not bytes, so multibyte text maps correctly.
 #[derive(Debug)]
 pub struct LineIndex {
     /// Char offset at which each line starts; `line_starts[0] == 0`.

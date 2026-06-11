@@ -18,8 +18,8 @@ pub struct Segment {
     /// 1-based inclusive line range of this segment in the source document,
     /// when known. [`segment`] leaves it `None` (extractors derive lines from
     /// the char offsets, which they can because they hold the full text);
-    /// pre-chunked input carries it from chonkie's `start_line`/`end_line`
-    /// chunk metadata, the only line information available without the text.
+    /// pre-chunked input carries it from chonkie's protocol `range.line`
+    /// field, the only line information available without the text.
     pub lines: Option<(usize, usize)>,
 }
 
@@ -65,9 +65,9 @@ pub fn segment(
 #[derive(Debug)]
 pub struct PreChunked {
     pub segments: Vec<Segment>,
-    /// `metadata.source` carried by the chunks (the original document the
-    /// chunks were cut from), if present — chonkie's CLI records it unless run
-    /// with `--no-source`. `"<stdin>"` is treated as unknown.
+    /// `source_file` carried by the protocol chunks (the original document the
+    /// chunks were cut from), if present — chonkie's CLI records it when run
+    /// with `--with-source`. `"<stdin>"` is treated as unknown.
     pub source: Option<String>,
 }
 
@@ -76,10 +76,10 @@ pub struct PreChunked {
 /// optional trailing `{"truncated": ...}` metadata line is skipped) — into
 /// segments the extractors can consume *without re-chunking*.
 ///
-/// Each chunk needs a `text` field; `start_index`/`end_index` are taken when
-/// present (chonkie always emits them) and otherwise synthesized cumulatively
-/// so offsets stay monotonic. `metadata.start_line`/`end_line` become the
-/// segment's [`Segment::lines`] for provenance.
+/// Each chunk needs a `text` field. Character offsets are read from
+/// `range.char_span.start`/`end` (protocol format); if absent, synthesized
+/// cumulatively so offsets stay monotonic. Line ranges are read from
+/// `range.line.start`/`end`; source file from `source_file`.
 pub fn parse_prechunked(input: &str) -> anyhow::Result<PreChunked> {
     use serde_json::Value;
 
@@ -119,31 +119,41 @@ pub fn parse_prechunked(input: &str) -> anyhow::Result<PreChunked> {
             None if v.get("truncated").is_some() => continue,
             None => anyhow::bail!("chunk {} has no \"text\" field: {v}", i + 1),
         };
-        let start = v
-            .get("start_index")
+
+        // Protocol format: range.char_span.start / range.char_span.end
+        let char_span = v
+            .get("range")
+            .and_then(|r| r.get("char_span"));
+        let start = char_span
+            .and_then(|cs| cs.get("start"))
             .and_then(Value::as_u64)
             .map(|n| n as usize)
             .unwrap_or(cursor);
-        let end = v
-            .get("end_index")
+        let end = char_span
+            .and_then(|cs| cs.get("end"))
             .and_then(Value::as_u64)
             .map(|n| n as usize)
             .unwrap_or_else(|| start + text.chars().count());
         cursor = end;
 
-        let meta = v.get("metadata");
-        let line = |key: &str| {
-            meta.and_then(|m| m.get(key))
+        // Protocol format: range.line.start / range.line.end
+        let range_obj = v.get("range");
+        let line_val = |key: &str| {
+            range_obj
+                .and_then(|r| r.get("line"))
+                .and_then(|l| l.get(key))
                 .and_then(Value::as_u64)
                 .map(|n| n as usize)
         };
-        let lines = match (line("start_line"), line("end_line")) {
+        let lines = match (line_val("start"), line_val("end")) {
             (Some(s), Some(e)) => Some((s, e)),
             _ => None,
         };
+
+        // Protocol format: source_file (top-level field)
         if source.is_none() {
-            source = meta
-                .and_then(|m| m.get("source"))
+            source = v
+                .get("source_file")
                 .and_then(Value::as_str)
                 .filter(|s| !s.is_empty() && *s != "<stdin>")
                 .map(str::to_string);
@@ -201,8 +211,8 @@ mod tests {
     #[test]
     fn prechunked_parses_jsonl_with_metadata() {
         let input = r#"
-{"id":"chnk_1","text":"First chunk.","start_index":0,"end_index":12,"token_count":3,"metadata":{"source":"doc.md","start_line":1,"end_line":2}}
-{"id":"chnk_2","text":"Second chunk.","start_index":12,"end_index":25,"token_count":3,"metadata":{"source":"doc.md","start_line":3,"end_line":4}}
+{"id":"chnk_1","text":"First chunk.","source_file":"doc.md","range":{"char_span":{"start":0,"end":12},"line":{"start":1,"end":2}},"metadata":{"token_count":3}}
+{"id":"chnk_2","text":"Second chunk.","source_file":"doc.md","range":{"char_span":{"start":12,"end":25},"line":{"start":3,"end":4}},"metadata":{"token_count":3}}
 "#;
         let p = parse_prechunked(input).unwrap();
         assert_eq!(p.segments.len(), 2);
@@ -215,11 +225,11 @@ mod tests {
 
     #[test]
     fn prechunked_parses_json_array_and_truncation_wrapper() {
-        let arr = r#"[{"text":"A","start_index":0,"end_index":1},{"text":"B","start_index":1,"end_index":2}]"#;
+        let arr = r#"[{"text":"A","range":{"char_span":{"start":0,"end":1}}},{"text":"B","range":{"char_span":{"start":1,"end":2}}}]"#;
         assert_eq!(parse_prechunked(arr).unwrap().segments.len(), 2);
 
         // `chonkie --json --limit` wraps the chunks when truncated.
-        let wrapped = r#"{"chunks":[{"text":"A","start_index":0,"end_index":1}],"truncated":true,"returned":1,"total":9}"#;
+        let wrapped = r#"{"chunks":[{"text":"A","range":{"char_span":{"start":0,"end":1}}}],"truncated":true,"returned":1,"total":9}"#;
         let p = parse_prechunked(wrapped).unwrap();
         assert_eq!(p.segments.len(), 1);
         assert_eq!(p.segments[0].content, "A");
@@ -227,7 +237,7 @@ mod tests {
 
     #[test]
     fn prechunked_skips_jsonl_truncation_trailer() {
-        let input = "{\"text\":\"A\",\"start_index\":0,\"end_index\":1}\n\
+        let input = "{\"text\":\"A\",\"range\":{\"char_span\":{\"start\":0,\"end\":1}}}\n\
             {\"truncated\":true,\"returned\":1,\"total\":5}";
         let p = parse_prechunked(input).unwrap();
         assert_eq!(p.segments.len(), 1);
@@ -244,7 +254,7 @@ mod tests {
 
     #[test]
     fn prechunked_stdin_source_is_unknown() {
-        let input = r#"{"text":"A","metadata":{"source":"<stdin>"}}"#;
+        let input = r#"{"text":"A","source_file":"<stdin>"}"#;
         assert!(parse_prechunked(input).unwrap().source.is_none());
     }
 
