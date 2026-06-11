@@ -42,6 +42,7 @@ pub mod ladybug_export;
 pub mod mcp;
 pub mod merger;
 pub mod parser;
+pub mod protocol;
 pub mod template;
 pub mod types;
 

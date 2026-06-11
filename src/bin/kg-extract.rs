@@ -122,6 +122,9 @@ impl From<MergeStrategyArg> for MergeStrategy {
 #[serde(rename_all = "lowercase")]
 enum OutFmt {
     Json,
+    #[serde(rename = "kg-protocol")]
+    #[value(name = "kg-protocol", alias = "kg")]
+    KgProtocol,
     #[serde(rename = "node-link")]
     #[value(name = "node-link", alias = "nodelink")]
     NodeLink,
@@ -666,6 +669,12 @@ async fn main() -> anyhow::Result<()> {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&response.knowledge_graph.to_dict())?
+            )
+        }
+        OutFmt::KgProtocol => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&response.knowledge_graph.to_kg_document())?
             )
         }
         OutFmt::NodeLink => {

@@ -54,6 +54,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io
 clap = { version = "4", features = ["derive"] }
 
 chonkie = { path = "../chonkie" }
+core-types-rs = { path = "../core-types-rs" }
 llms = { path = "../llms", optional = true }
 # Structured Claude-Code-CLI driver (stream-json) — the default `agent` backend.
 claude-agent-sdk-rs = { path = "../claude-agent-sdk-rs" }

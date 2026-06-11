@@ -312,7 +312,11 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 | `--relation-gleaning` | simple/agentic: targeted rounds that re-question orphan entities to recover edges (0 = off) |
 | `--mock-tool-calls` | mock backend only: scripted tool calls for `-e toolcall` offline/e2e tests |
 | `-F, --input-format` | `text` (default) \| `chunks` — input is chonkie chunk JSON/JSONL, consumed without re-chunking |
-| `-o, --output` | `json` (default) \| `node-link` \| `ladybug-import` \| `mermaid` \| `stats` |
+| `-o, --output` | `json` (default) \| `kg-protocol` \| `node-link` \| `ladybug-import` \| `mermaid` \| `stats` |
+
+`-o kg-protocol` emits the portable `core-types-rs` `kg.protocol.v1` shape:
+entities and relations use open string vocabularies, relations reference entity
+ids, and citation metadata is lifted into first-class evidence ranges.
 
 ### LadybugDB import output
 
