@@ -51,12 +51,24 @@ pub fn segment(
     chunks
         .into_iter()
         .enumerate()
-        .map(|(i, c)| Segment {
-            content: c.text,
-            index: i,
-            start: c.start_index,
-            end: c.end_index,
-            lines: None,
+        .map(|(i, c)| {
+            let (start, end) = c
+                .range
+                .as_ref()
+                .and_then(|r| r.char_span.as_ref())
+                .map(|cs| (cs.start, cs.end))
+                .unwrap_or((0, 0));
+            let lines = c.range.as_ref().and_then(|r| r.line.as_ref()).map(|l| {
+                // LineSpan uses 0-based internally; convert to 1-based inclusive.
+                (l.start as usize + 1, l.end as usize + 1)
+            });
+            Segment {
+                content: c.text.unwrap_or_default(),
+                index: i,
+                start,
+                end,
+                lines,
+            }
         })
         .collect()
 }
