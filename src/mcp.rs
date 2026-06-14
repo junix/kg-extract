@@ -17,8 +17,44 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use serde_json::Value;
 
+use crate::citation::{attach_citation, Citation};
 use crate::graph_build::{build_predicate, entity_id, parse_entity_type};
 use crate::types::{Entity, KnowledgeGraph, Schema, SchemaMode, Triple};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourceCitation {
+    pub source_file: String,
+    pub start_line: usize,
+    pub end_line: usize,
+}
+
+impl SourceCitation {
+    pub fn new(source_file: String, start_line: usize, end_line: usize) -> Result<Self> {
+        let source_file = source_file.trim().to_string();
+        if source_file.is_empty() {
+            anyhow::bail!("source_file must not be empty when citation fields are provided");
+        }
+        if start_line == 0 || end_line == 0 {
+            anyhow::bail!("start_line and end_line must be 1-based positive line numbers");
+        }
+        if start_line > end_line {
+            anyhow::bail!("start_line must be <= end_line");
+        }
+        Ok(Self {
+            source_file,
+            start_line,
+            end_line,
+        })
+    }
+
+    fn to_citation(&self) -> Citation {
+        Citation::new(
+            Some(self.source_file.clone()),
+            self.start_line,
+            self.end_line,
+        )
+    }
+}
 
 /// Schema contract enforced by the MCP store.
 ///
@@ -165,6 +201,18 @@ impl KgStore {
         description: Option<String>,
         attributes: HashMap<String, Value>,
     ) -> Result<Value> {
+        self.add_entity_with_citation(rel, name, type_str, description, attributes, None)
+    }
+
+    pub fn add_entity_with_citation(
+        &self,
+        rel: &str,
+        name: &str,
+        type_str: &str,
+        description: Option<String>,
+        attributes: HashMap<String, Value>,
+        citation: Option<SourceCitation>,
+    ) -> Result<Value> {
         let name = name.trim();
         if name.is_empty() {
             anyhow::bail!("name must not be empty");
@@ -182,10 +230,16 @@ impl KgStore {
             for (k, v) in attributes {
                 existing.metadata.insert(k, v);
             }
+            if let Some(cite) = &citation {
+                attach_citation(&mut existing.metadata, &cite.to_citation());
+            }
         } else {
             let mut e = Entity::new(id, name, etype);
             e.description = description;
             e.metadata = attributes;
+            if let Some(cite) = &citation {
+                attach_citation(&mut e.metadata, &cite.to_citation());
+            }
             kg.add_entity(e);
         }
         self.apply_schema_metadata(&mut kg);
@@ -205,6 +259,27 @@ impl KgStore {
         target: &str,
         description: Option<String>,
         strength: Option<f64>,
+    ) -> Result<Value> {
+        self.add_relation_with_citation(
+            rel_path,
+            source,
+            predicate,
+            target,
+            description,
+            strength,
+            None,
+        )
+    }
+
+    pub fn add_relation_with_citation(
+        &self,
+        rel_path: &str,
+        source: &str,
+        predicate: &str,
+        target: &str,
+        description: Option<String>,
+        strength: Option<f64>,
+        citation: Option<SourceCitation>,
     ) -> Result<Value> {
         let (source, target, predicate) = (source.trim(), target.trim(), predicate.trim());
         if source.is_empty() || target.is_empty() || predicate.is_empty() {
@@ -249,10 +324,19 @@ impl KgStore {
                 .metadata
                 .insert("description".into(), serde_json::json!(d));
         }
+        if let Some(cite) = &citation {
+            attach_citation(&mut triple.metadata, &cite.to_citation());
+        }
         let key = triple.to_tuple();
-        let added = !kg.triples.iter().any(|t| t.to_tuple() == key);
-        if added {
-            kg.add_triple(triple);
+        let existing = kg.triples.iter_mut().find(|t| t.to_tuple() == key);
+        let added = existing.is_none();
+        match existing {
+            Some(existing) => {
+                if let Some(cite) = &citation {
+                    attach_citation(&mut existing.metadata, &cite.to_citation());
+                }
+            }
+            None => kg.add_triple(triple),
         }
         self.apply_schema_metadata(&mut kg);
         let path = self.save(rel_path, &kg)?;

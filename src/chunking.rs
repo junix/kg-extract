@@ -133,9 +133,7 @@ pub fn parse_prechunked(input: &str) -> anyhow::Result<PreChunked> {
         };
 
         // Protocol format: range.char_span.start / range.char_span.end
-        let char_span = v
-            .get("range")
-            .and_then(|r| r.get("char_span"));
+        let char_span = v.get("range").and_then(|r| r.get("char_span"));
         let start = char_span
             .and_then(|cs| cs.get("start"))
             .and_then(Value::as_u64)

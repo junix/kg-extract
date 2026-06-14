@@ -379,10 +379,8 @@ impl Extractor for SchemaJsonExtractor {
             None => &data,
         };
 
-        #[allow(unused_mut)]
         let mut kg = self.build_graph(data);
         // Single-shot over the whole text, so provenance is whole-document.
-        #[cfg(feature = "citations")]
         {
             let li = crate::citation::LineIndex::new(text);
             let cite =

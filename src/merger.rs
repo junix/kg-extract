@@ -79,7 +79,6 @@ pub fn merge_with_deduplication_strategy(
                     g1.entities.insert(existing_id.clone(), merged);
                 }
             } else {
-                #[cfg(feature = "citations")]
                 if let Some(existing) = g1.entities.get_mut(&existing_id) {
                     crate::citation::union_citations(&mut existing.metadata, &entity.metadata);
                 }
@@ -212,7 +211,6 @@ pub fn combine_entities(
     };
     // Whatever the strategy keeps, provenance from BOTH sides survives: the
     // merged entity was seen everywhere either duplicate was seen.
-    #[cfg(feature = "citations")]
     {
         crate::citation::union_citations(&mut merged.metadata, &existing.metadata);
         crate::citation::union_citations(&mut merged.metadata, &incoming.metadata);
@@ -333,7 +331,6 @@ fn remap_triples(
         let key = remapped.to_tuple();
         match existing.get(&key) {
             Some(&_kept_idx) => {
-                #[cfg(feature = "citations")]
                 crate::citation::union_citations(
                     &mut g1.triples[_kept_idx].metadata,
                     &remapped.metadata,

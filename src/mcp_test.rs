@@ -110,6 +110,41 @@ fn add_entity_same_name_merges_not_duplicates() {
 }
 
 #[test]
+fn add_entity_with_citation_merges_provenance() {
+    let t = TmpStore::new();
+    t.store
+        .add_entity_with_citation(
+            "g",
+            "Alice",
+            "person",
+            None,
+            HashMap::new(),
+            Some(SourceCitation::new("doc.md".into(), 3, 5).unwrap()),
+        )
+        .unwrap();
+    t.store
+        .add_entity_with_citation(
+            "g",
+            "Alice",
+            "person",
+            None,
+            HashMap::new(),
+            Some(SourceCitation::new("doc.md".into(), 9, 12).unwrap()),
+        )
+        .unwrap();
+
+    let kg = t.store.load("g").unwrap();
+    let e = kg.get_entity(&entity_id("Alice")).unwrap();
+    assert_eq!(
+        e.metadata.get(crate::citation::CITATIONS_KEY).unwrap(),
+        &serde_json::json!([
+            {"doc": "doc.md", "lines": [3, 5]},
+            {"doc": "doc.md", "lines": [9, 12]},
+        ])
+    );
+}
+
+#[test]
 fn add_relation_errors_on_missing_endpoint_with_guidance() {
     let t = TmpStore::new();
     t.store
@@ -153,6 +188,52 @@ fn add_relation_succeeds_after_endpoints_added_and_dedups() {
         .unwrap();
     assert_eq!(n(&r2, "num_triples"), 1, "identical relation must dedup");
     assert!(r2["message"].as_str().unwrap().contains("already present"));
+}
+
+#[test]
+fn add_relation_with_citation_dedups_and_merges_provenance() {
+    let t = TmpStore::new();
+    t.store
+        .add_entity("g", "Alice", "person", None, HashMap::new())
+        .unwrap();
+    t.store
+        .add_entity("g", "Acme", "organization", None, HashMap::new())
+        .unwrap();
+    t.store
+        .add_relation_with_citation(
+            "g",
+            "Alice",
+            "works_at",
+            "Acme",
+            None,
+            Some(0.9),
+            Some(SourceCitation::new("doc.md".into(), 20, 22).unwrap()),
+        )
+        .unwrap();
+    t.store
+        .add_relation_with_citation(
+            "g",
+            "Alice",
+            "works_at",
+            "Acme",
+            None,
+            Some(0.9),
+            Some(SourceCitation::new("doc.md".into(), 30, 31).unwrap()),
+        )
+        .unwrap();
+
+    let kg = t.store.load("g").unwrap();
+    assert_eq!(kg.triples.len(), 1);
+    assert_eq!(
+        kg.triples[0]
+            .metadata
+            .get(crate::citation::CITATIONS_KEY)
+            .unwrap(),
+        &serde_json::json!([
+            {"doc": "doc.md", "lines": [20, 22]},
+            {"doc": "doc.md", "lines": [30, 31]},
+        ])
+    );
 }
 
 #[test]

@@ -566,10 +566,9 @@ async fn main() -> anyhow::Result<()> {
                 .context("parsing --input-format chunks input")?,
         ),
     };
-    // Document identity for provenance citations (feature `citations`): with
-    // pre-chunked input the chunks' recorded source document (`-f` names the
-    // chunks file, not the document); otherwise the input file path, or none
-    // when reading stdin.
+    // Document identity for provenance citations: with pre-chunked input the
+    // chunks' recorded source document (`-f` names the chunks file, not the
+    // document); otherwise the input file path, or none when reading stdin.
     let source_doc: Option<String> = match &prechunked {
         Some(p) => p.source.clone(),
         None => args.file.as_ref().filter(|f| f.as_str() != "-").cloned(),

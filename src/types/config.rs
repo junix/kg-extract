@@ -42,8 +42,7 @@ pub struct ExtractionConfig {
     /// cooperative concurrency (not CPU parallelism). `1` = sequential.
     #[serde(default = "default_max_concurrency")]
     pub max_concurrency: usize,
-    /// Document name recorded in provenance citations (only consulted when
-    /// built with the `citations` feature; the CLI sets it from `-f`).
+    /// Document name recorded in provenance citations; the CLI sets it from `-f`.
     #[serde(default)]
     pub source_doc: Option<String>,
 }

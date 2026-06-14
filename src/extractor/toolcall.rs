@@ -440,7 +440,6 @@ impl Extractor for ToolCallExtractor {
             kg = dedup_graph(kg, self.config.spec.merge_strategy, &self.backend, &opts).await;
         }
         // Tool calls see the whole text at once, so provenance is whole-document.
-        #[cfg(feature = "citations")]
         {
             let li = crate::citation::LineIndex::new(text);
             let cite =

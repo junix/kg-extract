@@ -415,7 +415,6 @@ impl Extractor for SimpleExtractor {
 
         // Lines are derivable here because we hold the full text; pre-chunked
         // input instead carries them from the chunk metadata.
-        #[cfg(feature = "citations")]
         {
             let line_index = crate::citation::LineIndex::new(text);
             for c in chunks.iter_mut() {
@@ -448,7 +447,6 @@ impl SimpleExtractor {
         let per_chunk: Vec<(Vec<ParsedResult>, KnowledgeGraph)> = stream::iter(chunks)
             .map(|seg| async move {
                 let result = self.extract_chunk(&seg.content).await;
-                #[cfg(feature = "citations")]
                 let result = match seg.lines {
                     Some((start_line, end_line)) => {
                         let (prs, mut kg) = result;
@@ -1107,7 +1105,6 @@ mod tests {
     /// Pre-chunked provenance: line ranges come from the chunks' own metadata
     /// (chonkie's `start_line`/`end_line`), the doc from `source_doc`; a chunk
     /// without line info contributes records unstamped.
-    #[cfg(feature = "citations")]
     #[tokio::test]
     async fn prechunked_citations_use_chunk_metadata_lines() {
         use crate::chunking::Segment;
@@ -1164,7 +1161,6 @@ mod tests {
     /// End-to-end provenance: chunked extraction stamps every record with the
     /// chunk's doc + line range, and merging a duplicate entity unions the
     /// citations from both chunks.
-    #[cfg(feature = "citations")]
     #[tokio::test]
     async fn citations_stamp_chunk_line_ranges_and_union_on_merge() {
         use crate::citation::CITATIONS_KEY;

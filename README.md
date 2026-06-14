@@ -220,14 +220,14 @@ let extractor = ToolCallExtractor::new(backend);          // single-round, qwen-
 let response = extractor.extract("OpenAI built GPT-4.").await?;
 ```
 
-## Provenance citations (feature `citations`)
+## Provenance citations
 
-Built with `--features citations`, every extracted entity and triple carries
-**where it came from**: a `citations` array in its `metadata`, each entry
+Every extracted entity and triple carries **where it came from**: a `citations`
+array in its `metadata`, each entry
 `{"doc": <name|null>, "lines": [start, end]}` (1-based, inclusive).
 
 ```bash
-cargo build --release --features citations
+cargo build --release
 kg-extract -e agentic --agent minimaxcc -f doc.md -o json   # records now carry metadata.citations
 ```
 
@@ -247,8 +247,7 @@ A record seen in several places accumulates **multiple citations**: slice-level
 recurrences union within the agentic session, and every dedup/merge path
 (`merger`, all `MergeStrategy` variants, duplicate-triple drops) unions the two
 sides' citations — so merging graphs from different documents yields entities
-citing every document they appeared in. Without the feature, output is
-byte-for-byte unchanged and the bookkeeping is compiled out.
+citing every document they appeared in.
 
 ## Types
 
@@ -396,9 +395,9 @@ Engine behaviour:
 - **`schema-json` / `toolcall`** (single-shot engines): the chunk texts are
   joined (`\n\n`) and extracted in one call, exactly as for plain text.
 
-With `--features citations`, provenance comes from the chunks themselves:
-`metadata.source` names the cited document (the *original* file the chunks
-were cut from — `-f` names the chunks file, so it is not used as the doc) and
+Provenance comes from the chunks themselves: `metadata.source` names the cited
+document (the *original* file the chunks were cut from — `-f` names the chunks
+file, so it is not used as the doc) and
 `metadata.start_line`/`end_line` become each record's cited line range. Chunks
 without line metadata (e.g. `chonkie --no-lines`) yield unstamped records.
 
@@ -472,6 +471,24 @@ Validation is on the **raw type token**, so a domain-specific schema type outsid
 the built-in `EntityType` vocabulary (which the enum would collapse to `Other`)
 still matches. `schema_dropped_records` / `schema_dropped_types` land in the
 response metadata for auditing.
+
+## MCP graph-building tools
+
+`kg-extract-mcp` exposes the same graph-building surface to an external MCP
+client. The server does not call an LLM; the client reads source text and drives
+the mutations.
+
+For provenance, `add_entity` and `add_relation` accept these fields as a group:
+
+| Field | Meaning |
+|-------|---------|
+| `source_file` | source document path |
+| `start_line` | 1-based inclusive start line |
+| `end_line` | 1-based inclusive end line |
+
+When provided, the store writes them to `metadata.citations`. Repeated calls for
+the same entity or relation merge citations rather than duplicating the graph
+record.
 
 ```bash
 kg-extract -e agentic --agent minimaxcc --schema-mode fixed --schema schema.json -f doc.txt -o json

@@ -30,10 +30,6 @@ default = []
 llms-backend = ["dep:llms"]
 # Build the `kg-extract-mcp` stdio MCP server (rmcp SDK + schemars).
 mcp = ["dep:rmcp", "dep:schemars"]
-# Stamp every extracted entity/triple with provenance citations
-# ({doc, line range}, computed code-side from chunk offsets — never by the model).
-citations = []
-
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -53,7 +49,7 @@ nanoid = "0.4"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util"] }
 clap = { version = "4", features = ["derive"] }
 
-chonkie = { path = "../chonkie" }
+chonkie = { path = "../chonkie", default-features = false, features = ["tokenizer"] }
 core-types-rs = { path = "../core-types-rs" }
 llms = { path = "../llms", optional = true }
 # Structured Claude-Code-CLI driver (stream-json) — the default `agent` backend.

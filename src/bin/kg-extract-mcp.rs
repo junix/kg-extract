@@ -26,7 +26,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::Value;
 
-use kg_extract::mcp::{KgStore, SchemaPolicy};
+use kg_extract::mcp::{KgStore, SchemaPolicy, SourceCitation};
 use kg_extract::types::{Schema, SchemaMode};
 
 // ── Tool parameter types ─────────────────────────────────────────────────────
@@ -46,6 +46,15 @@ struct AddEntityParams {
     /// Optional key/value attributes to attach to the entity
     #[serde(default)]
     attributes: Option<HashMap<String, Value>>,
+    /// Source document path for provenance citation.
+    #[serde(default)]
+    source_file: Option<String>,
+    /// 1-based inclusive start line for provenance citation.
+    #[serde(default)]
+    start_line: Option<usize>,
+    /// 1-based inclusive end line for provenance citation.
+    #[serde(default)]
+    end_line: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -64,6 +73,15 @@ struct AddRelationParams {
     /// Optional confidence in 0..1 (defaults to 0.8)
     #[serde(default)]
     strength: Option<f64>,
+    /// Source document path for provenance citation.
+    #[serde(default)]
+    source_file: Option<String>,
+    /// 1-based inclusive start line for provenance citation.
+    #[serde(default)]
+    start_line: Option<usize>,
+    /// 1-based inclusive end line for provenance citation.
+    #[serde(default)]
+    end_line: Option<usize>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -142,10 +160,28 @@ fn json_string(v: Value) -> Result<String, String> {
     serde_json::to_string_pretty(&v).map_err(|e| e.to_string())
 }
 
+fn citation_from_parts(
+    source_file: Option<String>,
+    start_line: Option<usize>,
+    end_line: Option<usize>,
+) -> Result<Option<SourceCitation>, String> {
+    match (source_file, start_line, end_line) {
+        (None, None, None) => Ok(None),
+        (Some(source_file), Some(start_line), Some(end_line)) => {
+            SourceCitation::new(source_file, start_line, end_line)
+                .map(Some)
+                .map_err(|e| e.to_string())
+        }
+        _ => Err(
+            "source_file, start_line, and end_line must be provided together for provenance".into(),
+        ),
+    }
+}
+
 #[tool_router]
 impl KgExtractMcp {
     #[tool(
-        description = "Record an entity in the knowledge graph at <output>/<path>.json. Merges by name into any existing entity. Returns the updated graph stats and the file path written."
+        description = "Record an entity in the knowledge graph at <output>/<path>.json. Merges by name into any existing entity. Provide source_file, start_line, and end_line together to store provenance in metadata.citations. Returns the updated graph stats and the file path written."
     )]
     async fn add_entity(
         &self,
@@ -153,15 +189,16 @@ impl KgExtractMcp {
     ) -> Result<String, String> {
         let attrs = p.attributes.unwrap_or_default();
         let kind = p.kind.as_deref().unwrap_or("OTHER");
+        let citation = citation_from_parts(p.source_file, p.start_line, p.end_line)?;
         let r = self
             .store
-            .add_entity(&p.path, &p.name, kind, p.description, attrs)
+            .add_entity_with_citation(&p.path, &p.name, kind, p.description, attrs, citation)
             .map_err(|e| e.to_string())?;
         json_string(r)
     }
 
     #[tool(
-        description = "Record a relationship between two entities in the graph at <output>/<path>.json. BOTH endpoints must already exist — call add_entity for each first. If an endpoint is missing the tool returns an error naming it and listing the known entities, so you can add it (or fix a typo) and retry. Identical relations are deduplicated. Returns updated stats and the file path."
+        description = "Record a relationship between two entities in the graph at <output>/<path>.json. BOTH endpoints must already exist — call add_entity for each first. Provide source_file, start_line, and end_line together to store relationship provenance in metadata.citations. If an endpoint is missing the tool returns an error naming it and listing the known entities, so you can add it (or fix a typo) and retry. Identical relations are deduplicated and citations are merged. Returns updated stats and the file path."
     )]
     async fn add_relation(
         &self,
@@ -169,13 +206,14 @@ impl KgExtractMcp {
     ) -> Result<String, String> {
         let r = self
             .store
-            .add_relation(
+            .add_relation_with_citation(
                 &p.path,
                 &p.source,
                 &p.predicate,
                 &p.target,
                 p.description,
                 p.strength,
+                citation_from_parts(p.source_file, p.start_line, p.end_line)?,
             )
             .map_err(|e| e.to_string())?;
         json_string(r)
@@ -253,6 +291,9 @@ impl ServerHandler for KgExtractMcp {
                  results are merged into <output>/<path>.json. Workflow: for each chunk of \
                  text, call add_entity for every entity, then add_relation between them \
                  (both endpoints must already exist), and add_attribute for extra facts. \
+                 When a fact comes from source text, pass source_file, start_line, and \
+                 end_line together on add_entity/add_relation so provenance is stored in \
+                 metadata.citations. \
                  Use query_graph (view=entities/relations/neighbors) to see what is already \
                  recorded before extending. Use query_schema to inspect fixed/evolving schema \
                  constraints; in evolving mode call propose_schema_type before using a new \

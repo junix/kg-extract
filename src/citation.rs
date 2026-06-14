@@ -1,10 +1,7 @@
 //! Provenance support: which document and line range each entity / triple
 //! came from.
 //!
-//! The types and helpers here are always compiled; the **`citations` cargo
-//! feature** gates whether the engines actually stamp records (see the
-//! `#[cfg(feature = "citations")]` call sites in `extractor/*`, `merger` and
-//! the CLI). Built without the feature, nothing changes in the output.
+//! Citation stamping is part of the default extraction path.
 //!
 //! Citations are stored in the open `metadata` map of [`Entity`] / [`Triple`]
 //! under [`CITATIONS_KEY`], as an array of `{"doc": <name|null>, "lines":
@@ -188,7 +185,6 @@ mod tests {
         assert_eq!(list.len(), 2);
     }
 
-    #[cfg(feature = "citations")]
     #[test]
     fn add_triple_endpoint_overwrite_keeps_entity_citations() {
         use crate::types::{Entity, EntityType, Predicate, PredicateType, Triple};

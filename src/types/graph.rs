@@ -82,9 +82,7 @@ impl KnowledgeGraph {
     /// never losing provenance: citations already recorded on the stored
     /// entity are unioned into the incoming snapshot before it overwrites.
     fn upsert_endpoint(&mut self, entity: Entity) {
-        #[allow(unused_mut)]
         let mut entity = entity;
-        #[cfg(feature = "citations")]
         if let Some(existing) = self.entities.get(&entity.id) {
             crate::citation::union_citations(&mut entity.metadata, &existing.metadata);
         }

@@ -105,12 +105,11 @@ If none have any relationship, answer just: NO"#;
 
 /// Merge one slice's entity into the running entity table. First occurrence
 /// wins (the prompt asks the model to only add what is NEW each turn); under
-/// the `citations` feature a repeat occurrence still contributes its
-/// provenance, so an entity mentioned in several slices cites all of them.
+/// a repeat occurrence still contributes its provenance, so an entity mentioned
+/// in several slices cites all of them.
 fn merge_slice_entity(all: &mut HashMap<String, Entity>, id: &str, e: &Entity) {
     match all.entry(id.to_string()) {
         std::collections::hash_map::Entry::Occupied(mut _o) => {
-            #[cfg(feature = "citations")]
             crate::citation::union_citations(&mut _o.get_mut().metadata, &e.metadata);
         }
         std::collections::hash_map::Entry::Vacant(v) => {
@@ -426,11 +425,9 @@ impl Extractor for AgenticExtractor {
     async fn extract(&self, text: &str) -> anyhow::Result<ExtractionResponse> {
         validate_input(text, self.config.min_segment_size, self.quiet)?;
 
-        #[allow(unused_mut)]
         let mut slices = self.slices(text);
         // Lines are derivable here because we hold the full text; pre-chunked
         // input instead carries them from the chunk metadata.
-        #[cfg(feature = "citations")]
         let doc_lines = {
             let line_index = crate::citation::LineIndex::new(text);
             for s in slices.iter_mut() {
@@ -438,8 +435,6 @@ impl Extractor for AgenticExtractor {
             }
             Some((1, line_index.total_lines()))
         };
-        #[cfg(not(feature = "citations"))]
-        let doc_lines = None;
 
         self.extract_slices(text, slices, doc_lines).await
     }
@@ -603,9 +598,7 @@ impl AgenticExtractor {
                 if output.is_empty() {
                     continue 'slices;
                 }
-                #[allow(unused_mut)]
                 let mut parsed = parse_output(&output, &self.config);
-                #[cfg(feature = "citations")]
                 if let Some((start_line, end_line)) = seg.lines {
                     let cite = crate::citation::Citation::new(
                         self.config.source_doc.clone(),
@@ -803,7 +796,6 @@ impl AgenticExtractor {
             }
             // Gleaned relations come from a whole-document pass, so they cite
             // the full document rather than one slice (when its span is known).
-            #[cfg(feature = "citations")]
             let rescued = match _doc_lines {
                 Some((start_line, end_line)) => {
                     let mut rescued = rescued;
