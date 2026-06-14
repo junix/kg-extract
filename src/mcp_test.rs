@@ -3,22 +3,49 @@ use super::*;
 /// A fresh, unique temp output dir for one test (cleaned up on drop).
 struct TmpStore {
     dir: PathBuf,
+    source_dir: PathBuf,
     store: KgStore,
 }
 
 impl TmpStore {
     fn new() -> Self {
         let dir = std::env::temp_dir().join(format!("kg-mcp-test-{}", nanoid::nanoid!()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let store = KgStore::new(dir.clone());
-        TmpStore { dir, store }
+        let source_dir = dir.join("source");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        let store = KgStore::with_policy_and_source_root(
+            dir.clone(),
+            SchemaPolicy::open(),
+            source_dir.clone(),
+        );
+        TmpStore {
+            dir,
+            source_dir,
+            store,
+        }
     }
 
     fn with_policy(policy: SchemaPolicy) -> Self {
         let dir = std::env::temp_dir().join(format!("kg-mcp-test-{}", nanoid::nanoid!()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let store = KgStore::with_policy(dir.clone(), policy);
-        TmpStore { dir, store }
+        let source_dir = dir.join("source");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        let store = KgStore::with_policy_and_source_root(dir.clone(), policy, source_dir.clone());
+        TmpStore {
+            dir,
+            source_dir,
+            store,
+        }
+    }
+
+    fn write_source(&self, rel: &str, lines: usize) {
+        let path = self.source_dir.join(rel);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).unwrap();
+        }
+        let body = (1..=lines)
+            .map(|i| format!("line {i}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(path, body).unwrap();
     }
 }
 
@@ -112,6 +139,7 @@ fn add_entity_same_name_merges_not_duplicates() {
 #[test]
 fn add_entity_with_citation_merges_provenance() {
     let t = TmpStore::new();
+    t.write_source("doc.md", 12);
     t.store
         .add_entity_with_citation(
             "g",
@@ -142,6 +170,58 @@ fn add_entity_with_citation_merges_provenance() {
             {"doc": "doc.md", "lines": [9, 12]},
         ])
     );
+}
+
+#[test]
+fn add_entity_with_citation_rejects_bad_source_file() {
+    let t = TmpStore::new();
+    let err = t
+        .store
+        .add_entity_with_citation(
+            "g",
+            "Alice",
+            "person",
+            None,
+            HashMap::new(),
+            Some(SourceCitation::new("missing.md".into(), 1, 1).unwrap()),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("source_file 'missing.md' was not found"),
+        "unexpected error: {err}"
+    );
+    assert!(!t.store.resolve("g").unwrap().exists());
+}
+
+#[test]
+fn add_entity_with_citation_rejects_out_of_range_lines() {
+    let t = TmpStore::new();
+    t.write_source("doc.md", 2);
+    let err = t
+        .store
+        .add_entity_with_citation(
+            "g",
+            "Alice",
+            "person",
+            None,
+            HashMap::new(),
+            Some(SourceCitation::new("doc.md".into(), 1, 3).unwrap()),
+        )
+        .unwrap_err()
+        .to_string();
+    assert!(
+        err.contains("exceed source_file 'doc.md' line count 2"),
+        "unexpected error: {err}"
+    );
+    assert!(!t.store.resolve("g").unwrap().exists());
+}
+
+#[test]
+fn source_citation_rejects_absolute_and_parent_paths() {
+    assert!(SourceCitation::new("/tmp/doc.md".into(), 1, 1).is_err());
+    assert!(SourceCitation::new("../doc.md".into(), 1, 1).is_err());
+    assert!(SourceCitation::new("a/../doc.md".into(), 1, 1).is_err());
 }
 
 #[test]
@@ -193,6 +273,7 @@ fn add_relation_succeeds_after_endpoints_added_and_dedups() {
 #[test]
 fn add_relation_with_citation_dedups_and_merges_provenance() {
     let t = TmpStore::new();
+    t.write_source("doc.md", 31);
     t.store
         .add_entity("g", "Alice", "person", None, HashMap::new())
         .unwrap();

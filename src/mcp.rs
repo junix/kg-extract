@@ -12,7 +12,7 @@
 //! `(subject_id, predicate_type, object_id)`.
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use anyhow::{Context, Result};
 use serde_json::Value;
@@ -30,10 +30,7 @@ pub struct SourceCitation {
 
 impl SourceCitation {
     pub fn new(source_file: String, start_line: usize, end_line: usize) -> Result<Self> {
-        let source_file = source_file.trim().to_string();
-        if source_file.is_empty() {
-            anyhow::bail!("source_file must not be empty when citation fields are provided");
-        }
+        let source_file = normalize_source_file(&source_file)?;
         if start_line == 0 || end_line == 0 {
             anyhow::bail!("start_line and end_line must be 1-based positive line numbers");
         }
@@ -108,6 +105,7 @@ impl SchemaPolicy {
 #[derive(Debug)]
 pub struct KgStore {
     output: PathBuf,
+    source_root: PathBuf,
     lock: std::sync::Mutex<()>,
     policy: SchemaPolicy,
 }
@@ -118,8 +116,18 @@ impl KgStore {
     }
 
     pub fn with_policy(output: impl Into<PathBuf>, policy: SchemaPolicy) -> Self {
+        let source_root = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        Self::with_policy_and_source_root(output, policy, source_root)
+    }
+
+    pub fn with_policy_and_source_root(
+        output: impl Into<PathBuf>,
+        policy: SchemaPolicy,
+        source_root: impl Into<PathBuf>,
+    ) -> Self {
         Self {
             output: output.into(),
+            source_root: source_root.into(),
             lock: std::sync::Mutex::new(()),
             policy,
         }
@@ -127,6 +135,10 @@ impl KgStore {
 
     pub fn output_dir(&self) -> &Path {
         &self.output
+    }
+
+    pub fn source_root(&self) -> &Path {
+        &self.source_root
     }
 
     pub fn schema_policy(&self) -> &SchemaPolicy {
@@ -218,6 +230,7 @@ impl KgStore {
             anyhow::bail!("name must not be empty");
         }
         let _guard = self.lock.lock().unwrap();
+        self.validate_source_citation(citation.as_ref())?;
         let mut kg = self.load(rel)?;
         self.validate_entity_type(&kg, type_str)?;
         let id = entity_id(name);
@@ -286,6 +299,7 @@ impl KgStore {
             anyhow::bail!("source, predicate and target are required");
         }
         let _guard = self.lock.lock().unwrap();
+        self.validate_source_citation(citation.as_ref())?;
         let mut kg = self.load(rel_path)?;
         self.validate_relation_type(&kg, predicate)?;
         let sid = entity_id(source);
@@ -627,6 +641,83 @@ impl KgStore {
                 .insert("schema_used".into(), serde_json::json!(self.policy.schema));
         }
         ensure_new_schema_types(&mut kg.metadata);
+    }
+
+    fn validate_source_citation(&self, citation: Option<&SourceCitation>) -> Result<()> {
+        let Some(citation) = citation else {
+            return Ok(());
+        };
+        let source_path = self.source_root.join(&citation.source_file);
+        let metadata = std::fs::metadata(&source_path).with_context(|| {
+            format!(
+                "source_file '{}' was not found under source_root '{}'",
+                citation.source_file,
+                self.source_root.display()
+            )
+        })?;
+        if !metadata.is_file() {
+            anyhow::bail!(
+                "source_file '{}' resolves to '{}' but is not a regular file",
+                citation.source_file,
+                source_path.display()
+            );
+        }
+        let text = std::fs::read_to_string(&source_path)
+            .with_context(|| format!("reading source_file '{}'", citation.source_file))?;
+        let line_count = source_line_count(&text);
+        if citation.end_line > line_count {
+            anyhow::bail!(
+                "citation lines {}-{} exceed source_file '{}' line count {}",
+                citation.start_line,
+                citation.end_line,
+                citation.source_file,
+                line_count
+            );
+        }
+        Ok(())
+    }
+}
+
+fn normalize_source_file(source_file: &str) -> Result<String> {
+    let source_file = source_file.trim();
+    if source_file.is_empty() {
+        anyhow::bail!("source_file must not be empty when citation fields are provided");
+    }
+    let path = Path::new(source_file);
+    if path.is_absolute() || source_file.starts_with('\\') {
+        anyhow::bail!("source_file must be relative to source_root, not absolute: {source_file}");
+    }
+
+    let mut parts = Vec::new();
+    for raw in source_file.split(['/', '\\']) {
+        match raw {
+            "" | "." => continue,
+            ".." => anyhow::bail!("source_file must not contain '..': {source_file}"),
+            part => {
+                let component_path = Path::new(part);
+                if component_path.components().any(|c| {
+                    matches!(
+                        c,
+                        Component::Prefix(_) | Component::RootDir | Component::ParentDir
+                    )
+                }) {
+                    anyhow::bail!("source_file contains an invalid path component: {source_file}");
+                }
+                parts.push(part);
+            }
+        }
+    }
+    if parts.is_empty() {
+        anyhow::bail!("source_file must name a file, not the source root");
+    }
+    Ok(parts.join("/"))
+}
+
+fn source_line_count(text: &str) -> usize {
+    if text.is_empty() {
+        0
+    } else {
+        text.lines().count()
     }
 }
 

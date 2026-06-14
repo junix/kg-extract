@@ -8,7 +8,7 @@
 //! calls, deduplicated by entity id and triple.
 //!
 //! Built with the `rmcp` SDK behind the `mcp` feature:
-//!     cargo run --features mcp --bin kg-extract-mcp -- -o /path/to/out
+//!     cargo run --features mcp --bin kg-extract-mcp -- -o /path/to/out --source-root /path/to/docs
 //!
 //! All protocol traffic is JSON-RPC 2.0 over stdin/stdout — never write to
 //! stdout yourself; diagnostics go to stderr.
@@ -46,7 +46,7 @@ struct AddEntityParams {
     /// Optional key/value attributes to attach to the entity
     #[serde(default)]
     attributes: Option<HashMap<String, Value>>,
-    /// Source document path for provenance citation.
+    /// Source document path, relative to the server source_root, for provenance citation.
     #[serde(default)]
     source_file: Option<String>,
     /// 1-based inclusive start line for provenance citation.
@@ -73,7 +73,7 @@ struct AddRelationParams {
     /// Optional confidence in 0..1 (defaults to 0.8)
     #[serde(default)]
     strength: Option<f64>,
-    /// Source document path for provenance citation.
+    /// Source document path, relative to the server source_root, for provenance citation.
     #[serde(default)]
     source_file: Option<String>,
     /// 1-based inclusive start line for provenance citation.
@@ -181,7 +181,7 @@ fn citation_from_parts(
 #[tool_router]
 impl KgExtractMcp {
     #[tool(
-        description = "Record an entity in the knowledge graph at <output>/<path>.json. Merges by name into any existing entity. Provide source_file, start_line, and end_line together to store provenance in metadata.citations. Returns the updated graph stats and the file path written."
+        description = "Record an entity in the knowledge graph at <output>/<path>.json. Merges by name into any existing entity. Provide source_file, start_line, and end_line together to store provenance in metadata.citations. source_file must be a relative path under the server source_root; absolute paths and '..' are rejected. The server validates that the file exists and that the line range is in bounds before writing. Returns the updated graph stats and the file path written."
     )]
     async fn add_entity(
         &self,
@@ -198,7 +198,7 @@ impl KgExtractMcp {
     }
 
     #[tool(
-        description = "Record a relationship between two entities in the graph at <output>/<path>.json. BOTH endpoints must already exist — call add_entity for each first. Provide source_file, start_line, and end_line together to store relationship provenance in metadata.citations. If an endpoint is missing the tool returns an error naming it and listing the known entities, so you can add it (or fix a typo) and retry. Identical relations are deduplicated and citations are merged. Returns updated stats and the file path."
+        description = "Record a relationship between two entities in the graph at <output>/<path>.json. BOTH endpoints must already exist — call add_entity for each first. Provide source_file, start_line, and end_line together to store relationship provenance in metadata.citations. source_file must be a relative path under the server source_root; absolute paths and '..' are rejected. The server validates that the file exists and that the line range is in bounds before writing. If an endpoint is missing the tool returns an error naming it and listing the known entities, so you can add it (or fix a typo) and retry. Identical relations are deduplicated and citations are merged. Returns updated stats and the file path."
     )]
     async fn add_relation(
         &self,
@@ -293,7 +293,8 @@ impl ServerHandler for KgExtractMcp {
                  (both endpoints must already exist), and add_attribute for extra facts. \
                  When a fact comes from source text, pass source_file, start_line, and \
                  end_line together on add_entity/add_relation so provenance is stored in \
-                 metadata.citations. \
+                 metadata.citations. source_file must be relative to source_root; the \
+                 server validates file existence and line bounds before writing. \
                  Use query_graph (view=entities/relations/neighbors) to see what is already \
                  recorded before extending. Use query_schema to inspect fixed/evolving schema \
                  constraints; in evolving mode call propose_schema_type before using a new \
@@ -336,6 +337,11 @@ struct Args {
     /// Output directory. Each tool call writes <output>/<path>.json.
     #[arg(short = 'o', long)]
     output: String,
+
+    /// Source document root. source_file provenance values must be relative to
+    /// this directory. Defaults to the current working directory.
+    #[arg(long)]
+    source_root: Option<String>,
 
     /// Schema mode: open accepts any type; fixed accepts only --schema; evolving
     /// starts from --schema and allows explicit propose_schema_type additions.
@@ -407,15 +413,30 @@ async fn main() -> anyhow::Result<()> {
     let output = expand_tilde(&args.output);
     std::fs::create_dir_all(&output)
         .with_context(|| format!("creating output dir {}", output.display()))?;
+    let source_root = match args.source_root.as_deref() {
+        Some(path) => expand_tilde(path),
+        None => std::env::current_dir().context("resolving current directory as source root")?,
+    };
+    let source_root = source_root
+        .canonicalize()
+        .with_context(|| format!("resolving source root {}", source_root.display()))?;
+    if !source_root.is_dir() {
+        anyhow::bail!("source root is not a directory: {}", source_root.display());
+    }
     if args.verbose {
         eprintln!(
-            "kg-extract-mcp: serving stdio MCP; output dir = {}; schema mode = {:?}",
+            "kg-extract-mcp: serving stdio MCP; output dir = {}; source root = {}; schema mode = {:?}",
             output.display(),
+            source_root.display(),
             args.schema_mode
         );
     }
 
-    KgExtractMcp::new(KgStore::with_policy(output, policy))
-        .serve_stdio()
-        .await
+    KgExtractMcp::new(KgStore::with_policy_and_source_root(
+        output,
+        policy,
+        source_root,
+    ))
+    .serve_stdio()
+    .await
 }

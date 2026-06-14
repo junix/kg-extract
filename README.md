@@ -478,17 +478,29 @@ response metadata for auditing.
 client. The server does not call an LLM; the client reads source text and drives
 the mutations.
 
+Start the server with an output directory and, optionally, the source document
+root used to validate provenance:
+
+```bash
+kg-extract-mcp -o /tmp/kg-out --source-root /path/to/docs
+```
+
+If `--source-root` is omitted, the current working directory is used.
+
 For provenance, `add_entity` and `add_relation` accept these fields as a group:
 
 | Field | Meaning |
 |-------|---------|
-| `source_file` | source document path |
+| `source_file` | source document path, relative to `source_root` |
 | `start_line` | 1-based inclusive start line |
 | `end_line` | 1-based inclusive end line |
 
-When provided, the store writes them to `metadata.citations`. Repeated calls for
-the same entity or relation merge citations rather than duplicating the graph
-record.
+When provided, `source_file` must be a relative path under `source_root`
+(absolute paths and `..` are rejected), and the line range must fit the source
+file. The store validates this before writing and returns a tool error if the
+client needs to correct the path or lines. Valid citations are written to
+`metadata.citations`. Repeated calls for the same entity or relation merge
+citations rather than duplicating the graph record.
 
 ```bash
 kg-extract -e agentic --agent minimaxcc --schema-mode fixed --schema schema.json -f doc.txt -o json
