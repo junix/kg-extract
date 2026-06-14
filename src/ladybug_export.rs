@@ -22,7 +22,7 @@ pub fn to_ladybug_import_json(kg: &KnowledgeGraph) -> Value {
     let rel_types: BTreeSet<String> = kg
         .triples
         .iter()
-        .map(|t| sanitize_identifier(&t.predicate.predicate_type.value()))
+        .map(|t| sanitize_identifier(&t.predicate.output_type()))
         .collect();
 
     let mut schema = vec![format!(
@@ -42,10 +42,10 @@ pub fn to_ladybug_import_json(kg: &KnowledgeGraph) -> Value {
                 "_table": ENTITY_TABLE,
                 "id": entity.id,
                 "label": entity.label,
-                "type": entity.entity_type.value(),
+                "type": entity.output_type(),
                 "description": entity.description,
                 "confidence": entity.confidence,
-                "metadata": metadata_string(&entity.metadata),
+                "metadata": entity_metadata_string(entity),
             })
         })
         .collect();
@@ -54,14 +54,14 @@ pub fn to_ladybug_import_json(kg: &KnowledgeGraph) -> Value {
         .triples
         .iter()
         .map(|triple| {
-            let rel_type = sanitize_identifier(&triple.predicate.predicate_type.value());
+            let rel_type = sanitize_identifier(&triple.predicate.output_type());
             json!({
                 "_type": rel_type,
                 "_from": triple.subject.id,
                 "_to": triple.object.id,
                 "_from_table": ENTITY_TABLE,
                 "_to_table": ENTITY_TABLE,
-                "predicate": triple.predicate.predicate_type.value(),
+                "predicate": triple.predicate.output_type(),
                 "label": triple.predicate.display_label(),
                 "confidence": triple.confidence.or(triple.predicate.confidence),
                 "metadata": relationship_metadata_string(triple),
@@ -77,14 +77,25 @@ pub fn to_ladybug_import_json(kg: &KnowledgeGraph) -> Value {
     })
 }
 
-fn metadata_string(metadata: &std::collections::HashMap<String, Value>) -> String {
-    serde_json::to_string(metadata).unwrap_or_else(|_| "{}".to_string())
+fn entity_metadata_string(entity: &crate::types::Entity) -> String {
+    let mut merged: BTreeMap<String, Value> = entity
+        .metadata
+        .iter()
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    merged.insert("normalized_type".into(), json!(entity.entity_type.value()));
+    serde_json::to_string(&merged).unwrap_or_else(|_| "{}".to_string())
 }
 
 fn relationship_metadata_string(triple: &crate::types::Triple) -> String {
     let mut merged = BTreeMap::new();
     merged.insert("triple", json!(triple.metadata));
-    merged.insert("predicate", json!(triple.predicate.metadata));
+    let mut predicate_metadata = triple.predicate.metadata.clone();
+    predicate_metadata.insert(
+        "normalized_type".into(),
+        json!(triple.predicate.predicate_type.value()),
+    );
+    merged.insert("predicate", json!(predicate_metadata));
     serde_json::to_string(&merged).unwrap_or_else(|_| "{}".to_string())
 }
 

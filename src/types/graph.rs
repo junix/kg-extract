@@ -33,7 +33,7 @@ impl Triple {
     pub fn to_tuple(&self) -> (String, String, String) {
         (
             self.subject.id.clone(),
-            self.predicate.predicate_type.value(),
+            self.predicate.output_type(),
             self.object.id.clone(),
         )
     }
@@ -42,7 +42,8 @@ impl Triple {
         serde_json::json!({
             "subject": self.subject.to_dict(),
             "predicate": {
-                "type": self.predicate.predicate_type.value(),
+                "type": self.predicate.output_type(),
+                "normalized_type": self.predicate.predicate_type.value(),
                 "label": self.predicate.label,
                 "confidence": self.predicate.confidence,
                 "metadata": self.predicate.metadata,
@@ -201,7 +202,8 @@ impl KnowledgeGraph {
                 serde_json::json!({
                     "source": t.subject.id,
                     "target": t.object.id,
-                    "type": t.predicate.predicate_type.value(),
+                    "type": t.predicate.output_type(),
+                    "normalized_type": t.predicate.predicate_type.value(),
                     "label": t.predicate.label,
                     "confidence": t.confidence,
                     "metadata": t.metadata,
@@ -242,12 +244,12 @@ impl KnowledgeGraph {
     pub fn stats(&self) -> serde_json::Value {
         let mut entity_types: HashMap<String, usize> = HashMap::new();
         for (_, e) in self.entities.iter() {
-            *entity_types.entry(e.entity_type.value()).or_insert(0) += 1;
+            *entity_types.entry(e.output_type()).or_insert(0) += 1;
         }
         let mut predicate_types: HashMap<String, usize> = HashMap::new();
         for t in &self.triples {
             *predicate_types
-                .entry(t.predicate.predicate_type.value())
+                .entry(t.predicate.output_type())
                 .or_insert(0) += 1;
         }
         serde_json::json!({

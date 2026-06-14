@@ -114,10 +114,15 @@ pub fn render_prompt(template: &TemplateCfg, lang: &str, text: &str) -> String {
         "# Output\n\
 Return a single JSON object with exactly these keys:\n\
 1. \"entities\": {\"<entity name>\": {\"type\": \"<entity type>\", \"attributes\": {\"<attr>\": \"<value>\"}}}\n\
-2. \"relationships\": [[\"<subject>\", \"<predicate>\", \"<object>\"]]\n\
-3. \"entity_types\": {\"<entity name>\": \"<entity type>\"}\n",
+2. \"relationships\": ",
     );
-    if !has_relations {
+    if has_relations {
+        out.push_str(
+            "[{\"source\": \"<subject>\", \"type\": \"<predicate>\", \"target\": \"<object>\", \"attributes\": {\"<attr>\": \"<value>\"}}]\n\
+3. \"entity_types\": {\"<entity name>\": \"<entity type>\"}\n",
+        );
+    } else {
+        out.push_str("[]\n3. \"entity_types\": {\"<entity name>\": \"<entity type>\"}\n");
         out.push_str(
             "This template has no relations — return \"relationships\": [] (an empty list).\n",
         );

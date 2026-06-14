@@ -201,6 +201,10 @@ pub fn default_predicates() -> Vec<PredicateType> {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Predicate {
     pub predicate_type: PredicateType,
+    /// Original relation type token emitted by the model/tool before enum
+    /// normalisation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_type: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub label: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -213,6 +217,7 @@ impl Predicate {
     pub fn new(predicate_type: PredicateType) -> Self {
         Predicate {
             predicate_type,
+            raw_type: None,
             label: None,
             confidence: None,
             metadata: HashMap::new(),
@@ -220,18 +225,32 @@ impl Predicate {
     }
 
     pub fn with_label(predicate_type: PredicateType, label: impl Into<String>) -> Self {
+        let label = label.into();
         Predicate {
             predicate_type,
-            label: Some(label.into()),
+            raw_type: Some(label.clone()),
+            label: Some(label),
             confidence: None,
             metadata: HashMap::new(),
         }
+    }
+
+    pub fn output_type(&self) -> String {
+        self.raw_type
+            .as_deref()
+            .or(self.label.as_deref())
+            .filter(|s| !s.trim().is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| self.predicate_type.value())
     }
 
     /// Human-readable label: `label` if set, else Title-Cased type value.
     pub fn display_label(&self) -> String {
         if let Some(l) = &self.label {
             return l.clone();
+        }
+        if let Some(raw) = &self.raw_type {
+            return raw.clone();
         }
         title_case(&self.predicate_type.value())
     }

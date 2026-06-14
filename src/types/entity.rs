@@ -223,6 +223,12 @@ pub struct Entity {
     pub id: String,
     pub label: String,
     pub entity_type: EntityType,
+    /// Original type token emitted by the model/tool before enum normalisation.
+    ///
+    /// This keeps open-schema extraction lossless while `entity_type` remains
+    /// available for legacy enum-based code paths.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub raw_type: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confidence: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -237,10 +243,25 @@ impl Entity {
             id: id.into(),
             label: label.into(),
             entity_type,
+            raw_type: None,
             confidence: None,
             description: None,
             metadata: HashMap::new(),
         }
+    }
+
+    pub fn with_raw_type(mut self, raw_type: impl Into<String>) -> Self {
+        self.raw_type = Some(raw_type.into());
+        self
+    }
+
+    /// The type token to expose in open-schema output.
+    pub fn output_type(&self) -> String {
+        self.raw_type
+            .as_deref()
+            .filter(|s| !s.trim().is_empty())
+            .map(ToOwned::to_owned)
+            .unwrap_or_else(|| self.entity_type.value())
     }
 
     /// Dict form matching Python `Entity.to_dict` (`type` key holds the value).
@@ -248,7 +269,8 @@ impl Entity {
         serde_json::json!({
             "id": self.id,
             "label": self.label,
-            "type": self.entity_type.value(),
+            "type": self.output_type(),
+            "normalized_type": self.entity_type.value(),
             "confidence": self.confidence,
             "description": self.description,
             "metadata": self.metadata,

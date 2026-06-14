@@ -344,9 +344,10 @@ impl ToolCallExtractor {
 
         // Entities: deduped by lowercased name, combined per the strategy above.
         for draft in &acc.entities {
-            gb.add_entity(
+            gb.add_entity_with_raw_type(
                 &draft.name,
                 parse_entity_type(&draft.type_str),
+                Some(draft.type_str.clone()),
                 draft.description.clone(),
                 draft.attributes.clone(),
             );

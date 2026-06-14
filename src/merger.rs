@@ -202,6 +202,9 @@ pub fn combine_entities(
             {
                 e.entity_type = incoming.entity_type;
             }
+            if e.raw_type.is_none() {
+                e.raw_type = incoming.raw_type.clone();
+            }
             // Union metadata; existing keys win on conflict.
             for (k, v) in &incoming.metadata {
                 e.metadata.entry(k.clone()).or_insert_with(|| v.clone());

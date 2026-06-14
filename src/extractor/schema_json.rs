@@ -167,11 +167,10 @@ Ensure valid JSON output."
                                 .map(String::from)
                         })
                         .unwrap_or_else(|| "UNKNOWN".into());
-                    let attrs: HashMap<String, serde_json::Value> = io
-                        .get("attributes")
-                        .and_then(|v| v.as_object())
-                        .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
-                        .unwrap_or_default();
+                    let attrs = collect_attributes(
+                        io,
+                        &["type", "label", "name", "description", "attributes"],
+                    );
                     (t, attrs)
                 } else {
                     let t = entity_types
@@ -196,27 +195,33 @@ Ensure valid JSON output."
                     .map(String::from);
                 // GraphBuilder keys by lowercased name, so a relationship that
                 // references the entity with different casing still resolves.
-                gb.add_entity(name, entity_type, description, attributes);
+                gb.add_entity_with_raw_type(
+                    name,
+                    entity_type,
+                    Some(type_str),
+                    description,
+                    attributes,
+                );
             }
         }
 
         if let Some(rels) = data.get("relationships").and_then(|v| v.as_array()) {
             for rel in rels {
-                let Some(arr) = rel.as_array() else { continue };
-                if arr.len() < 3 {
+                let Some((subject_name, predicate_str, object_name, attributes)) =
+                    relation_parts(rel)
+                else {
                     continue;
-                }
-                let subject_name = arr[0].as_str().unwrap_or_default();
-                let predicate_str = arr[1].as_str().unwrap_or_default();
-                let object_name = arr[2].as_str().unwrap_or_default();
+                };
 
                 let predicate_type = predicate_str
                     .to_uppercase()
                     .replace([' ', '-'], "_")
                     .parse::<PredicateType>()
                     .unwrap_or(PredicateType::RelatedTo);
-                let predicate = Predicate::with_label(predicate_type, predicate_str);
-                gb.add_relation(subject_name, predicate, object_name, |_| {});
+                let predicate = Predicate::with_label(predicate_type, predicate_str.clone());
+                gb.add_relation(&subject_name, predicate, &object_name, |t| {
+                    t.metadata = attributes;
+                });
             }
         }
 
@@ -282,14 +287,10 @@ Ensure valid JSON output."
         let mut kept_rels = Vec::new();
         if let Some(arr) = data.get("relationships").and_then(|v| v.as_array()) {
             for rel in arr {
-                let Some(a) = rel.as_array() else { continue };
-                if a.len() < 3 {
+                let Some((s, p, o, _)) = relation_parts(rel) else {
                     continue;
-                }
-                let s = a[0].as_str().unwrap_or_default();
-                let p = a[1].as_str().unwrap_or_default();
-                let o = a[2].as_str().unwrap_or_default();
-                let pt = norm_type(p);
+                };
+                let pt = norm_type(&p);
                 let pred_ok = rels.is_empty() || rels.contains(&pt);
                 let endpoint_dropped = dropped_names.contains(&s.to_lowercase())
                     || dropped_names.contains(&o.to_lowercase());
@@ -311,6 +312,76 @@ Ensure valid JSON output."
         }
         (out, drops)
     }
+}
+
+fn collect_attributes(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    reserved: &[&str],
+) -> HashMap<String, serde_json::Value> {
+    let mut attrs: HashMap<String, serde_json::Value> = obj
+        .get("attributes")
+        .and_then(|v| v.as_object())
+        .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+        .unwrap_or_default();
+
+    for (key, value) in obj {
+        if reserved.iter().any(|r| key == r) {
+            continue;
+        }
+        attrs.entry(key.clone()).or_insert_with(|| value.clone());
+    }
+    attrs
+}
+
+fn relation_parts(
+    rel: &serde_json::Value,
+) -> Option<(String, String, String, HashMap<String, serde_json::Value>)> {
+    if let Some(arr) = rel.as_array() {
+        if arr.len() < 3 {
+            return None;
+        }
+        let source = arr[0].as_str().unwrap_or_default().to_string();
+        let predicate = arr[1].as_str().unwrap_or_default().to_string();
+        let target = arr[2].as_str().unwrap_or_default().to_string();
+        let attributes = arr
+            .get(3)
+            .and_then(|v| v.as_object())
+            .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
+            .unwrap_or_default();
+        return Some((source, predicate, target, attributes));
+    }
+
+    let obj = rel.as_object()?;
+    let source = obj
+        .get("source")
+        .or_else(|| obj.get("subject"))
+        .and_then(|v| v.as_str())?
+        .to_string();
+    let target = obj
+        .get("target")
+        .or_else(|| obj.get("object"))
+        .and_then(|v| v.as_str())?
+        .to_string();
+    let predicate = obj
+        .get("type")
+        .or_else(|| obj.get("predicate"))
+        .or_else(|| obj.get("relation"))
+        .and_then(|v| v.as_str())?
+        .to_string();
+    let attributes = collect_attributes(
+        obj,
+        &[
+            "source",
+            "subject",
+            "target",
+            "object",
+            "type",
+            "predicate",
+            "relation",
+            "attributes",
+        ],
+    );
+    Some((source, predicate, target, attributes))
 }
 
 #[async_trait::async_trait]
@@ -452,6 +523,62 @@ mod tests {
         let out = ex.extract("OpenAI developed GPT-4.").await.unwrap();
         assert_eq!(out.num_entities(), 2);
         assert_eq!(out.num_triples(), 1);
+    }
+
+    #[tokio::test]
+    async fn open_schema_output_preserves_raw_entity_and_relation_types() {
+        let json = r#"{"entities": {
+            "KG-RAG": {"type": "METHOD"},
+            "RAG": {"type": "FRAMEWORK"}
+        }, "relationships": [["KG-RAG", "BUILDS_ON", "RAG"]]}"#;
+        let out = SchemaJsonExtractor::new(Arc::new(MockBackend::single(json)))
+            .extract("KG-RAG builds on RAG.")
+            .await
+            .unwrap();
+
+        let doc = out.knowledge_graph.to_dict();
+        let kg_rag_id = entity_id("KG-RAG");
+        assert_eq!(doc["entities"][&kg_rag_id]["type"], "METHOD");
+        assert_eq!(
+            doc["entities"][&kg_rag_id]["normalized_type"],
+            "PHYSICAL_OBJECT"
+        );
+        assert_eq!(doc["triples"][0]["predicate"]["type"], "BUILDS_ON");
+        assert_eq!(
+            doc["triples"][0]["predicate"]["normalized_type"],
+            "RELATED_TO"
+        );
+    }
+
+    #[tokio::test]
+    async fn object_relationships_preserve_attributes_as_triple_metadata() {
+        let json = r#"{"entities": {
+            "KG-RAG": {"type": "METHOD", "evidence_quote": "KG-RAG framework"},
+            "SPOKE": {"type": "KNOWLEDGE_GRAPH", "attributes": {"role": "knowledge source"}}
+        }, "relationships": [{
+            "source": "KG-RAG",
+            "type": "RETRIEVES_FROM",
+            "target": "SPOKE",
+            "evidence_quote": "retrieves context from SPOKE",
+            "source_section": "Methods"
+        }]}"#;
+        let out = SchemaJsonExtractor::new(Arc::new(MockBackend::single(json)))
+            .extract("KG-RAG retrieves context from SPOKE.")
+            .await
+            .unwrap();
+
+        let doc = out.knowledge_graph.to_dict();
+        assert_eq!(doc["triples"][0]["predicate"]["type"], "RETRIEVES_FROM");
+        assert_eq!(
+            doc["triples"][0]["metadata"]["evidence_quote"],
+            "retrieves context from SPOKE"
+        );
+        assert_eq!(doc["triples"][0]["metadata"]["source_section"], "Methods");
+        let kg_rag_id = entity_id("KG-RAG");
+        assert_eq!(
+            doc["entities"][&kg_rag_id]["metadata"]["evidence_quote"],
+            "KG-RAG framework"
+        );
     }
 
     /// Single-shot engines never chunk, so pre-chunked input goes through the

@@ -273,6 +273,7 @@ pub fn create_entities_from_parsed(
         };
 
         let mut entity = Entity::new(id.clone(), label, entity_type);
+        entity.raw_type = data.r#type.clone();
         entity.description = data.description.clone();
         if !data.attributes.is_empty() {
             entity.metadata = data.attributes.clone();

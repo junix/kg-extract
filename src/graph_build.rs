@@ -163,10 +163,11 @@ impl GraphBuilder {
     /// Add an entity, deduped by lowercased name. On a collision the existing
     /// entity is combined with the incoming one per [`Self::merge_strategy`]
     /// (keeping the existing id stable). Returns the entity's id.
-    pub(crate) fn add_entity(
+    pub(crate) fn add_entity_with_raw_type(
         &mut self,
         name: &str,
         entity_type: EntityType,
+        raw_type: Option<String>,
         description: Option<String>,
         attributes: HashMap<String, serde_json::Value>,
     ) -> String {
@@ -177,6 +178,7 @@ impl GraphBuilder {
             if self.strategy != MergeStrategy::KeepExisting {
                 if let Some(existing) = self.kg.entities.get(&id).cloned() {
                     let mut incoming = Entity::new(id.clone(), name, entity_type);
+                    incoming.raw_type = raw_type;
                     incoming.description = description;
                     incoming.metadata = attributes;
                     let merged = combine_entities(self.strategy, &existing, &incoming, None);
@@ -187,6 +189,7 @@ impl GraphBuilder {
         }
         let id = entity_id(name);
         let mut entity = Entity::new(id.clone(), name, entity_type);
+        entity.raw_type = raw_type;
         entity.description = description;
         entity.metadata = attributes;
         self.by_name.insert(key, id.clone());

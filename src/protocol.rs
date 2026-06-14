@@ -21,10 +21,10 @@ impl KnowledgeGraph {
                 .map(|(_, entity)| KgEntity {
                     id: entity.id.clone(),
                     label: entity.label.clone(),
-                    entity_type: entity.entity_type.value(),
+                    entity_type: entity.output_type(),
                     description: entity.description.clone(),
                     confidence: entity.confidence,
-                    properties: metadata_to_properties(&entity.metadata),
+                    properties: entity_properties(entity),
                     evidence: citations_to_evidence(&entity.metadata),
                 })
                 .collect(),
@@ -34,7 +34,7 @@ impl KnowledgeGraph {
                 .map(|triple| KgRelation {
                     id: None,
                     subject: triple.subject.id.clone(),
-                    predicate: triple.predicate.predicate_type.value(),
+                    predicate: triple.predicate.output_type(),
                     object: triple.object.id.clone(),
                     label: triple.predicate.label.clone(),
                     confidence: triple.confidence.or(triple.predicate.confidence),
@@ -49,8 +49,21 @@ impl KnowledgeGraph {
     }
 }
 
+fn entity_properties(entity: &crate::types::Entity) -> BTreeMap<String, Value> {
+    let mut properties = metadata_to_properties(&entity.metadata);
+    properties.insert(
+        "normalized_entity_type".into(),
+        Value::String(entity.entity_type.value()),
+    );
+    properties
+}
+
 fn relation_properties(triple: &Triple) -> BTreeMap<String, Value> {
     let mut properties = metadata_to_properties(&triple.metadata);
+    properties.insert(
+        "normalized_predicate_type".into(),
+        Value::String(triple.predicate.predicate_type.value()),
+    );
     if !triple.predicate.metadata.is_empty() {
         properties.insert(
             "predicate_metadata".into(),
@@ -148,6 +161,10 @@ mod tests {
         assert_eq!(doc.entities.len(), 2);
         assert_eq!(doc.entities[0].entity_type, "ORGANIZATION");
         assert_eq!(
+            doc.entities[0].properties["normalized_entity_type"],
+            json!("ORGANIZATION")
+        );
+        assert_eq!(
             doc.entities[0].evidence[0].source_file.as_deref(),
             Some("doc.md")
         );
@@ -163,7 +180,11 @@ mod tests {
         );
         assert_eq!(doc.relations.len(), 1);
         assert_eq!(doc.relations[0].subject, "entity_openai");
-        assert_eq!(doc.relations[0].predicate, "DEVELOPED_BY");
+        assert_eq!(doc.relations[0].predicate, "developed");
+        assert_eq!(
+            doc.relations[0].properties["normalized_predicate_type"],
+            json!("DEVELOPED_BY")
+        );
         assert_eq!(doc.relations[0].object, "entity_gpt4");
         assert!(doc.relations[0]
             .properties
