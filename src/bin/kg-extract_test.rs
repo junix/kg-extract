@@ -211,3 +211,51 @@ fn precedence_cli_flag_overrides_config() {
         "explicit --schema-mode must win over config"
     );
 }
+
+// ---- print_response: every output-format arm must terminate Ok on a
+// populated response. The branches are pure printing; this locks the dispatch
+// wiring (no panic, no format mis-route) for all seven formats. ----
+
+use kg_extract::types::{Entity, EntityType, ExtractionResponse, KnowledgeGraph, Predicate,
+    PredicateType, Triple};
+
+fn populated_response() -> ExtractionResponse {
+    // One entity + one self-loop triple so the jsonl/mermaid/stats branches
+    // have non-empty content to serialize.
+    let widget = Entity::new("p", "Widget", EntityType::Product);
+    let mut kg = KnowledgeGraph::new();
+    kg.add_entity(widget.clone());
+    kg.add_triple(Triple::new(
+        widget.clone(),
+        Predicate::with_label(PredicateType::Uses, "USES"),
+        widget,
+    ));
+    ExtractionResponse::new(kg)
+}
+
+#[test]
+fn print_response_json_round_trips_ok() {
+    // stdout goes to the test capture; we only assert the arm returns Ok
+    // (i.e. serialization of every format succeeds and dispatch doesn't panic).
+    let r = populated_response();
+    assert!(print_response(OutFmt::Json, &r).is_ok());
+}
+
+#[test]
+fn print_response_all_formats_return_ok() {
+    let r = populated_response();
+    for fmt in [
+        OutFmt::Json,
+        OutFmt::Jsonl,
+        OutFmt::KgProtocol,
+        OutFmt::NodeLink,
+        OutFmt::LadybugImport,
+        OutFmt::Mermaid,
+        OutFmt::Stats,
+    ] {
+        assert!(
+            print_response(fmt, &r).is_ok(),
+            "print_response must succeed for every output format"
+        );
+    }
+}

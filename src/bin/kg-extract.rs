@@ -23,7 +23,7 @@ use kg_extract::extractor::{
     ToolCallExtractor,
 };
 use kg_extract::template::{gallery, TemplateCfg};
-use kg_extract::types::{ChunkStrategy, MergeStrategy, Schema};
+use kg_extract::types::{ChunkStrategy, ExtractionResponse, MergeStrategy, Schema};
 
 #[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -533,6 +533,64 @@ fn print_presets() {
     }
 }
 
+/// Render the extracted graph in the requested output format to stdout. The
+/// seven formats are mutually-exclusive terminal printing, split out of `main`
+/// so the dispatch arm-per-format complexity lives in one tested-by-wiring
+/// place rather than inflating main's cyclomatic complexity.
+fn print_response(fmt: OutFmt, response: &ExtractionResponse) -> anyhow::Result<()> {
+    match fmt {
+        OutFmt::Json => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&response.knowledge_graph.to_dict())?
+            )
+        }
+        OutFmt::Jsonl => {
+            for (_, entity) in response.knowledge_graph.entities.iter() {
+                println!(
+                    "{}",
+                    serde_json::to_string(&serde_json::json!({
+                        "kind": "entity",
+                        "data": entity.to_dict(),
+                    }))?
+                );
+            }
+            for triple in &response.knowledge_graph.triples {
+                println!(
+                    "{}",
+                    serde_json::to_string(&serde_json::json!({
+                        "kind": "triple",
+                        "data": triple.to_dict(),
+                    }))?
+                );
+            }
+        }
+        OutFmt::KgProtocol => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&response.knowledge_graph.to_kg_document())?
+            )
+        }
+        OutFmt::NodeLink => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&response.knowledge_graph.to_node_link())?
+            )
+        }
+        OutFmt::LadybugImport => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&kg_extract::ladybug_export::to_ladybug_import_json(
+                    &response.knowledge_graph
+                ))?
+            )
+        }
+        OutFmt::Mermaid => println!("{}", response.get_mermaid_code()),
+        OutFmt::Stats => println!("{}", serde_json::to_string_pretty(&response.get_stats())?),
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let matches = Args::command().get_matches();
@@ -664,56 +722,7 @@ async fn main() -> anyhow::Result<()> {
         None => extractor.extract(&text).await?,
     };
 
-    match cfg.output {
-        OutFmt::Json => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&response.knowledge_graph.to_dict())?
-            )
-        }
-        OutFmt::Jsonl => {
-            for (_, entity) in response.knowledge_graph.entities.iter() {
-                println!(
-                    "{}",
-                    serde_json::to_string(&serde_json::json!({
-                        "kind": "entity",
-                        "data": entity.to_dict(),
-                    }))?
-                );
-            }
-            for triple in &response.knowledge_graph.triples {
-                println!(
-                    "{}",
-                    serde_json::to_string(&serde_json::json!({
-                        "kind": "triple",
-                        "data": triple.to_dict(),
-                    }))?
-                );
-            }
-        }
-        OutFmt::KgProtocol => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&response.knowledge_graph.to_kg_document())?
-            )
-        }
-        OutFmt::NodeLink => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&response.knowledge_graph.to_node_link())?
-            )
-        }
-        OutFmt::LadybugImport => {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&kg_extract::ladybug_export::to_ladybug_import_json(
-                    &response.knowledge_graph
-                ))?
-            )
-        }
-        OutFmt::Mermaid => println!("{}", response.get_mermaid_code()),
-        OutFmt::Stats => println!("{}", serde_json::to_string_pretty(&response.get_stats())?),
-    }
+    print_response(cfg.output, &response)?;
     Ok(())
 }
 
