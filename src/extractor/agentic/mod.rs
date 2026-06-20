@@ -95,6 +95,31 @@ fn merge_slice_entity(all: &mut HashMap<String, Entity>, id: &str, e: &Entity) {
     }
 }
 
+/// Format the per-slice "proposed N new type(s)" log line for the Evolving
+/// schema arm. Returns `None` when no new types were proposed (the caller's
+/// quiet-gate), otherwise the ready-to-`eprintln!` string. Pure so the
+/// BTreeSet-join formatting can be unit-tested.
+fn new_types_proposal_log(
+    slice_index: usize,
+    new_nodes: &BTreeSet<String>,
+    new_relations: &BTreeSet<String>,
+) -> Option<String> {
+    if new_nodes.is_empty() && new_relations.is_empty() {
+        return None;
+    }
+    let csv = new_nodes
+        .iter()
+        .chain(new_relations.iter())
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(", ");
+    Some(format!(
+        "  [schema] slice {} proposed {} new type(s): {csv}",
+        slice_index + 1,
+        new_nodes.len() + new_relations.len()
+    ))
+}
+
 /// Stamp a slice's line-range provenance onto every record it produced: each
 /// entity, and each triple plus its two endpoint snapshots. No-op when the
 /// slice carries no line metadata (`lines == None`). Endpoint snapshots matter
@@ -595,18 +620,10 @@ impl AgenticExtractor {
                         // that lie outside the seed schema.
                         let tokens = entity_type_tokens(&output);
                         let (nn, nr) = f.new_types(&parsed.entities, &parsed.triples, &tokens);
-                        if !self.quiet && (!nn.is_empty() || !nr.is_empty()) {
-                            let csv = nn
-                                .iter()
-                                .chain(nr.iter())
-                                .cloned()
-                                .collect::<Vec<_>>()
-                                .join(", ");
-                            eprintln!(
-                                "  [schema] slice {} proposed {} new type(s): {csv}",
-                                i + 1,
-                                nn.len() + nr.len()
-                            );
+                        if !self.quiet {
+                            if let Some(line) = new_types_proposal_log(i, &nn, &nr) {
+                                eprintln!("{line}");
+                            }
                         }
                         new_nodes.extend(nn);
                         new_relations.extend(nr);

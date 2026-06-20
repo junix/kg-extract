@@ -121,6 +121,25 @@ fn all_dropped_flags_the_degenerate_slice() {
 }
 
 #[test]
+fn new_types_proposal_log_is_none_when_nothing_proposed() {
+    assert!(new_types_proposal_log(0, &BTreeSet::new(), &BTreeSet::new()).is_none());
+}
+
+#[test]
+fn new_types_proposal_log_lists_nodes_and_relations_with_1_based_slice() {
+    let mut nn = BTreeSet::new();
+    nn.insert("ORG".to_string());
+    let mut nr = BTreeSet::new();
+    nr.insert("DEPENDS_ON".to_string());
+    // slice_index 2 -> "slice 3" (1-based).
+    let line = new_types_proposal_log(2, &nn, &nr).unwrap();
+    assert!(line.contains("slice 3"), "{line:?}");
+    assert!(line.contains("2 new type(s)"), "{line:?}");
+    // Both proposals appear, nodes joined before relations.
+    assert!(line.contains("ORG, DEPENDS_ON"), "{line:?}");
+}
+
+#[test]
 fn stamp_slice_citations_marks_entity_triple_and_both_endpoints() {
     use crate::citation::{Citation, CITATIONS_KEY};
     let cite = Citation::new(Some("doc.md".into()), 5, 9);
