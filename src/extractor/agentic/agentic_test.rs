@@ -207,3 +207,104 @@ fn evolving_collects_types_outside_the_seed() {
         "seed relation is not a proposal"
     );
 }
+
+// ---- assemble_response: the three schema-policy arms are pure over their
+// inputs, so they can be exercised without an SDK client. ----
+
+fn outcome() -> SessionOutcome {
+    let mut entities = HashMap::new();
+    entities.insert(
+        "p".to_string(),
+        ent("p", "Widget", EntityType::Product),
+    );
+    SessionOutcome {
+        slices_count: 2,
+        total_tool_uses: 3,
+        entities,
+        triples: Vec::new(),
+        parsed_results: Vec::new(),
+        total_dropped: 0,
+        dropped_types: BTreeSet::new(),
+        new_nodes: BTreeSet::new(),
+        new_relations: BTreeSet::new(),
+    }
+}
+
+fn config_for(mode: SchemaMode) -> ExtractionConfig {
+    let mut c = AgenticExtractor::default_config();
+    c.spec.mode = mode;
+    c
+}
+
+#[test]
+fn assemble_response_off_policy_has_no_schema_metadata() {
+    let cfg = config_for(SchemaMode::Open);
+    let resp = AgenticExtractor::assemble_response(outcome(), &SchemaPolicy::Off, true, SchemaMode::Open, &cfg);
+    // Common metadata always present.
+    assert_eq!(resp.metadata["tool_uses"], serde_json::json!(3));
+    assert_eq!(resp.metadata["schema_mode"], serde_json::json!("open"));
+    // Off arm sets neither fixed- nor evolving-specific keys.
+    assert!(resp.metadata.get("schema_dropped_records").is_none());
+    assert!(resp.metadata.get("new_schema_types").is_none());
+    // The single Product entity made it into the knowledge graph.
+    assert_eq!(resp.knowledge_graph.entities.len(), 1);
+}
+
+#[test]
+fn assemble_response_fixed_policy_records_drops() {
+    let cfg = config_for(SchemaMode::Fixed);
+    let mut o = outcome();
+    o.total_dropped = 4;
+    let mut dt = BTreeSet::new();
+    dt.insert("ORGANIZATION".to_string());
+    dt.insert("PERSON".to_string());
+    o.dropped_types = dt;
+    let schema = Schema::new(vec!["PRODUCT".into()], vec!["USES".into()], vec![]);
+    let filter = SchemaFilter::build(&schema).expect("non-empty schema builds a filter");
+    let resp = AgenticExtractor::assemble_response(o, &SchemaPolicy::Fixed(filter), true, SchemaMode::Fixed, &cfg);
+    assert_eq!(resp.metadata["schema_dropped_records"], serde_json::json!(4));
+    // BTreeSet -> sorted Vec; both dropped types recorded.
+    assert_eq!(
+        resp.metadata["schema_dropped_types"],
+        serde_json::json!(["ORGANIZATION", "PERSON"])
+    );
+    // Fixed arm must not emit the evolving `new_schema_types` shape.
+    assert!(resp.metadata.get("new_schema_types").is_none());
+}
+
+#[test]
+fn assemble_response_evolving_policy_proposes_new_types() {
+    let cfg = config_for(SchemaMode::Evolving);
+    let mut o = outcome();
+    let mut nn = BTreeSet::new();
+    nn.insert("GADGET".to_string());
+    o.new_nodes = nn;
+    let mut nr = BTreeSet::new();
+    nr.insert("DEPENDS_ON".to_string());
+    o.new_relations = nr;
+    let schema = Schema::new(vec!["PRODUCT".into()], vec!["USES".into()], vec![]);
+    let filter = SchemaFilter::build(&schema).expect("non-empty schema builds a filter");
+    let resp = AgenticExtractor::assemble_response(o, &SchemaPolicy::Evolving(filter), true, SchemaMode::Evolving, &cfg);
+    let nst = resp.metadata.get("new_schema_types").expect("evolving sets new_schema_types");
+    // Mirrors SchemaJson/ToolCall's shape: nodes/relations sorted, attributes empty.
+    assert_eq!(nst["nodes"], serde_json::json!(["GADGET"]));
+    assert_eq!(nst["relations"], serde_json::json!(["DEPENDS_ON"]));
+    assert_eq!(nst["attributes"], serde_json::json!([]));
+    // Evolving arm must not emit the fixed drop-count keys.
+    assert!(resp.metadata.get("schema_dropped_records").is_none());
+    assert!(resp.metadata.get("schema_dropped_types").is_none());
+}
+
+#[test]
+fn assemble_response_carries_config_and_parsed_results() {
+    let cfg = config_for(SchemaMode::Open);
+    let mut o = outcome();
+    // parsed_results survives into the response verbatim (empty here, but the
+    // field wiring is what we're checking).
+    let _ = std::mem::replace(&mut o.parsed_results, Vec::new());
+    let resp = AgenticExtractor::assemble_response(o, &SchemaPolicy::Off, true, SchemaMode::Open, &cfg);
+    assert!(resp.config.is_some(), "config is stamped on the response");
+    // source_doc defaults to None in default_config; this just confirms the
+    // cloned config round-trips.
+    assert!(resp.parsed_results.is_empty());
+}

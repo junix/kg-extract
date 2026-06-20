@@ -34,6 +34,26 @@ mod prompts;
 mod schema_filter;
 
 use schema_filter::{norm_type, SchemaPolicy};
+
+/// The accumulators one finished agentic session produced, handed to
+/// [`AgenticExtractor::assemble_response`] to build the final
+/// [`ExtractionResponse`]. Held as a struct so the assembly helper stays under
+/// clippy's argument limit and is easy to construct in tests.
+struct SessionOutcome {
+    slices_count: usize,
+    total_tool_uses: usize,
+    entities: HashMap<String, Entity>,
+    triples: Vec<Triple>,
+    parsed_results: Vec<ParsedResult>,
+    /// Fixed mode: how many records were dropped across all slices.
+    total_dropped: usize,
+    /// Fixed mode: the out-of-schema type names seen.
+    dropped_types: BTreeSet<String>,
+    /// Evolving mode: node types proposed outside the seed.
+    new_nodes: BTreeSet<String>,
+    /// Evolving mode: relation types proposed outside the seed.
+    new_relations: BTreeSet<String>,
+}
 use prompts::{
     RELATION_GLEANING_PROMPT, SCHEMA_EVOLVING, SCHEMA_FEEDBACK, SCHEMA_HINTS, SCHEMA_REDO_PROMPT,
     SCHEMA_STRICT, SLICE_PROMPT, SYSTEM_PROMPT,
@@ -325,6 +345,92 @@ impl AgenticExtractor {
         // Best-effort cleanup of the temp workspace regardless of outcome.
         let _ = std::fs::remove_dir_all(&workdir);
         result
+    }
+
+    /// Build the final [`ExtractionResponse`] from a finished session's
+    /// accumulators, and emit the per-mode summary line on stderr when not
+    /// quiet. Pure over its inputs (the only side effect is the optional
+    /// stderr summary, at the run's boundary) so the three policy arms' bookkeeping
+    /// (Fixed drop counts, Evolving proposals, Off no-op) can be exercised
+    /// without an SDK.
+    fn assemble_response(
+        outcome: SessionOutcome,
+        policy: &SchemaPolicy,
+        quiet: bool,
+        mode: crate::types::SchemaMode,
+        config: &ExtractionConfig,
+    ) -> ExtractionResponse {
+        let SessionOutcome {
+            slices_count,
+            total_tool_uses,
+            entities,
+            triples,
+            parsed_results,
+            total_dropped,
+            dropped_types,
+            new_nodes,
+            new_relations,
+        } = outcome;
+
+        if !quiet {
+            let tail = match policy {
+                SchemaPolicy::Fixed(_) => {
+                    format!(", {total_dropped} out-of-schema record(s) dropped")
+                }
+                SchemaPolicy::Evolving(_) => format!(
+                    ", {} new type(s) proposed",
+                    new_nodes.len() + new_relations.len()
+                ),
+                SchemaPolicy::Off => String::new(),
+            };
+            eprintln!(
+                "agentic: {} slice(s), {} self-context tool call(s){}",
+                slices_count, total_tool_uses, tail
+            );
+        }
+
+        let mut kg = KnowledgeGraph::new();
+        for e in entities.into_values() {
+            kg.add_entity(e);
+        }
+        for t in triples {
+            kg.add_triple(t);
+        }
+
+        let mut resp = ExtractionResponse::new(kg);
+        resp.parsed_results = parsed_results;
+        resp.config = Some(config.clone());
+        resp.metadata
+            .insert("tool_uses".into(), serde_json::json!(total_tool_uses));
+        resp.metadata.insert(
+            "schema_mode".into(),
+            serde_json::json!(mode.as_str()),
+        );
+        match policy {
+            SchemaPolicy::Fixed(_) => {
+                resp.metadata.insert(
+                    "schema_dropped_records".into(),
+                    serde_json::json!(total_dropped),
+                );
+                resp.metadata.insert(
+                    "schema_dropped_types".into(),
+                    serde_json::json!(dropped_types.into_iter().collect::<Vec<_>>()),
+                );
+            }
+            SchemaPolicy::Evolving(_) => {
+                // Mirror SchemaJson/ToolCall's `new_schema_types` shape.
+                resp.metadata.insert(
+                    "new_schema_types".into(),
+                    serde_json::json!({
+                        "nodes": new_nodes.into_iter().collect::<Vec<_>>(),
+                        "relations": new_relations.into_iter().collect::<Vec<_>>(),
+                        "attributes": [],
+                    }),
+                );
+            }
+            SchemaPolicy::Off => {}
+        }
+        resp
     }
 
     async fn run_session(
@@ -634,62 +740,23 @@ impl AgenticExtractor {
 
         let _ = client.disconnect().await;
 
-        let mut kg = KnowledgeGraph::new();
-        for e in all_entities.into_values() {
-            kg.add_entity(e);
-        }
-        for t in all_triples {
-            kg.add_triple(t);
-        }
-        if !self.quiet {
-            let tail = match &policy {
-                SchemaPolicy::Fixed(_) => {
-                    format!(", {total_dropped} out-of-schema record(s) dropped")
-                }
-                SchemaPolicy::Evolving(_) => format!(
-                    ", {} new type(s) proposed",
-                    new_nodes.len() + new_relations.len()
-                ),
-                SchemaPolicy::Off => String::new(),
-            };
-            eprintln!(
-                "agentic: {} slice(s), {} self-context tool call(s){}",
-                n, total_tool_uses, tail
-            );
-        }
-        let mut resp = ExtractionResponse::new(kg);
-        resp.parsed_results = parsed_results;
-        resp.config = Some(self.config.clone());
-        resp.metadata
-            .insert("tool_uses".into(), serde_json::json!(total_tool_uses));
-        resp.metadata.insert(
-            "schema_mode".into(),
-            serde_json::json!(self.config.spec.mode.as_str()),
+        let resp = Self::assemble_response(
+            SessionOutcome {
+                slices_count: n,
+                total_tool_uses,
+                entities: all_entities,
+                triples: all_triples,
+                parsed_results,
+                total_dropped,
+                dropped_types: all_dropped_types,
+                new_nodes,
+                new_relations,
+            },
+            &policy,
+            self.quiet,
+            self.config.spec.mode,
+            &self.config,
         );
-        match &policy {
-            SchemaPolicy::Fixed(_) => {
-                resp.metadata.insert(
-                    "schema_dropped_records".into(),
-                    serde_json::json!(total_dropped),
-                );
-                resp.metadata.insert(
-                    "schema_dropped_types".into(),
-                    serde_json::json!(all_dropped_types.into_iter().collect::<Vec<_>>()),
-                );
-            }
-            SchemaPolicy::Evolving(_) => {
-                // Mirror SchemaJson/ToolCall's `new_schema_types` shape.
-                resp.metadata.insert(
-                    "new_schema_types".into(),
-                    serde_json::json!({
-                        "nodes": new_nodes.into_iter().collect::<Vec<_>>(),
-                        "relations": new_relations.into_iter().collect::<Vec<_>>(),
-                        "attributes": [],
-                    }),
-                );
-            }
-            SchemaPolicy::Off => {}
-        }
         Ok(resp)
     }
 }
