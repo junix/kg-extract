@@ -121,6 +121,66 @@ fn all_dropped_flags_the_degenerate_slice() {
 }
 
 #[test]
+fn stamp_slice_citations_marks_entity_triple_and_both_endpoints() {
+    use crate::citation::{Citation, CITATIONS_KEY};
+    let cite = Citation::new(Some("doc.md".into()), 5, 9);
+
+    let mut parsed = ParsedResult::default();
+    parsed.entities.insert(
+        "p".to_string(),
+        ent("p", "Widget", EntityType::Product),
+    );
+    let t = Triple::new(
+        ent("s", "Src", EntityType::Product),
+        Predicate::with_label(PredicateType::Uses, "USES"),
+        ent("o", "Obj", EntityType::Organization),
+    );
+    parsed.triples.push(t);
+
+    stamp_slice_citations(&mut parsed, &cite);
+
+    // Entity stamped.
+    let e_cites = parsed.entities["p"]
+        .metadata
+        .get(CITATIONS_KEY)
+        .and_then(|v| v.as_array())
+        .expect("entity cited");
+    assert_eq!(e_cites.len(), 1);
+
+    // Triple + both endpoints stamped (the add_triple re-insert path needs all
+    // three, else an unstamped snapshot erases provenance on union).
+    let t = &parsed.triples[0];
+    for meta in [&t.metadata, &t.subject.metadata, &t.object.metadata] {
+        assert!(
+            meta.get(CITATIONS_KEY).is_some(),
+            "triple endpoint metadata must be cited"
+        );
+    }
+}
+
+#[test]
+fn stamp_slice_citations_does_not_duplicate_an_identical_citation() {
+    use crate::citation::{Citation, CITATIONS_KEY};
+    let cite = Citation::new(Some("doc.md".into()), 1, 4);
+    let mut parsed = ParsedResult::default();
+    parsed.entities.insert(
+        "p".to_string(),
+        ent("p", "Widget", EntityType::Product),
+    );
+
+    stamp_slice_citations(&mut parsed, &cite);
+    stamp_slice_citations(&mut parsed, &cite); // same citation again
+
+    let count = parsed.entities["p"]
+        .metadata
+        .get(CITATIONS_KEY)
+        .and_then(|v| v.as_array())
+        .map(|a| a.len())
+        .unwrap_or(0);
+    assert_eq!(count, 1, "attach_citation skips exact duplicates");
+}
+
+#[test]
 fn commit_unconstrained_slice_merges_entities_and_appends_triples() {
     let mut all_entities: HashMap<String, Entity> = HashMap::new();
     let mut all_triples: Vec<Triple> = Vec::new();

@@ -95,6 +95,22 @@ fn merge_slice_entity(all: &mut HashMap<String, Entity>, id: &str, e: &Entity) {
     }
 }
 
+/// Stamp a slice's line-range provenance onto every record it produced: each
+/// entity, and each triple plus its two endpoint snapshots. No-op when the
+/// slice carries no line metadata (`lines == None`). Endpoint snapshots matter
+/// because `add_triple` re-inserts endpoints into the entity table, where an
+/// unstamped copy would erase provenance (the union only keeps what's present).
+fn stamp_slice_citations(parsed: &mut ParsedResult, cite: &crate::citation::Citation) {
+    for e in parsed.entities.values_mut() {
+        crate::citation::attach_citation(&mut e.metadata, cite);
+    }
+    for t in parsed.triples.iter_mut() {
+        crate::citation::attach_citation(&mut t.metadata, cite);
+        crate::citation::attach_citation(&mut t.subject.metadata, cite);
+        crate::citation::attach_citation(&mut t.object.metadata, cite);
+    }
+}
+
 /// Commit one slice's parse into the running accumulators without any schema
 /// filtering — the shared tail of the `SchemaPolicy::Off` and `Evolving` arms
 /// (both keep everything; Evolving additionally records new types first).
@@ -559,17 +575,7 @@ impl AgenticExtractor {
                         start_line,
                         end_line,
                     );
-                    for e in parsed.entities.values_mut() {
-                        crate::citation::attach_citation(&mut e.metadata, &cite);
-                    }
-                    // Endpoint snapshots too: `add_triple` re-inserts them into
-                    // the entity table, where an unstamped copy would erase the
-                    // entity's provenance (it unions, but only what's present).
-                    for t in parsed.triples.iter_mut() {
-                        crate::citation::attach_citation(&mut t.metadata, &cite);
-                        crate::citation::attach_citation(&mut t.subject.metadata, &cite);
-                        crate::citation::attach_citation(&mut t.object.metadata, &cite);
-                    }
+                    stamp_slice_citations(&mut parsed, &cite);
                 }
                 let parsed = parsed;
 
