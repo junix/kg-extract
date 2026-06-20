@@ -121,6 +121,62 @@ fn all_dropped_flags_the_degenerate_slice() {
 }
 
 #[test]
+fn slice_prompt_uses_1_based_index_and_total() {
+    let p = AgenticExtractor::slice_prompt(0, 3, "hello");
+    assert!(
+        p.contains("Slice 1/3:"),
+        "first slice must be 1-based: {p:?}"
+    );
+    assert!(p.contains("hello"), "slice content is inlined");
+    // Last slice.
+    let p = AgenticExtractor::slice_prompt(2, 3, "tail");
+    assert!(p.contains("Slice 3/3:"), "{p:?}");
+}
+
+#[test]
+fn redo_prompt_carries_full_type_vocabulary() {
+    let p = AgenticExtractor::redo_prompt("PRODUCT, ORG", "USES, FUNDS");
+    assert!(p.contains("PRODUCT, ORG"), "{p:?}");
+    assert!(p.contains("USES, FUNDS"), "{p:?}");
+    // The redo template's sentinel phrase survives.
+    assert!(p.contains("Redo THIS slice"), "{p:?}");
+}
+
+#[test]
+fn drop_feedback_is_none_when_nothing_dropped() {
+    // No dropped records -> no feedback (the caller's gate, but the helper
+    // defends it too).
+    assert!(AgenticExtractor::drop_feedback(0, &BTreeSet::new(), "X", "Y").is_none());
+}
+
+#[test]
+fn drop_feedback_without_type_names_omits_the_dropped_slot() {
+    // Records dropped but no recorded type names (e.g. only relation endpoints
+    // were dropped) -> the `{dropped_types}` slot is empty, sentence reads
+    // "...NOT in the schema. Stay...".
+    let fb = AgenticExtractor::drop_feedback(2, &BTreeSet::new(), "PRODUCT", "USES").unwrap();
+    assert!(fb.contains("discarded 2 record(s)"), "{fb:?}");
+    // No stray "(dropped:" segment.
+    assert!(!fb.contains("(dropped:"), "{fb:?}");
+    assert!(fb.contains("PRODUCT"), "{fb:?}");
+    assert!(fb.contains("USES"), "{fb:?}");
+}
+
+#[test]
+fn drop_feedback_with_type_names_appends_dropped_csv() {
+    // Types recorded -> slot becomes " (dropped: A, B)".
+    let mut types = BTreeSet::new();
+    types.insert("A".to_string());
+    types.insert("B".to_string());
+    let fb = AgenticExtractor::drop_feedback(3, &types, "PRODUCT", "USES").unwrap();
+    assert!(fb.contains("discarded 3 record(s)"), "{fb:?}");
+    assert!(fb.contains("(dropped: A, B)"), "{fb:?}");
+    // BTreeSet keeps them sorted; both present.
+    assert!(fb.contains("A"), "{fb:?}");
+    assert!(fb.contains("B"), "{fb:?}");
+}
+
+#[test]
 fn evolving_collects_types_outside_the_seed() {
     // Seed allows PRODUCT entities and USES relations. The model also emits an
     // ORGANIZATION entity and a DEPENDS_ON relation — Evolving keeps both but

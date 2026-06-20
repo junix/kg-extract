@@ -168,6 +168,53 @@ impl AgenticExtractor {
         }
     }
 
+    /// Build one slice turn's base prompt. `{i}` is 1-based (the human-facing
+    /// "slice N of M"); `{n}` is the total slice count.
+    fn slice_prompt(i: usize, n: usize, slice: &str) -> String {
+        SLICE_PROMPT
+            .replace("{i}", &(i + 1).to_string())
+            .replace("{n}", &n.to_string())
+            .replace("{slice}", slice)
+    }
+
+    /// The stern re-do prompt, fired when a whole slice came back entirely
+    /// out-of-schema. Carries the full allowed type vocabulary so the model
+    /// can map each thing onto the closest fit.
+    fn redo_prompt(entity_types: &str, rel_types: &str) -> String {
+        SCHEMA_REDO_PROMPT
+            .replace("{entity_types}", entity_types)
+            .replace("{relationship_types}", rel_types)
+    }
+
+    /// Format the per-turn feedback that re-anchors a drifting model after a
+    /// slice dropped out-of-schema records. The `{dropped_types}` slot is filled
+    /// with ` (dropped: CSV)` when any types were dropped, or the empty string
+    /// otherwise (so the sentence still reads naturally). Returns `None` when
+    /// there is nothing to feed back (`dropped_records == 0`).
+    fn drop_feedback(
+        dropped_records: usize,
+        dropped_types: &BTreeSet<String>,
+        entity_types: &str,
+        rel_types: &str,
+    ) -> Option<String> {
+        if dropped_records == 0 {
+            return None;
+        }
+        let types_csv: String = dropped_types.iter().cloned().collect::<Vec<_>>().join(", ");
+        let dropped_types_slot = if types_csv.is_empty() {
+            String::new()
+        } else {
+            format!(" (dropped: {types_csv})")
+        };
+        Some(
+            SCHEMA_FEEDBACK
+                .replace("{dropped}", &dropped_records.to_string())
+                .replace("{dropped_types}", &dropped_types_slot)
+                .replace("{entity_types}", entity_types)
+                .replace("{relationship_types}", rel_types),
+        )
+    }
+
     /// Drain one turn's response stream, concatenating assistant text (the
     /// delimiter records). Tool round-trips (Read/Grep) are handled inside the
     /// CLI; we collect the final text *and* count/log the tool calls the agent
@@ -348,10 +395,7 @@ impl AgenticExtractor {
 
         // 2. Feed each slice as a turn in the same conversation.
         'slices: for (i, seg) in slices.iter().enumerate() {
-            let base_prompt = SLICE_PROMPT
-                .replace("{i}", &(i + 1).to_string())
-                .replace("{n}", &n.to_string())
-                .replace("{slice}", &seg.content);
+            let base_prompt = Self::slice_prompt(i, n, &seg.content);
             // The first turn for this slice carries any correction the previous
             // slice's out-of-schema drops produced (re-anchors a drifting model).
             let mut prompt = match pending_feedback.take() {
@@ -458,9 +502,7 @@ impl AgenticExtractor {
                             i + 1
                         );
                     }
-                    prompt = SCHEMA_REDO_PROMPT
-                        .replace("{entity_types}", &entity_types)
-                        .replace("{relationship_types}", &rel_types);
+                    prompt = Self::redo_prompt(&entity_types, &rel_types);
                     continue; // re-do the SAME slice in this inner loop
                 }
 
@@ -491,18 +533,8 @@ impl AgenticExtractor {
                             }
                         );
                     }
-                    let dropped_types = if types_csv.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" (dropped: {types_csv})")
-                    };
-                    pending_feedback = Some(
-                        SCHEMA_FEEDBACK
-                            .replace("{dropped}", &sf.dropped_records.to_string())
-                            .replace("{dropped_types}", &dropped_types)
-                            .replace("{entity_types}", &entity_types)
-                            .replace("{relationship_types}", &rel_types),
-                    );
+                    pending_feedback =
+                        Self::drop_feedback(sf.dropped_records, &sf.dropped_types, &entity_types, &rel_types);
                 }
                 parsed_results.push(parsed);
                 continue 'slices;
