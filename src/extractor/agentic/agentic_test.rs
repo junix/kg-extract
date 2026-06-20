@@ -121,6 +121,69 @@ fn all_dropped_flags_the_degenerate_slice() {
 }
 
 #[test]
+fn commit_unconstrained_slice_merges_entities_and_appends_triples() {
+    let mut all_entities: HashMap<String, Entity> = HashMap::new();
+    let mut all_triples: Vec<Triple> = Vec::new();
+    let mut parsed_results: Vec<ParsedResult> = Vec::new();
+
+    let mut parsed = ParsedResult::default();
+    parsed.entities.insert(
+        "p".to_string(),
+        ent("p", "Widget", EntityType::Product),
+    );
+    let t = Triple::new(
+        ent("p", "Widget", EntityType::Product),
+        Predicate::with_label(PredicateType::Uses, "USES"),
+        ent("o", "Acme", EntityType::Organization),
+    );
+    parsed.triples.push(t);
+
+    commit_unconstrained_slice(
+        &mut all_entities,
+        &mut all_triples,
+        &mut parsed_results,
+        parsed,
+    );
+    assert_eq!(all_entities.len(), 1, "entity merged into the table");
+    assert_eq!(all_triples.len(), 1, "triple appended");
+    assert_eq!(parsed_results.len(), 1, "parse retained");
+}
+
+#[test]
+fn commit_unconstrained_slice_first_occurrence_wins_on_repeat() {
+    // A repeat entity must keep its first id (first-occurrence-wins) but still
+    // union citations; a brand-new id is inserted.
+    let mut all_entities: HashMap<String, Entity> = HashMap::new();
+    all_entities.insert(
+        "p".to_string(),
+        ent("p", "Widget", EntityType::Product),
+    );
+    let mut all_triples: Vec<Triple> = Vec::new();
+    let mut parsed_results: Vec<ParsedResult> = Vec::new();
+
+    let mut parsed = ParsedResult::default();
+    parsed.entities.insert(
+        "p".to_string(),
+        ent("p", "Widget repeated", EntityType::Product),
+    );
+    parsed.entities.insert(
+        "q".to_string(),
+        ent("q", "Gadget", EntityType::Product),
+    );
+
+    commit_unconstrained_slice(
+        &mut all_entities,
+        &mut all_triples,
+        &mut parsed_results,
+        parsed,
+    );
+    assert_eq!(all_entities.len(), 2, "repeat + new = 2 entities");
+    // First occurrence's label is kept (provenance unions, identity does not).
+    assert_eq!(all_entities["p"].label, "Widget");
+    assert_eq!(all_entities["q"].label, "Gadget");
+}
+
+#[test]
 fn slice_prompt_uses_1_based_index_and_total() {
     let p = AgenticExtractor::slice_prompt(0, 3, "hello");
     assert!(

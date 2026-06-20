@@ -95,6 +95,24 @@ fn merge_slice_entity(all: &mut HashMap<String, Entity>, id: &str, e: &Entity) {
     }
 }
 
+/// Commit one slice's parse into the running accumulators without any schema
+/// filtering — the shared tail of the `SchemaPolicy::Off` and `Evolving` arms
+/// (both keep everything; Evolving additionally records new types first).
+/// Each entity is merged with first-occurrence-wins citation unioning, the
+/// triples are appended, and the parse is kept for the response.
+fn commit_unconstrained_slice(
+    all_entities: &mut HashMap<String, Entity>,
+    all_triples: &mut Vec<Triple>,
+    parsed_results: &mut Vec<ParsedResult>,
+    parsed: ParsedResult,
+) {
+    for (id, e) in &parsed.entities {
+        merge_slice_entity(all_entities, id, e);
+    }
+    all_triples.extend(parsed.triples.clone());
+    parsed_results.push(parsed);
+}
+
 /// Experimental single-session, sandboxed, multi-turn extractor.
 pub struct AgenticExtractor {
     config: ExtractionConfig,
@@ -558,11 +576,12 @@ impl AgenticExtractor {
                 let f = match &policy {
                     SchemaPolicy::Off => {
                         // Unconstrained (Open / empty schema): merge as-is.
-                        for (id, e) in &parsed.entities {
-                            merge_slice_entity(&mut all_entities, id, e);
-                        }
-                        all_triples.extend(parsed.triples.clone());
-                        parsed_results.push(parsed);
+                        commit_unconstrained_slice(
+                            &mut all_entities,
+                            &mut all_triples,
+                            &mut parsed_results,
+                            parsed,
+                        );
                         continue 'slices;
                     }
                     SchemaPolicy::Evolving(f) => {
@@ -585,11 +604,12 @@ impl AgenticExtractor {
                         }
                         new_nodes.extend(nn);
                         new_relations.extend(nr);
-                        for (id, e) in &parsed.entities {
-                            merge_slice_entity(&mut all_entities, id, e);
-                        }
-                        all_triples.extend(parsed.triples.clone());
-                        parsed_results.push(parsed);
+                        commit_unconstrained_slice(
+                            &mut all_entities,
+                            &mut all_triples,
+                            &mut parsed_results,
+                            parsed,
+                        );
                         continue 'slices;
                     }
                     SchemaPolicy::Fixed(f) => f,
