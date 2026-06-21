@@ -1,0 +1,162 @@
+language: [zh, en]
+
+name: business_domain_flow
+type: temporal_graph
+tags: [code, domain, business, flow, ddd]
+
+description:
+  zh: '业务域流程图模板 - 从代码库中提取业务领域、业务流程及其步骤，把代码结构映射到真实业务过程，形成横向流程图'
+  en: 'Business Domain Flow Graph Template - Extract business domains, flows, and process steps from a codebase, mapping code structure to real business processes as a horizontal flow graph'
+
+output:
+  description:
+    zh: '业务领域的横向流程图：域（domain）包含若干流程（flow），流程由若干步骤（step）按顺序串联，跨域之间可有交互'
+    en: 'A horizontal business flow graph: a domain contains flows; each flow is an ordered sequence of steps; cross-domain interactions link domains'
+  entities:
+    description:
+      zh: '业务领域节点：domain（业务域）/ flow（业务流程）/ step（流程步骤）'
+      en: 'Business domain nodes: domain (business domain) / flow (business flow) / step (process step)'
+    fields:
+      - name: name
+        type: str
+        description:
+          zh: '节点名称（领域名、流程名、步骤名）'
+          en: 'Node name (domain name, flow name, or step name)'
+        required: true
+      - name: type
+        type: str
+        description:
+          zh: '节点类型，必须是以下之一：domain/flow/step'
+          en: 'Node type, must be one of: domain/flow/step'
+        required: true
+      - name: summary
+        type: str
+        description:
+          zh: '该领域/流程/步骤的简短业务说明'
+          en: 'A short business description of this domain/flow/step'
+        required: false
+      - name: tags
+        type: list
+        description:
+          zh: '描述性标签（如 checkout、payment、auth）'
+          en: 'Descriptive tags (e.g. checkout, payment, auth)'
+        required: false
+      - name: complexity
+        type: str
+        description:
+          zh: '复杂度，取值：simple/moderate/complex'
+          en: 'Complexity: simple/moderate/complex'
+        required: false
+      - name: entities
+        type: list
+        description:
+          zh: '该领域涉及的核心业务实体（domain 节点用）'
+          en: 'Core business entities involved in this domain (for domain nodes)'
+        required: false
+      - name: businessRules
+        type: list
+        description:
+          zh: '该领域/流程遵循的业务规则（domain/flow 节点用）'
+          en: 'Business rules followed by this domain/flow (for domain/flow nodes)'
+        required: false
+      - name: crossDomainInteractions
+        type: list
+        description:
+          zh: '与其他领域的交互说明（domain 节点用）'
+          en: 'Descriptions of interactions with other domains (for domain nodes)'
+        required: false
+      - name: entryPoint
+        type: str
+        description:
+          zh: '该流程的入口（flow 节点用），如某个 HTTP 路由、CLI 命令、事件或定时任务'
+          en: 'The entry point of this flow (for flow nodes), e.g. an HTTP route, CLI command, event, or cron job'
+        required: false
+      - name: entryType
+        type: str
+        description:
+          zh: '入口类型（flow 节点用），取值：http/cli/event/cron/manual'
+          en: 'Entry type (for flow nodes): http/cli/event/cron/manual'
+        required: false
+  relations:
+    description:
+      zh: '业务域流程关系：contains_flow（域→流程）、flow_step（步骤顺序，含分支）、cross_domain（跨域交互）'
+      en: 'Business flow relations: contains_flow (domain→flow), flow_step (step ordering, incl. branches), cross_domain (cross-domain interaction)'
+    fields:
+      - name: source
+        type: str
+        description:
+          zh: '源节点名称'
+          en: 'Source node name'
+        required: true
+      - name: target
+        type: str
+        description:
+          zh: '目标节点名称'
+          en: 'Target node name'
+        required: true
+      - name: type
+        type: str
+        description:
+          zh: '关系类型，必须是以下之一：contains_flow（domain→flow）/ flow_step（step 间顺序或分支）/ cross_domain（domain 间跨域交互）'
+          en: 'Relation type, must be one of: contains_flow (domain→flow) / flow_step (step ordering or branch) / cross_domain (domain-to-domain interaction)'
+        required: true
+      - name: direction
+        type: str
+        description:
+          zh: '方向，取值：forward/backward/bidirectional（默认 forward）'
+          en: 'Direction: forward/backward/bidirectional (default forward)'
+        required: false
+      - name: description
+        type: str
+        description:
+          zh: '关系说明（如分支条件、跨域交互内容）'
+          en: 'Relation description (e.g. branch condition, cross-domain interaction content)'
+        required: false
+      - name: weight
+        type: str
+        description:
+          zh: '关系强度 0–1（contains_flow=1.0, flow_step=0.8, cross_domain=0.5）'
+          en: 'Relation strength 0–1 (contains_flow=1.0, flow_step=0.8, cross_domain=0.5)'
+        required: false
+
+guideline:
+  target:
+    zh: '你是一位业务架构师与领域驱动设计专家，擅长阅读代码库（HTTP 路由、CLI 命令、事件处理、定时任务、服务层），从中识别业务领域、业务流程和流程步骤，把代码结构映射到真实业务过程。'
+    en: 'You are a business architect and domain-driven-design expert skilled at reading a codebase (HTTP routes, CLI commands, event handlers, cron jobs, service layers) to identify business domains, flows, and steps, mapping code structure to real business processes.'
+  rules_for_entities:
+    zh:
+      - '识别相互协作、共同支撑某个业务能力的一组代码，归为一个 domain（业务域）'
+      - '在每个 domain 内，识别从入口（HTTP/CLI/事件/cron）到结果的完整链路，作为一个 flow（业务流程）'
+      - '把每个 flow 拆解为有序的 step（流程步骤），每个 step 对应一段可独立说明的处理逻辑'
+      - 'domain 节点应填写 entities（核心业务实体）和 crossDomainInteractions（跨域交互）'
+      - 'flow 节点应填写 entryPoint 和 entryType（http/cli/event/cron/manual）'
+      - 'step 节点的 summary 应从业务视角描述这步做了什么，而非复述代码实现'
+    en:
+      - 'Identify a domain as a group of collaborating code that together supports one business capability'
+      - 'Within each domain, identify a flow as the complete path from an entry point (HTTP/CLI/event/cron) to its outcome'
+      - 'Decompose each flow into ordered steps, where each step is a self-explainable unit of processing'
+      - 'Populate entities and crossDomainInteractions on domain nodes'
+      - 'Populate entryPoint and entryType (http/cli/event/cron/manual) on flow nodes'
+      - 'Describe each step''s summary from the business perspective, not by paraphrasing code'
+  rules_for_relations:
+    zh:
+      - '用 contains_flow 把 domain 连到它包含的 flow（方向 domain→flow）'
+      - '用 flow_step 串联同一 flow 内的 step 顺序；分支用多条 flow_step 边并加 description 说明条件'
+      - '用 cross_domain 连接交互的两个 domain（方向按主导方→被调方）'
+      - '仅提取代码中明确存在的领域/流程/步骤，不要凭空创造业务逻辑'
+    en:
+      - 'Use contains_flow to link a domain to the flows it contains (directed domain→flow)'
+      - 'Use flow_step to order steps within a flow; represent branches as multiple flow_step edges with a description of the condition'
+      - 'Use cross_domain to link two interacting domains (directed from the initiator to the callee)'
+      - 'Extract only domains/flows/steps that clearly exist in the code; do not invent business logic'
+
+identifiers:
+  entity_id: name
+  relation_id: '{source}|{type}|{target}'
+  relation_members:
+    source: source
+    target: target
+
+display:
+  entity_label: '{name}'
+  relation_label: '{type}'
