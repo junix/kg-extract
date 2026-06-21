@@ -24,8 +24,10 @@ fn localized_resolves_text_list_and_map() {
 #[test]
 fn every_bundled_preset_parses() {
     let presets = gallery::list();
-    // Sanity: we shipped the full set (37 files at port time).
-    assert!(presets.len() >= 37, "only {} presets loaded", presets.len());
+    // Sanity: we shipped the full set (40 files; the original 37 plus the
+    // Understand-Anything ports — code/codebase_graph,
+    // code/business_domain_flow, knowledge/wiki_graph).
+    assert!(presets.len() >= 40, "only {} presets loaded", presets.len());
     for p in presets {
         assert!(p.key.contains('/'), "key not domain-qualified: {}", p.key);
         // Each declares at least a target persona.
@@ -87,4 +89,197 @@ fn template_roundtrips_through_json() {
     let json = serde_json::to_string(&tpl).unwrap();
     let back: TemplateCfg = serde_json::from_str(&json).unwrap();
     assert_eq!(tpl, back);
+}
+
+#[test]
+fn codebase_graph_preset_is_registered_and_renders() {
+    // The code-understanding preset ports Understand-Anything's GraphNode/
+    // GraphEdge schema into kg-extract's template form. It lives under the
+    // `code/` domain (not `general/`), so only the qualified key resolves —
+    // a bare name would be searched under `general/` per gallery::get's rule.
+    let by_full = gallery::get("code/codebase_graph").expect("codebase_graph via full key");
+    assert_eq!(by_full.autotype, AutoType::Graph);
+
+    // The entity/relation `type` field docs carry the full UA vocabularies —
+    // 13 node types and 29 edge types as enumerations in the field description.
+    let node_type_doc = by_full
+        .output
+        .entities
+        .as_ref()
+        .expect("graph-family entities")
+        .fields
+        .iter()
+        .find(|f| f.name == "type")
+        .expect("entity type field");
+    for t in [
+        "file", "function", "class", "module", "concept", "config", "document",
+        "service", "table", "endpoint", "pipeline", "schema", "resource",
+    ] {
+        assert!(
+            node_type_doc.description.resolve("en").contains(t),
+            "node type vocab missing '{t}'"
+        );
+    }
+    let rel_type_doc = by_full
+        .output
+        .relations
+        .as_ref()
+        .expect("graph-family relations")
+        .fields
+        .iter()
+        .find(|f| f.name == "type")
+        .expect("relation type field");
+    for t in [
+        "imports", "exports", "contains", "inherits", "implements", "calls",
+        "subscribes", "publishes", "middleware", "reads_from", "writes_to",
+        "transforms", "validates", "depends_on", "tested_by", "configures",
+        "related", "similar_to", "deploys", "serves", "provisions", "triggers",
+        "migrates", "documents", "routes", "defines_schema",
+    ] {
+        assert!(
+            rel_type_doc.description.resolve("en").contains(t),
+            "relation type vocab missing '{t}'"
+        );
+    }
+
+    // The rendered prompt keeps the schema-json wire format GraphBuilder parses.
+    let lang = by_full.resolve_lang(Some("en"));
+    assert_eq!(lang, "en");
+    let prompt = render_prompt(&by_full, &lang, "src/main.ts imports src/utils.ts");
+    assert!(prompt.contains("software architect"));
+    assert!(prompt.contains("# Entity fields"));
+    assert!(prompt.contains("# Relation fields"));
+    assert!(prompt.contains("\"relationships\""));
+    assert!(prompt.contains("src/main.ts imports src/utils.ts"));
+}
+
+#[test]
+fn business_domain_flow_preset_is_registered_and_renders() {
+    // Ports Understand-Anything's `/understand-domain` schema: domain/flow/step
+    // nodes plus contains_flow/flow_step/cross_domain edges. Lives under `code/`.
+    let tpl = gallery::get("code/business_domain_flow")
+        .expect("business_domain_flow via full key");
+    assert_eq!(tpl.autotype, AutoType::TemporalGraph);
+
+    let node_types = tpl
+        .output
+        .entities
+        .as_ref()
+        .expect("graph-family entities")
+        .fields
+        .iter()
+        .find(|f| f.name == "type")
+        .expect("entity type field")
+        .description
+        .resolve("en");
+    for t in ["domain", "flow", "step"] {
+        assert!(
+            node_types.contains(t),
+            "domain-flow node vocab missing '{t}'"
+        );
+    }
+    let rel_types = tpl
+        .output
+        .relations
+        .as_ref()
+        .expect("graph-family relations")
+        .fields
+        .iter()
+        .find(|f| f.name == "type")
+        .expect("relation type field")
+        .description
+        .resolve("en");
+    for t in ["contains_flow", "flow_step", "cross_domain"] {
+        assert!(
+            rel_types.contains(t),
+            "domain-flow relation vocab missing '{t}'"
+        );
+    }
+    // UA's domainMeta is carried as entity fields (entryType vocabulary too).
+    for f in ["entryType", "businessRules", "crossDomainInteractions"] {
+        assert!(
+            tpl.output
+                .entities
+                .as_ref()
+                .unwrap()
+                .fields
+                .iter()
+                .any(|fld| fld.name == f),
+            "domain-flow entity fields missing '{f}'"
+        );
+    }
+
+    let prompt = render_prompt(&tpl, "en", "POST /checkout triggers the payment flow");
+    assert!(prompt.contains("domain-driven-design"));
+    assert!(prompt.contains("# Entity fields"));
+    assert!(prompt.contains("\"relationships\""));
+}
+
+#[test]
+fn wiki_graph_preset_is_registered_and_renders() {
+    // Ports Understand-Anything's `/understand-knowledge` schema:
+    // article/entity/topic/claim/source nodes plus the six knowledge edges.
+    // Lives under a new `knowledge/` domain (bare key resolves under general/).
+    let tpl = gallery::get("knowledge/wiki_graph").expect("wiki_graph via full key");
+    assert_eq!(tpl.autotype, AutoType::Graph);
+
+    let node_types = tpl
+        .output
+        .entities
+        .as_ref()
+        .expect("graph-family entities")
+        .fields
+        .iter()
+        .find(|f| f.name == "type")
+        .expect("entity type field")
+        .description
+        .resolve("en");
+    for t in ["article", "entity", "topic", "claim", "source"] {
+        assert!(
+            node_types.contains(t),
+            "wiki node vocab missing '{t}'"
+        );
+    }
+    let rel_types = tpl
+        .output
+        .relations
+        .as_ref()
+        .expect("graph-family relations")
+        .fields
+        .iter()
+        .find(|f| f.name == "type")
+        .expect("relation type field")
+        .description
+        .resolve("en");
+    for t in [
+        "cites",
+        "contradicts",
+        "builds_on",
+        "exemplifies",
+        "categorized_under",
+        "authored_by",
+    ] {
+        assert!(
+            rel_types.contains(t),
+            "wiki relation vocab missing '{t}'"
+        );
+    }
+    // UA's knowledgeMeta is carried as entity fields.
+    for f in ["wikilinks", "backlinks", "category", "content"] {
+        assert!(
+            tpl.output
+                .entities
+                .as_ref()
+                .unwrap()
+                .fields
+                .iter()
+                .any(|fld| fld.name == f),
+            "wiki entity fields missing '{f}'"
+        );
+    }
+
+    let prompt = render_prompt(&tpl, "en", "[[RAG]] cites a survey on retrieval.");
+    assert!(prompt.contains("knowledge graph expert"));
+    assert!(prompt.contains("# Entity fields"));
+    assert!(prompt.contains("\"relationships\""));
 }

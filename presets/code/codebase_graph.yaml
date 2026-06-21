@@ -1,0 +1,152 @@
+language: [zh, en]
+
+name: codebase_graph
+type: graph
+tags: [code, codebase, architecture, software, dependency]
+
+description:
+  zh: '代码库结构图模板 - 从源代码文件、配置、文档、基础设施定义中提取文件、函数、类、模块等结构节点及其依赖、调用、包含等关系'
+  en: 'Codebase Structure Graph Template - Extract structural nodes (files, functions, classes, modules) and their dependencies, calls, and containment relationships from source code, configs, docs, and infrastructure definitions'
+
+output:
+  description:
+    zh: '代码库的结构知识图谱：文件/函数/类/模块等节点 + 它们之间的导入、调用、包含、继承、依赖等关系'
+    en: 'A structural knowledge graph of a codebase: files/functions/classes/modules nodes plus their imports, calls, containment, inheritance, and dependency relationships'
+  entities:
+    description:
+      zh: '代码库中的结构单元（文件、函数、类、模块、概念、配置、文档、服务、数据库表、API端点、流水线、Schema、基础设施资源）'
+      en: 'Structural units in the codebase (files, functions, classes, modules, concepts, configs, docs, services, database tables, API endpoints, pipelines, schemas, infrastructure resources)'
+    fields:
+      - name: name
+        type: str
+        description:
+          zh: '节点名称（如类名、函数名、文件相对路径）'
+          en: 'Node name (e.g. class name, function name, or file relative path)'
+        required: true
+      - name: type
+        type: str
+        description:
+          zh: '节点类型，必须是以下之一：file/function/class/module/concept/config/document/service/table/endpoint/pipeline/schema/resource'
+          en: 'Node type, must be one of: file/function/class/module/concept/config/document/service/table/endpoint/pipeline/schema/resource'
+        required: true
+      - name: summary
+        type: str
+        description:
+          zh: '该节点用途的简短自然语言说明'
+          en: 'A short natural-language summary of what this node is for'
+        required: false
+      - name: tags
+        type: list
+        description:
+          zh: '描述性标签列表（如 api、ui、auth、test）'
+          en: 'Descriptive tags (e.g. api, ui, auth, test)'
+        required: false
+      - name: complexity
+        type: str
+        description:
+          zh: '复杂度，取值：simple/moderate/complex'
+          en: 'Complexity: simple/moderate/complex'
+        required: false
+      - name: filePath
+        type: str
+        description:
+          zh: '相对文件路径（适用于 file 类节点及带源码位置的实体）'
+          en: 'Relative file path (for file nodes and entities with source location)'
+        required: false
+      - name: lineRange
+        type: list
+        description:
+          zh: '行范围 [起始, 结束]，1-based 闭区间'
+          en: 'Line range [start, end], 1-based inclusive'
+        required: false
+      - name: languageNotes
+        type: str
+        description:
+          zh: '语言/框架相关的说明或值得注意的实现模式'
+          en: 'Language/framework notes or notable implementation patterns'
+        required: false
+  relations:
+    description:
+      zh: '节点之间的关系，覆盖结构、行为、数据流、依赖、语义、基础设施、数据/Schema 七大类'
+      en: 'Relationships between nodes, spanning structural, behavioral, data-flow, dependency, semantic, infrastructure, and schema/data categories'
+    fields:
+      - name: source
+        type: str
+        description:
+          zh: '源节点名称'
+          en: 'Source node name'
+        required: true
+      - name: target
+        type: str
+        description:
+          zh: '目标节点名称'
+          en: 'Target node name'
+        required: true
+      - name: type
+        type: str
+        description:
+          zh: '关系类型，必须是以下之一：imports/exports/contains/inherits/implements/calls/subscribes/publishes/middleware/reads_from/writes_to/transforms/validates/depends_on/tested_by/configures/related/similar_to/deploys/serves/provisions/triggers/migrates/documents/routes/defines_schema'
+          en: 'Relation type, must be one of: imports/exports/contains/inherits/implements/calls/subscribes/publishes/middleware/reads_from/writes_to/transforms/validates/depends_on/tested_by/configures/related/similar_to/deploys/serves/provisions/triggers/migrates/documents/routes/defines_schema'
+        required: true
+      - name: direction
+        type: str
+        description:
+          zh: '方向，取值：forward/backward/bidirectional（默认 forward）'
+          en: 'Direction: forward/backward/bidirectional (default forward)'
+        required: false
+      - name: description
+        type: str
+        description:
+          zh: '关系说明'
+          en: 'Relation description'
+        required: false
+      - name: weight
+        type: str
+        description:
+          zh: '关系强度 0–1（如 contains=1.0, inherits=0.9, calls=0.8, imports=0.7, depends_on=0.6, 其余默认 0.5）'
+          en: 'Relation strength 0–1 (e.g. contains=1.0, inherits=0.9, calls=0.8, imports=0.7, depends_on=0.6, others default 0.5)'
+        required: false
+
+guideline:
+  target:
+    zh: '你是一位资深软件架构师与代码分析师，擅长阅读源代码、配置、文档和基础设施定义，从中提取代码库的结构知识图谱。'
+    en: 'You are a senior software architect and code analyst skilled at reading source code, configs, docs, and infrastructure definitions to extract a structural knowledge graph of a codebase.'
+  rules_for_entities:
+    zh:
+      - '为每个文件抽取一个 file 节点；为显著函数/方法抽取 function 节点；为类/接口抽取 class 节点'
+      - '配置文件（YAML/JSON/TOML/env）抽为 config；文档（Markdown/RST/TXT）抽为 document；Dockerfile/K8s 抽为 service'
+      - '数据库迁移/表抽为 table；API 路由/端点抽为 endpoint；CI/CD 配置抽为 pipeline；GraphQL/Protobuf/Prisma schema 抽为 schema；Terraform/CloudFormation 资源抽为 resource'
+      - '同一实体在全代码库中保持命名一致；filePath 使用相对于项目根的路径'
+      - 'summary 用简短自然语言描述该节点的用途，而不是复述代码'
+    en:
+      - 'Extract one file node per file; a function node for each notable function/method; a class node for classes/interfaces'
+      - 'Map config files (YAML/JSON/TOML/env) to config; docs (Markdown/RST/TXT) to document; Dockerfile/K8s to service'
+      - 'Map DB migrations/tables to table; API routes/endpoints to endpoint; CI/CD configs to pipeline; GraphQL/Protobuf/Prisma schemas to schema; Terraform/CloudFormation resources to resource'
+      - 'Keep entity names consistent across the whole codebase; use filePaths relative to the project root'
+      - 'Describe each node''s purpose in a short natural-language summary, do not paraphrase the code'
+  rules_for_relations:
+    zh:
+      - '仅抽取代码中明确存在的关系：import 语句→imports，函数调用→calls，包含/定义→contains，继承→inherits，实现接口→implements'
+      - '依赖（depends_on）用于表达非导入的依赖关系；测试代码与被测代码用 tested_by，方向为 生产→测试'
+      - '数据流用 reads_from/writes_to/transforms/validates；行为用 subscribes/publishes/middleware'
+      - '基础设施关系：deploys/serves/provisions/triggers；数据/Schema 关系：migrates/documents/routes/defines_schema'
+      - 'configures 表示配置作用于某个节点；related/similar_to 用于语义关联，应谨慎使用'
+      - '不要凭空创造代码中没有的关系；关系方向 direction 默认 forward'
+    en:
+      - 'Extract only relations that clearly exist in the code: import statements → imports, function calls → calls, containment/definitions → contains, inheritance → inherits, interface impl → implements'
+      - 'Use depends_on for non-import dependencies; tested_by links test code to the code under test, directed production → test'
+      - 'Use reads_from/writes_to/transforms/validates for data flow; subscribes/publishes/middleware for behavior'
+      - 'Infrastructure relations: deploys/serves/provisions/triggers; schema/data relations: migrates/documents/routes/defines_schema'
+      - 'configures means a config applies to a node; use related/similar_to sparingly for semantic links'
+      - 'Do not invent relations absent from the code; default direction is forward'
+
+identifiers:
+  entity_id: name
+  relation_id: '{source}|{type}|{target}'
+  relation_members:
+    source: source
+    target: target
+
+display:
+  entity_label: '{name}'
+  relation_label: '{type}'

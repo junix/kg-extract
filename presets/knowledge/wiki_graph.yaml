@@ -1,0 +1,160 @@
+language: [zh, en]
+
+name: wiki_graph
+type: graph
+tags: [knowledge, wiki, karpathy, article, claim]
+
+description:
+  zh: '知识库图谱模板 - 从 Karpathy 模式 LLM wiki（带 [[wikilink]] 的 markdown 文档、原始资料、index.md 分类目录）中提取文章、实体、主题、论断、资料来源及其引用、支撑、归类等关系'
+  en: 'Knowledge Base Graph Template - Extract articles, entities, topics, claims, and sources from a Karpathy-pattern LLM wiki (markdown docs with [[wikilinks]], raw sources, an index.md category catalog) plus their citation, support, and categorization relationships'
+
+output:
+  description:
+    zh: '知识库图谱：文章（article）、实体（entity）、主题（topic）、论断（claim）、资料来源（source）五类节点及其语义关系'
+    en: 'A knowledge-base graph: five node types — article, entity, topic, claim, source — plus their semantic relationships'
+  entities:
+    description:
+      zh: '知识库节点：article（wiki 文章）/ entity（人/机构/对象等命名实体）/ topic（主题或分类）/ claim（论断或观点）/ source（原始资料）'
+      en: 'Knowledge nodes: article (wiki article) / entity (person, org, object, named entity) / topic (theme or category) / claim (assertion or position) / source (raw source material)'
+    fields:
+      - name: name
+        type: str
+        description:
+          zh: '节点名称（文章标题、实体名、主题名、论断摘要、资料文件名）'
+          en: 'Node name (article title, entity name, topic name, claim summary, or source filename)'
+        required: true
+      - name: type
+        type: str
+        description:
+          zh: '节点类型，必须是以下之一：article/entity/topic/claim/source'
+          en: 'Node type, must be one of: article/entity/topic/claim/source'
+        required: true
+      - name: summary
+        type: str
+        description:
+          zh: '该节点的简短说明'
+          en: 'A short description of this node'
+        required: false
+      - name: tags
+        type: list
+        description:
+          zh: '描述性标签'
+          en: 'Descriptive tags'
+        required: false
+      - name: complexity
+        type: str
+        description:
+          zh: '复杂度，取值：simple/moderate/complex'
+          en: 'Complexity: simple/moderate/complex'
+        required: false
+      - name: category
+        type: str
+        description:
+          zh: '该节点所属的分类（通常来自 index.md 的章节标题）'
+          en: 'The category this node belongs to (typically from an index.md section heading)'
+        required: false
+      - name: content
+        type: str
+        description:
+          zh: '文章/资料的文本内容摘要（article/source 节点用）'
+          en: 'Text content summary of the article/source (for article/source nodes)'
+        required: false
+      - name: wikilinks
+        type: list
+        description:
+          zh: '该文章中出现的 [[wikilink]] 目标列表（article 节点用）'
+          en: 'List of [[wikilink]] targets appearing in this article (for article nodes)'
+        required: false
+      - name: backlinks
+        type: list
+        description:
+          zh: '反向链接：指向该文章的其他文章列表（article 节点用）'
+          en: 'Backlinks: other articles linking to this one (for article nodes)'
+        required: false
+  relations:
+    description:
+      zh: '知识库语义关系：cites（引用）/ contradicts（反驳）/ builds_on（发展）/ exemplifies（例证）/ categorized_under（归类于）/ authored_by（作者关系）'
+      en: 'Knowledge semantic relations: cites (citation) / contradicts (rebuttal) / builds_on (develops) / exemplifies (example of) / categorized_under (classified under) / authored_by (authorship)'
+    fields:
+      - name: source
+        type: str
+        description:
+          zh: '源节点名称'
+          en: 'Source node name'
+        required: true
+      - name: target
+        type: str
+        description:
+          zh: '目标节点名称'
+          en: 'Target node name'
+        required: true
+      - name: type
+        type: str
+        description:
+          zh: '关系类型，必须是以下之一：cites（引用资料或论据）/ contradicts（与…相悖）/ builds_on（在…基础上发展）/ exemplifies（是…的例证）/ categorized_under（归属于某主题/分类）/ authored_by（由…撰写）'
+          en: 'Relation type, must be one of: cites (cites a source/evidence) / contradicts (conflicts with) / builds_on (develops upon) / exemplifies (is an example of) / categorized_under (classified under a topic/category) / authored_by (written by)'
+        required: true
+      - name: direction
+        type: str
+        description:
+          zh: '方向，取值：forward/backward/bidirectional（默认 forward）'
+          en: 'Direction: forward/backward/bidirectional (default forward)'
+        required: false
+      - name: description
+        type: str
+        description:
+          zh: '关系说明（如引用语境、反驳理由）'
+          en: 'Relation description (e.g. citation context, reason for contradiction)'
+        required: false
+      - name: weight
+        type: str
+        description:
+          zh: '关系强度 0–1（cites/authored_by=0.8, categorized_under=0.7, builds_on/exemplifies=0.6, contradicts=0.5）'
+          en: 'Relation strength 0–1 (cites/authored_by=0.8, categorized_under=0.7, builds_on/exemplifies=0.6, contradicts=0.5)'
+        required: false
+
+guideline:
+  target:
+    zh: '你是一位知识图谱专家，擅长从带 wikilink 的 markdown 知识库中提取文章、命名实体、主题、论断和资料来源，并识别它们之间的引用、支撑、反驳与归类关系。'
+    en: 'You are a knowledge graph expert skilled at extracting articles, named entities, topics, claims, and sources from wikilink-rich markdown knowledge bases, and identifying their citation, support, contradiction, and categorization relationships.'
+  rules_for_entities:
+    zh:
+      - '为每篇 wiki markdown 文档抽取一个 article 节点；为原始资料（raw/ 目录下的文件）抽取 source 节点'
+      - '从文章正文中抽取命名实体（人、机构、产品、技术等）作为 entity 节点'
+      - '从 index.md 的章节标题或显式分类抽取 topic 节点'
+      - '抽取文章中明确陈述的观点、论断或结论作为 claim 节点'
+      - '同一实体/主题在全文中保持命名一致；article 节点应记录其 wikilinks 和 backlinks'
+      - '仅提取文本中明确表达的内容，不要凭空推断'
+    en:
+      - 'Extract one article node per wiki markdown document; one source node per raw material file (e.g. under raw/)'
+      - 'Extract named entities (people, orgs, products, technologies) from article text as entity nodes'
+      - 'Extract topic nodes from index.md section headings or explicit categories'
+      - 'Extract explicit viewpoints, assertions, or conclusions as claim nodes'
+      - 'Keep entity/topic names consistent throughout the corpus; record wikilinks and backlinks on article nodes'
+      - 'Extract only what is explicitly expressed in the text; do not infer'
+  rules_for_relations:
+    zh:
+      - '用 cites 把 article 或 claim 连到它引用的 source 或 claim'
+      - '用 builds_on 表示一个观点在另一个观点基础上发展；用 exemplifies 表示某物是某概念的例证'
+      - '用 contradicts 表示两个论断相悖；direction 通常用 bidirectional'
+      - '用 categorized_under 把 article/entity/claim 连到所属 topic（方向 节点→topic）'
+      - '用 authored_by 把 source 或 article 连到其作者 entity（方向 资料→作者）'
+      - '优先提取文档中明确出现的关系（如显式 wikilink、明确引用），不要创造隐含的常识关联'
+    en:
+      - 'Use cites to link an article or claim to the source or claim it references'
+      - 'Use builds_on when one idea develops upon another; use exemplifies when something is an example of a concept'
+      - 'Use contradicts when two claims conflict; direction is usually bidirectional'
+      - 'Use categorized_under to link an article/entity/claim to its topic (directed node→topic)'
+      - 'Use authored_by to link a source or article to its author entity (directed material→author)'
+      - 'Prefer relations explicitly present in the document (explicit wikilinks, clear citations); do not invent implicit common-sense associations'
+
+identifiers:
+  entity_id: name
+  relation_id: '{source}|{type}|{target}'
+  relation_members:
+    source: source
+    target: target
+
+display:
+  entity_label: '{name}'
+  relation_label: '{type}'
