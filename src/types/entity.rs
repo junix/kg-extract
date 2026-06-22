@@ -176,6 +176,21 @@ pub enum EntityType {
     Other,
 }
 
+/// How a free-form type token resolved against the canonical vocabulary.
+///
+/// Returned by [`EntityType::resolve`] and [`PredicateType::resolve`] so a graph
+/// can report which tokens were remapped or lost rather than silently degrading.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TypeMatch {
+    /// The token is an exact canonical variant — no information lost.
+    Exact,
+    /// The token was remapped to a related canonical type via the alias table.
+    Aliased,
+    /// The token is out of vocabulary and fell back to the generic catch-all
+    /// (`OTHER` / `RELATED_TO`); the raw token is the only record of its meaning.
+    Fallback,
+}
+
 impl EntityType {
     /// The SCREAMING_SNAKE_CASE string value (matches Python `EntityType.value`).
     pub fn value(&self) -> String {
@@ -185,25 +200,75 @@ impl EntityType {
     /// Parse a free-form type string into an [`EntityType`], applying the same
     /// normalisation and fallback mapping used by the Python parser:
     /// `upper().replace(" ", "_")`, then exact match, then common aliases,
-    /// then `OTHER`.
+    /// then `OTHER`. Discards the resolution provenance; use [`resolve`] when you
+    /// need to know whether the token aliased or fell back.
+    ///
+    /// [`resolve`]: EntityType::resolve
     pub fn from_loose(raw: &str) -> EntityType {
+        Self::resolve(raw).0
+    }
+
+    /// Like [`from_loose`], but also reports *how* the token resolved
+    /// ([`TypeMatch::Exact`] / [`Aliased`] / [`Fallback`]) so callers can audit
+    /// out-of-vocabulary tokens instead of silently collapsing them to `OTHER`.
+    ///
+    /// [`from_loose`]: EntityType::from_loose
+    /// [`Aliased`]: TypeMatch::Aliased
+    /// [`Fallback`]: TypeMatch::Fallback
+    pub fn resolve(raw: &str) -> (EntityType, TypeMatch) {
         let normalized = raw.trim().to_uppercase().replace([' ', '-'], "_");
         if let Ok(t) = normalized.parse::<EntityType>() {
-            return t;
+            return (t, TypeMatch::Exact);
         }
-        match normalized.as_str() {
-            "MODEL" => EntityType::Technology,
-            "ALGORITHM" => EntityType::Technology,
-            "DATASET" => EntityType::Technology,
-            "METHOD" => EntityType::Technology,
-            "METRIC" => EntityType::Category,
-            "RESEARCH_GROUP" => EntityType::Organization,
-            "GPU_CLUSTER" => EntityType::Technology,
-            "REWARD_FUNCTION" => EntityType::Technology,
-            "OPTIMIZATION_ALGORITHM" => EntityType::Technology,
-            "FINETUNING_METHOD" => EntityType::Technology,
-            _ => EntityType::Other,
+        match Self::alias(&normalized) {
+            Some(t) => (t, TypeMatch::Aliased),
+            None => (EntityType::Other, TypeMatch::Fallback),
         }
+    }
+
+    /// Curated alias table: maps common out-of-vocabulary type tokens to the
+    /// closest canonical variant *before* the `OTHER` fallback. Only consulted
+    /// when no exact variant matches, so it can never override a real type.
+    ///
+    /// Extends the Python original (which had only the first block) with
+    /// software/ML/research tokens that models routinely emit; every added entry
+    /// previously collapsed to `OTHER`, so this strictly recovers information.
+    fn alias(normalized: &str) -> Option<EntityType> {
+        use EntityType::*;
+        Some(match normalized {
+            // --- Python-parity block (preserved verbatim) ---
+            "MODEL" => Technology,
+            "ALGORITHM" => Technology,
+            "DATASET" => Technology,
+            "METHOD" => Technology,
+            "METRIC" => Category,
+            "RESEARCH_GROUP" => Organization,
+            "GPU_CLUSTER" => Technology,
+            "REWARD_FUNCTION" => Technology,
+            "OPTIMIZATION_ALGORITHM" => Technology,
+            "FINETUNING_METHOD" => Technology,
+            // --- Software / AI artefacts → Technology ---
+            "AI_MODEL"
+            | "ML_MODEL"
+            | "LLM"
+            | "LANGUAGE_MODEL"
+            | "LARGE_LANGUAGE_MODEL"
+            | "FOUNDATION_MODEL" => Technology,
+            "FRAMEWORK" | "LIBRARY" | "API" | "SDK" | "TOOLKIT" | "PROTOCOL" | "PLATFORM"
+            | "TOOL" | "SERVICE" | "APPLICATION" | "APP" | "SYSTEM" => Technology,
+            // --- Data artefacts → Dataset ---
+            "BENCHMARK" | "CORPUS" | "TRAINING_DATA" => Dataset,
+            // --- Commercial orgs → Company / Institution / Organization ---
+            "STARTUP" | "CORPORATION" | "VENDOR" => Company,
+            "UNIVERSITY" | "LABORATORY" | "LAB" | "RESEARCH_LAB" | "RESEARCH_INSTITUTE" => {
+                Institution
+            }
+            "TEAM" | "RESEARCH_TEAM" | "GROUP" | "CONSORTIUM" => Organization,
+            // --- Human roles → Person ---
+            "RESEARCHER" | "SCIENTIST" | "ENGINEER" | "AUTHOR" | "DEVELOPER" | "FOUNDER"
+            | "PROFESSOR" => Person,
+            _ => return None,
+        })
     }
 
     /// All variants (mirrors `get_default_entity_types`).
@@ -302,6 +367,33 @@ mod tests {
         );
         assert_eq!(EntityType::from_loose("totally unknown"), EntityType::Other);
         assert_eq!(EntityType::from_loose("Person"), EntityType::Person);
+    }
+
+    #[test]
+    fn resolve_reports_match_kind() {
+        // Exact canonical variant.
+        assert_eq!(
+            EntityType::resolve("person"),
+            (EntityType::Person, TypeMatch::Exact)
+        );
+        // Extended alias table recovers tokens that previously hit OTHER.
+        assert_eq!(
+            EntityType::resolve("LLM"),
+            (EntityType::Technology, TypeMatch::Aliased)
+        );
+        assert_eq!(
+            EntityType::resolve("research lab"),
+            (EntityType::Institution, TypeMatch::Aliased)
+        );
+        assert_eq!(
+            EntityType::resolve("researcher"),
+            (EntityType::Person, TypeMatch::Aliased)
+        );
+        // Genuinely unknown still falls back, but now it is reported as such.
+        assert_eq!(
+            EntityType::resolve("totally unknown"),
+            (EntityType::Other, TypeMatch::Fallback)
+        );
     }
 
     #[test]

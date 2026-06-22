@@ -15,7 +15,7 @@ pub(crate) use parse::{entity_type_tokens, parse_output, parse_relations_against
 use super::{validate_input, Extractor};
 use crate::backend::{ChatSession, CompletionOptions, LlmBackend, ReplaySession};
 use crate::chunking::{segment, Segment};
-use crate::merger::{merge_all, merge_all_dedup_llm, merge_knowledge_graphs_with};
+use crate::merger::{merge_all, merge_all_dedup_coref, merge_all_dedup_llm};
 use crate::types::{ExtractionConfig, ExtractionResponse, KnowledgeGraph, ParsedResult};
 
 #[cfg(test)]
@@ -350,9 +350,7 @@ impl SimpleExtractor {
                 };
                 merge_all_dedup_llm(graphs, &self.backend, &opts).await
             } else {
-                graphs.into_iter().fold(KnowledgeGraph::new(), |acc, g| {
-                    merge_knowledge_graphs_with(acc, g, true, strategy)
-                })
+                merge_all_dedup_coref(graphs, strategy, self.config.spec.coref)
             }
         } else {
             merge_all(graphs)

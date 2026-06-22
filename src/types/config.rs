@@ -173,6 +173,21 @@ impl ExtractionResponse {
     pub fn get_mermaid_code(&self) -> String {
         self.knowledge_graph.to_mermaid()
     }
+    /// Record the type-normalisation audit (which raw type tokens were aliased
+    /// or fell back to the generic catch-all) under
+    /// `metadata["type_normalization"]`. No-op — and no key added — when every
+    /// type resolved to its own exact canonical variant, so clean extractions
+    /// are left untouched. Returns whether anything was recorded.
+    pub fn annotate_type_normalization(&mut self) -> bool {
+        match self.knowledge_graph.type_normalization_report() {
+            Some(report) => {
+                self.metadata.insert("type_normalization".into(), report);
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn get_stats(&self) -> serde_json::Value {
         let mut stats = self.knowledge_graph.stats();
         if let Some(obj) = stats.as_object_mut() {

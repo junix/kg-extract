@@ -10,8 +10,8 @@ pub mod spec;
 pub use config::{
     ChunkStrategy, ExtractionConfig, ExtractionRequest, ExtractionResponse, ParsedResult,
 };
-pub use entity::{default_entity_types, Entity, EntityType};
+pub use entity::{default_entity_types, Entity, EntityType, TypeMatch};
 pub use graph::{KnowledgeGraph, Triple};
 pub use predicate::{default_predicates, Predicate, PredicateType};
 pub use schema::Schema;
-pub use spec::{ExtractionSpec, MergeStrategy, SchemaMode};
+pub use spec::{CorefMode, ExtractionSpec, MergeStrategy, SchemaMode};

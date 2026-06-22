@@ -73,6 +73,27 @@ impl MergeStrategy {
     }
 }
 
+/// How aggressively duplicate entities are *recognised* before [`MergeStrategy`]
+/// decides how to combine them.
+///
+/// Orthogonal to `MergeStrategy`: this picks *which* entities count as the same,
+/// the strategy picks *how* their fields fold. `Off` is the historical behaviour
+/// (exact lowercased-label match only). `Fuzzy` additionally collapses surface
+/// variants of the same name — the main lever for cross-chunk coreference, where
+/// the same entity surfaces as `"OpenAI"`, `"Open AI"` and `"OpenAI, Inc."` in
+/// different segments and would otherwise fragment into three nodes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CorefMode {
+    /// Only exact (case-insensitive) label matches are deduplicated.
+    #[default]
+    Off,
+    /// Also merge labels that match after normalisation (case, punctuation,
+    /// corporate suffixes, articles) or that are near-identical (high
+    /// edit-distance similarity) and type-compatible.
+    Fuzzy,
+}
+
 /// The declarative contract for an extraction: *what* graph shape is wanted,
 /// independent of *how* it is produced.
 ///
@@ -94,6 +115,11 @@ pub struct ExtractionSpec {
     /// How colliding duplicates are combined when `merge_duplicates` is set.
     #[serde(default)]
     pub merge_strategy: MergeStrategy,
+    /// How duplicate entities are *recognised* before being combined. `Off`
+    /// (default) matches exact lowercased labels only; `Fuzzy` also collapses
+    /// surface variants of the same name for cross-chunk coreference.
+    #[serde(default)]
+    pub coref: CorefMode,
     /// An optional rich extraction *template* (preset). When set, schema-driven
     /// extractors render their prompt from the template's guideline and output
     /// fields (see [`crate::template`]) instead of the bare type-vocabulary,
@@ -117,6 +143,7 @@ impl Default for ExtractionSpec {
             mode: SchemaMode::Open,
             merge_duplicates: true,
             merge_strategy: MergeStrategy::default(),
+            coref: CorefMode::default(),
             template: None,
             language: None,
         }

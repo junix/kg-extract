@@ -20,7 +20,7 @@
 use super::{validate_input, Extractor, SchemaMode};
 use crate::backend::{CompletionOptions, LlmBackend, Message, ToolInvocation, ToolSpec};
 use crate::graph_build::{build_predicate, parse_entity_type, GraphBuilder};
-use crate::merger::dedup_graph;
+use crate::merger::dedup_graph_coref;
 use crate::types::{
     ExtractionConfig, ExtractionResponse, ExtractionSpec, KnowledgeGraph, MergeStrategy, Schema,
 };
@@ -438,7 +438,14 @@ impl Extractor for ToolCallExtractor {
 
         let mut kg = self.build_graph(&acc);
         if self.config.spec.merge_duplicates {
-            kg = dedup_graph(kg, self.config.spec.merge_strategy, &self.backend, &opts).await;
+            kg = dedup_graph_coref(
+                kg,
+                self.config.spec.merge_strategy,
+                self.config.spec.coref,
+                &self.backend,
+                &opts,
+            )
+            .await;
         }
         // Tool calls see the whole text at once, so provenance is whole-document.
         {

@@ -23,7 +23,7 @@ use kg_extract::extractor::{
     ToolCallExtractor,
 };
 use kg_extract::template::{gallery, TemplateCfg};
-use kg_extract::types::{ChunkStrategy, ExtractionResponse, MergeStrategy, Schema};
+use kg_extract::types::{ChunkStrategy, CorefMode, ExtractionResponse, MergeStrategy, Schema};
 
 #[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -155,6 +155,7 @@ struct FileConfig {
     lang: Option<String>,
     max_rounds: Option<usize>,
     merge_strategy: Option<MergeStrategyArg>,
+    coref: Option<bool>,
     max_concurrency: Option<usize>,
     relation_gleaning: Option<usize>,
     output: Option<OutFmt>,
@@ -241,6 +242,12 @@ struct Args {
     #[arg(long, value_enum, default_value_t = MergeStrategyArg::KeepExisting)]
     merge_strategy: MergeStrategyArg,
 
+    /// Entity coreference: also merge surface variants of the same name (case,
+    /// punctuation, corporate suffixes, near-identical spellings) across chunks,
+    /// not just exact-label duplicates. Off by default.
+    #[arg(long)]
+    coref: bool,
+
     /// Max segments extracted concurrently (Simple engine). 1 = sequential.
     #[arg(long, default_value_t = 8)]
     max_concurrency: usize,
@@ -280,6 +287,7 @@ struct Resolved {
     lang: Option<String>,
     max_rounds: usize,
     merge_strategy: MergeStrategyArg,
+    coref: bool,
     max_concurrency: usize,
     relation_gleaning: usize,
     output: OutFmt,
@@ -375,6 +383,8 @@ fn resolve(m: &ArgMatches, args: &Args, cfg: FileConfig) -> Resolved {
         },
         max_rounds: pick(m, "max_rounds", args.max_rounds, cfg.max_rounds),
         merge_strategy: pick(m, "merge_strategy", args.merge_strategy, cfg.merge_strategy),
+        // A presence flag: explicit `--coref` wins, else the config file value.
+        coref: args.coref || cfg.coref.unwrap_or(false),
         max_concurrency: pick(
             m,
             "max_concurrency",
@@ -660,6 +670,11 @@ async fn main() -> anyhow::Result<()> {
             args.mock_response.as_deref(),
             args.mock_tool_calls.as_deref(),
         )?;
+        let coref_mode = if cfg.coref {
+            CorefMode::Fuzzy
+        } else {
+            CorefMode::Off
+        };
         match cfg.engine {
             Engine::Simple => {
                 let mut c = SimpleExtractor::default_config();
@@ -667,6 +682,7 @@ async fn main() -> anyhow::Result<()> {
                 c.source_doc = source_doc.clone();
                 c.max_concurrency = cfg.max_concurrency;
                 c.spec.merge_strategy = cfg.merge_strategy.into();
+                c.spec.coref = coref_mode;
                 if let Some(m) = &cfg.model {
                     c.model_name = m.clone();
                 }
@@ -701,6 +717,7 @@ async fn main() -> anyhow::Result<()> {
                 c.chunker = cfg.chunker.into();
                 c.source_doc = source_doc.clone();
                 c.spec.merge_strategy = cfg.merge_strategy.into();
+                c.spec.coref = coref_mode;
                 if let Some(m) = &cfg.model {
                     c.model_name = m.clone();
                 }
@@ -717,10 +734,23 @@ async fn main() -> anyhow::Result<()> {
             Engine::Agentic => unreachable!("agentic handled above"),
         }
     };
-    let response = match &prechunked {
+    let mut response = match &prechunked {
         Some(p) => extractor.extract_prechunked(&p.segments).await?,
         None => extractor.extract(&text).await?,
     };
+
+    // Audit out-of-vocabulary type tokens (aliased / fell back to OTHER) into
+    // the response metadata, and surface a one-line summary so the silent
+    // normalisation is visible without parsing the JSON.
+    if response.annotate_type_normalization() {
+        if let Some(c) = response
+            .metadata
+            .get("type_normalization")
+            .and_then(|v| v.get("counts"))
+        {
+            eprintln!("Type normalization: {c}");
+        }
+    }
 
     print_response(cfg.output, &response)?;
     Ok(())

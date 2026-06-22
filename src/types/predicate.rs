@@ -2,6 +2,7 @@
 //!
 //! Ported from `graph/_types/predicates.py`.
 
+use super::entity::TypeMatch;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use strum::IntoEnumIterator;
@@ -171,24 +172,38 @@ impl PredicateType {
 
     /// Map a free-form relation string to a [`PredicateType`], mirroring the
     /// Python parser: normalise (`upper().replace(" ", "_")`), exact match,
-    /// then substring match either direction, else `RELATED_TO`.
+    /// then substring match either direction, else `RELATED_TO`. Discards the
+    /// resolution provenance; use [`resolve`] when you need it.
+    ///
+    /// [`resolve`]: PredicateType::resolve
     pub fn from_loose(raw: &str) -> PredicateType {
+        Self::resolve(raw).0
+    }
+
+    /// Like [`from_loose`], but also reports *how* the token resolved: an exact
+    /// variant, an [`Aliased`] substring match, or a [`Fallback`] to
+    /// `RELATED_TO`. Lets callers audit which relation tokens were lost.
+    ///
+    /// [`from_loose`]: PredicateType::from_loose
+    /// [`Aliased`]: TypeMatch::Aliased
+    /// [`Fallback`]: TypeMatch::Fallback
+    pub fn resolve(raw: &str) -> (PredicateType, TypeMatch) {
         let normalized = raw.trim().to_uppercase().replace([' ', '-'], "_");
         // A blank predicate must not fuzzy-match: `value.contains("")` is always
         // true, so the substring loop below would return the first variant.
         if normalized.is_empty() {
-            return PredicateType::RelatedTo;
+            return (PredicateType::RelatedTo, TypeMatch::Fallback);
         }
         if let Ok(p) = normalized.parse::<PredicateType>() {
-            return p;
+            return (p, TypeMatch::Exact);
         }
         for pt in PredicateType::iter() {
             let v = pt.value();
             if normalized.contains(&v) || v.contains(&normalized) {
-                return pt;
+                return (pt, TypeMatch::Aliased);
             }
         }
-        PredicateType::RelatedTo
+        (PredicateType::RelatedTo, TypeMatch::Fallback)
     }
 }
 
@@ -298,6 +313,28 @@ mod tests {
         assert_eq!(
             PredicateType::from_loose("no such thing"),
             PredicateType::RelatedTo
+        );
+    }
+
+    #[test]
+    fn resolve_reports_match_kind() {
+        assert_eq!(
+            PredicateType::resolve("uses"),
+            (PredicateType::Uses, TypeMatch::Exact)
+        );
+        // Substring match is reported as an alias, not an exact hit.
+        assert_eq!(
+            PredicateType::resolve("is developed by"),
+            (PredicateType::DevelopedBy, TypeMatch::Aliased)
+        );
+        // Unknown / blank fall back.
+        assert_eq!(
+            PredicateType::resolve("no such thing"),
+            (PredicateType::RelatedTo, TypeMatch::Fallback)
+        );
+        assert_eq!(
+            PredicateType::resolve(""),
+            (PredicateType::RelatedTo, TypeMatch::Fallback)
         );
     }
 

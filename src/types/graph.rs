@@ -1,10 +1,10 @@
 //! Core graph data structures (ported from `graph/_types/graph.py`).
 
-use super::entity::Entity;
+use super::entity::{Entity, EntityType, TypeMatch};
 use super::predicate::{Predicate, PredicateType};
 use indexmap_lite::OrderedMap;
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 /// A knowledge graph triple (subject-predicate-object).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -99,6 +99,88 @@ impl KnowledgeGraph {
             .iter()
             .filter(|t| t.predicate.predicate_type == pt)
             .collect()
+    }
+
+    /// Audit how the model-emitted type tokens mapped onto the canonical
+    /// vocabulary. Returns `None` when every token resolved to its own exact
+    /// variant; otherwise a report of which raw tokens were *aliased* to a
+    /// related type and which *fell back* to the generic catch-all
+    /// (`OTHER` / `RELATED_TO`) — turning the otherwise-silent normalisation into
+    /// an inspectable signal (e.g. for building a domain-specific vocabulary).
+    ///
+    /// Derived purely from the persisted `raw_type` tokens, so it covers every
+    /// extractor uniformly regardless of which parse path produced the graph.
+    /// Keys are sorted for deterministic output.
+    pub fn type_normalization_report(&self) -> Option<serde_json::Value> {
+        let mut ent_aliased: BTreeMap<String, String> = BTreeMap::new();
+        let mut ent_fallback: BTreeSet<String> = BTreeSet::new();
+        for (_, e) in self.entities.iter() {
+            let Some(raw) = e.raw_type.as_deref() else {
+                continue;
+            };
+            if raw.trim().is_empty() {
+                continue;
+            }
+            match EntityType::resolve(raw) {
+                (_, TypeMatch::Exact) => {}
+                (t, TypeMatch::Aliased) => {
+                    ent_aliased.insert(raw.to_string(), t.value());
+                }
+                (_, TypeMatch::Fallback) => {
+                    ent_fallback.insert(raw.to_string());
+                }
+            }
+        }
+
+        let mut rel_aliased: BTreeMap<String, String> = BTreeMap::new();
+        let mut rel_fallback: BTreeSet<String> = BTreeSet::new();
+        for triple in &self.triples {
+            let raw = triple
+                .predicate
+                .raw_type
+                .as_deref()
+                .or(triple.predicate.label.as_deref());
+            let Some(raw) = raw else { continue };
+            if raw.trim().is_empty() {
+                continue;
+            }
+            match PredicateType::resolve(raw) {
+                (_, TypeMatch::Exact) => {}
+                (p, TypeMatch::Aliased) => {
+                    rel_aliased.insert(raw.to_string(), p.value());
+                }
+                (_, TypeMatch::Fallback) => {
+                    rel_fallback.insert(raw.to_string());
+                }
+            }
+        }
+
+        if ent_aliased.is_empty()
+            && ent_fallback.is_empty()
+            && rel_aliased.is_empty()
+            && rel_fallback.is_empty()
+        {
+            return None;
+        }
+
+        let ent_fallback: Vec<&String> = ent_fallback.iter().collect();
+        let rel_fallback: Vec<&String> = rel_fallback.iter().collect();
+        Some(serde_json::json!({
+            "entities": {
+                "aliased": ent_aliased,
+                "fallback": ent_fallback,
+            },
+            "relations": {
+                "aliased": rel_aliased,
+                "fallback": rel_fallback,
+            },
+            "counts": {
+                "entities_aliased": ent_aliased.len(),
+                "entities_fallback": ent_fallback.len(),
+                "relations_aliased": rel_aliased.len(),
+                "relations_fallback": rel_fallback.len(),
+            },
+        }))
     }
 
     /// Merge another graph into `self` (mirrors `KnowledgeGraph.merge`):
@@ -273,6 +355,65 @@ mod tests {
     }
     fn tri(s: &Entity, p: PredicateType, o: &Entity) -> Triple {
         Triple::new(s.clone(), Predicate::new(p), o.clone())
+    }
+
+    #[test]
+    fn type_normalization_report_none_when_all_exact() {
+        let mut a = Entity::new("e1", "Ada", EntityType::Person);
+        a.raw_type = Some("PERSON".into());
+        let mut b = Entity::new("e2", "Rust", EntityType::Technology);
+        b.raw_type = Some("TECHNOLOGY".into());
+        let mut g = KnowledgeGraph::new();
+        g.add_entity(a.clone());
+        g.add_entity(b.clone());
+        g.add_triple(Triple::new(
+            a,
+            Predicate::with_label(PredicateType::Uses, "USES"),
+            b,
+        ));
+        assert!(g.type_normalization_report().is_none());
+    }
+
+    #[test]
+    fn type_normalization_report_records_aliased_and_fallback() {
+        // An aliased entity token (LLM → TECHNOLOGY) and a genuinely unknown one.
+        let mut model = Entity::new("e1", "Claude", EntityType::Technology);
+        model.raw_type = Some("LLM".into());
+        let mut blob = Entity::new("e2", "Mystery", EntityType::Other);
+        blob.raw_type = Some("WIDGET".into());
+        let mut g = KnowledgeGraph::new();
+        g.add_entity(model.clone());
+        g.add_entity(blob.clone());
+        // A relation token that only fuzzy-matches (aliased) and one that is lost.
+        g.add_triple(Triple::new(
+            model.clone(),
+            Predicate::with_label(PredicateType::DevelopedBy, "is developed by"),
+            blob.clone(),
+        ));
+        g.add_triple(Triple::new(
+            blob,
+            Predicate::with_label(PredicateType::RelatedTo, "frobnicates"),
+            model,
+        ));
+
+        let report = g.type_normalization_report().expect("report present");
+        assert_eq!(report["entities"]["aliased"]["LLM"], "TECHNOLOGY");
+        assert_eq!(
+            report["entities"]["fallback"],
+            serde_json::json!(["WIDGET"])
+        );
+        assert_eq!(
+            report["relations"]["aliased"]["is developed by"],
+            "DEVELOPED_BY"
+        );
+        assert_eq!(
+            report["relations"]["fallback"],
+            serde_json::json!(["frobnicates"])
+        );
+        assert_eq!(report["counts"]["entities_aliased"], 1);
+        assert_eq!(report["counts"]["entities_fallback"], 1);
+        assert_eq!(report["counts"]["relations_aliased"], 1);
+        assert_eq!(report["counts"]["relations_fallback"], 1);
     }
 
     #[test]
