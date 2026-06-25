@@ -59,7 +59,8 @@ Output:
 pub const CONTINUE_PROMPT: &str = "Seem MANY entities/relations were missed in the extraction. If there are no more entities/relations that need to be added, just answer NO. Otherwise, add them below using the same format:\n";
 
 /// System prompt shared by every turn of a chunk's extraction session.
-pub const SYSTEM_PROMPT: &str = "You are an elite assistant for extracting structured data from text.";
+pub const SYSTEM_PROMPT: &str =
+    "You are an elite assistant for extracting structured data from text.";
 
 /// Targeted *relation* gleaning. Plain entity gleaning (`CONTINUE_PROMPT`) asks
 /// "what did you miss?" and the model tends to answer with more *nouns*, leaving

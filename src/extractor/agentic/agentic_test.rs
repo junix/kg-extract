@@ -145,10 +145,9 @@ fn stamp_slice_citations_marks_entity_triple_and_both_endpoints() {
     let cite = Citation::new(Some("doc.md".into()), 5, 9);
 
     let mut parsed = ParsedResult::default();
-    parsed.entities.insert(
-        "p".to_string(),
-        ent("p", "Widget", EntityType::Product),
-    );
+    parsed
+        .entities
+        .insert("p".to_string(), ent("p", "Widget", EntityType::Product));
     let t = Triple::new(
         ent("s", "Src", EntityType::Product),
         Predicate::with_label(PredicateType::Uses, "USES"),
@@ -182,10 +181,9 @@ fn stamp_slice_citations_does_not_duplicate_an_identical_citation() {
     use crate::citation::{Citation, CITATIONS_KEY};
     let cite = Citation::new(Some("doc.md".into()), 1, 4);
     let mut parsed = ParsedResult::default();
-    parsed.entities.insert(
-        "p".to_string(),
-        ent("p", "Widget", EntityType::Product),
-    );
+    parsed
+        .entities
+        .insert("p".to_string(), ent("p", "Widget", EntityType::Product));
 
     stamp_slice_citations(&mut parsed, &cite);
     stamp_slice_citations(&mut parsed, &cite); // same citation again
@@ -206,10 +204,9 @@ fn commit_unconstrained_slice_merges_entities_and_appends_triples() {
     let mut parsed_results: Vec<ParsedResult> = Vec::new();
 
     let mut parsed = ParsedResult::default();
-    parsed.entities.insert(
-        "p".to_string(),
-        ent("p", "Widget", EntityType::Product),
-    );
+    parsed
+        .entities
+        .insert("p".to_string(), ent("p", "Widget", EntityType::Product));
     let t = Triple::new(
         ent("p", "Widget", EntityType::Product),
         Predicate::with_label(PredicateType::Uses, "USES"),
@@ -233,10 +230,7 @@ fn commit_unconstrained_slice_first_occurrence_wins_on_repeat() {
     // A repeat entity must keep its first id (first-occurrence-wins) but still
     // union citations; a brand-new id is inserted.
     let mut all_entities: HashMap<String, Entity> = HashMap::new();
-    all_entities.insert(
-        "p".to_string(),
-        ent("p", "Widget", EntityType::Product),
-    );
+    all_entities.insert("p".to_string(), ent("p", "Widget", EntityType::Product));
     let mut all_triples: Vec<Triple> = Vec::new();
     let mut parsed_results: Vec<ParsedResult> = Vec::new();
 
@@ -245,10 +239,9 @@ fn commit_unconstrained_slice_first_occurrence_wins_on_repeat() {
         "p".to_string(),
         ent("p", "Widget repeated", EntityType::Product),
     );
-    parsed.entities.insert(
-        "q".to_string(),
-        ent("q", "Gadget", EntityType::Product),
-    );
+    parsed
+        .entities
+        .insert("q".to_string(), ent("q", "Gadget", EntityType::Product));
 
     commit_unconstrained_slice(
         &mut all_entities,
@@ -355,10 +348,7 @@ fn evolving_collects_types_outside_the_seed() {
 
 fn outcome() -> SessionOutcome {
     let mut entities = HashMap::new();
-    entities.insert(
-        "p".to_string(),
-        ent("p", "Widget", EntityType::Product),
-    );
+    entities.insert("p".to_string(), ent("p", "Widget", EntityType::Product));
     SessionOutcome {
         slices_count: 2,
         total_tool_uses: 3,
@@ -381,7 +371,13 @@ fn config_for(mode: SchemaMode) -> ExtractionConfig {
 #[test]
 fn assemble_response_off_policy_has_no_schema_metadata() {
     let cfg = config_for(SchemaMode::Open);
-    let resp = AgenticExtractor::assemble_response(outcome(), &SchemaPolicy::Off, true, SchemaMode::Open, &cfg);
+    let resp = AgenticExtractor::assemble_response(
+        outcome(),
+        &SchemaPolicy::Off,
+        true,
+        SchemaMode::Open,
+        &cfg,
+    );
     // Common metadata always present.
     assert_eq!(resp.metadata["tool_uses"], serde_json::json!(3));
     assert_eq!(resp.metadata["schema_mode"], serde_json::json!("open"));
@@ -403,8 +399,17 @@ fn assemble_response_fixed_policy_records_drops() {
     o.dropped_types = dt;
     let schema = Schema::new(vec!["PRODUCT".into()], vec!["USES".into()], vec![]);
     let filter = SchemaFilter::build(&schema).expect("non-empty schema builds a filter");
-    let resp = AgenticExtractor::assemble_response(o, &SchemaPolicy::Fixed(filter), true, SchemaMode::Fixed, &cfg);
-    assert_eq!(resp.metadata["schema_dropped_records"], serde_json::json!(4));
+    let resp = AgenticExtractor::assemble_response(
+        o,
+        &SchemaPolicy::Fixed(filter),
+        true,
+        SchemaMode::Fixed,
+        &cfg,
+    );
+    assert_eq!(
+        resp.metadata["schema_dropped_records"],
+        serde_json::json!(4)
+    );
     // BTreeSet -> sorted Vec; both dropped types recorded.
     assert_eq!(
         resp.metadata["schema_dropped_types"],
@@ -426,8 +431,17 @@ fn assemble_response_evolving_policy_proposes_new_types() {
     o.new_relations = nr;
     let schema = Schema::new(vec!["PRODUCT".into()], vec!["USES".into()], vec![]);
     let filter = SchemaFilter::build(&schema).expect("non-empty schema builds a filter");
-    let resp = AgenticExtractor::assemble_response(o, &SchemaPolicy::Evolving(filter), true, SchemaMode::Evolving, &cfg);
-    let nst = resp.metadata.get("new_schema_types").expect("evolving sets new_schema_types");
+    let resp = AgenticExtractor::assemble_response(
+        o,
+        &SchemaPolicy::Evolving(filter),
+        true,
+        SchemaMode::Evolving,
+        &cfg,
+    );
+    let nst = resp
+        .metadata
+        .get("new_schema_types")
+        .expect("evolving sets new_schema_types");
     // Mirrors SchemaJson/ToolCall's shape: nodes/relations sorted, attributes empty.
     assert_eq!(nst["nodes"], serde_json::json!(["GADGET"]));
     assert_eq!(nst["relations"], serde_json::json!(["DEPENDS_ON"]));
@@ -444,7 +458,8 @@ fn assemble_response_carries_config_and_parsed_results() {
     // parsed_results survives into the response verbatim (empty here, but the
     // field wiring is what we're checking).
     let _ = std::mem::replace(&mut o.parsed_results, Vec::new());
-    let resp = AgenticExtractor::assemble_response(o, &SchemaPolicy::Off, true, SchemaMode::Open, &cfg);
+    let resp =
+        AgenticExtractor::assemble_response(o, &SchemaPolicy::Off, true, SchemaMode::Open, &cfg);
     assert!(resp.config.is_some(), "config is stamped on the response");
     // source_doc defaults to None in default_config; this just confirms the
     // cloned config round-trips.

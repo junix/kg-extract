@@ -216,8 +216,9 @@ fn precedence_cli_flag_overrides_config() {
 // populated response. The branches are pure printing; this locks the dispatch
 // wiring (no panic, no format mis-route) for all seven formats. ----
 
-use kg_extract::types::{Entity, EntityType, ExtractionResponse, KnowledgeGraph, Predicate,
-    PredicateType, Triple};
+use kg_extract::types::{
+    Entity, EntityType, ExtractionResponse, KnowledgeGraph, Predicate, PredicateType, Triple,
+};
 
 fn populated_response() -> ExtractionResponse {
     // One entity + one self-loop triple so the jsonl/mermaid/stats branches

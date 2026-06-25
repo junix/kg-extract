@@ -112,8 +112,8 @@ fn codebase_graph_preset_is_registered_and_renders() {
         .find(|f| f.name == "type")
         .expect("entity type field");
     for t in [
-        "file", "function", "class", "module", "concept", "config", "document",
-        "service", "table", "endpoint", "pipeline", "schema", "resource",
+        "file", "function", "class", "module", "concept", "config", "document", "service", "table",
+        "endpoint", "pipeline", "schema", "resource",
     ] {
         assert!(
             node_type_doc.description.resolve("en").contains(t),
@@ -130,11 +130,32 @@ fn codebase_graph_preset_is_registered_and_renders() {
         .find(|f| f.name == "type")
         .expect("relation type field");
     for t in [
-        "imports", "exports", "contains", "inherits", "implements", "calls",
-        "subscribes", "publishes", "middleware", "reads_from", "writes_to",
-        "transforms", "validates", "depends_on", "tested_by", "configures",
-        "related", "similar_to", "deploys", "serves", "provisions", "triggers",
-        "migrates", "documents", "routes", "defines_schema",
+        "imports",
+        "exports",
+        "contains",
+        "inherits",
+        "implements",
+        "calls",
+        "subscribes",
+        "publishes",
+        "middleware",
+        "reads_from",
+        "writes_to",
+        "transforms",
+        "validates",
+        "depends_on",
+        "tested_by",
+        "configures",
+        "related",
+        "similar_to",
+        "deploys",
+        "serves",
+        "provisions",
+        "triggers",
+        "migrates",
+        "documents",
+        "routes",
+        "defines_schema",
     ] {
         assert!(
             rel_type_doc.description.resolve("en").contains(t),
@@ -157,8 +178,7 @@ fn codebase_graph_preset_is_registered_and_renders() {
 fn business_domain_flow_preset_is_registered_and_renders() {
     // Ports Understand-Anything's `/understand-domain` schema: domain/flow/step
     // nodes plus contains_flow/flow_step/cross_domain edges. Lives under `code/`.
-    let tpl = gallery::get("code/business_domain_flow")
-        .expect("business_domain_flow via full key");
+    let tpl = gallery::get("code/business_domain_flow").expect("business_domain_flow via full key");
     assert_eq!(tpl.autotype, AutoType::TemporalGraph);
 
     let node_types = tpl
@@ -235,10 +255,7 @@ fn wiki_graph_preset_is_registered_and_renders() {
         .description
         .resolve("en");
     for t in ["article", "entity", "topic", "claim", "source"] {
-        assert!(
-            node_types.contains(t),
-            "wiki node vocab missing '{t}'"
-        );
+        assert!(node_types.contains(t), "wiki node vocab missing '{t}'");
     }
     let rel_types = tpl
         .output
@@ -259,10 +276,7 @@ fn wiki_graph_preset_is_registered_and_renders() {
         "categorized_under",
         "authored_by",
     ] {
-        assert!(
-            rel_types.contains(t),
-            "wiki relation vocab missing '{t}'"
-        );
+        assert!(rel_types.contains(t), "wiki relation vocab missing '{t}'");
     }
     // UA's knowledgeMeta is carried as entity fields.
     for f in ["wikilinks", "backlinks", "category", "content"] {

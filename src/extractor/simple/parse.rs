@@ -10,7 +10,9 @@ use std::collections::HashMap;
 use regex::Regex;
 
 use crate::graph_build::{entity_id, should_swap_passive_by};
-use crate::types::{Entity, EntityType, ExtractionConfig, ParsedResult, Predicate, PredicateType, Triple};
+use crate::types::{
+    Entity, EntityType, ExtractionConfig, ParsedResult, Predicate, PredicateType, Triple,
+};
 
 use super::TUPLE_DELIMITER;
 
@@ -264,7 +266,10 @@ pub(super) fn parse_entity_item(item: &str) -> Option<Entity> {
     Some(entity)
 }
 
-pub(super) fn parse_relationship_item(item: &str, id_map: &HashMap<String, String>) -> Option<RelData> {
+pub(super) fn parse_relationship_item(
+    item: &str,
+    id_map: &HashMap<String, String>,
+) -> Option<RelData> {
     let inner = strip_parens(item);
     let parts: Vec<&str> = inner.split(TUPLE_DELIMITER).collect();
     if parts.len() < 4 {

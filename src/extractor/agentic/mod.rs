@@ -461,10 +461,8 @@ impl AgenticExtractor {
         resp.config = Some(config.clone());
         resp.metadata
             .insert("tool_uses".into(), serde_json::json!(total_tool_uses));
-        resp.metadata.insert(
-            "schema_mode".into(),
-            serde_json::json!(mode.as_str()),
-        );
+        resp.metadata
+            .insert("schema_mode".into(), serde_json::json!(mode.as_str()));
         match policy {
             SchemaPolicy::Fixed(_) => {
                 resp.metadata.insert(
@@ -682,8 +680,12 @@ impl AgenticExtractor {
                             }
                         );
                     }
-                    pending_feedback =
-                        Self::drop_feedback(sf.dropped_records, &sf.dropped_types, &entity_types, &rel_types);
+                    pending_feedback = Self::drop_feedback(
+                        sf.dropped_records,
+                        &sf.dropped_types,
+                        &entity_types,
+                        &rel_types,
+                    );
                 }
                 parsed_results.push(parsed);
                 continue 'slices;

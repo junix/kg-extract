@@ -28,9 +28,7 @@ pub const MAX_GLEANINGS: usize = 2;
 const TUPLE_DELIMITER: &str = "<|>";
 const RECORD_DELIMITER: &str = "##";
 
-use prompts::{
-    CONTINUE_PROMPT, EXTRACTION_PROMPT, RELATION_GLEANING_PROMPT, SYSTEM_PROMPT,
-};
+use prompts::{CONTINUE_PROMPT, EXTRACTION_PROMPT, RELATION_GLEANING_PROMPT, SYSTEM_PROMPT};
 
 /// Knowledge graph extractor using a general LLM chat interface.
 pub struct SimpleExtractor {
@@ -223,10 +221,11 @@ impl SimpleExtractor {
             // Keep only edges that resolve to known entities and are genuinely new.
             let mut seen: HashSet<(String, String, String)> =
                 all_triples.iter().map(|t| t.to_tuple()).collect();
-            let rescued: Vec<crate::types::Triple> = parse_relations_against(&output, &all_entities)
-                .into_iter()
-                .filter(|t| seen.insert(t.to_tuple()))
-                .collect();
+            let rescued: Vec<crate::types::Triple> =
+                parse_relations_against(&output, &all_entities)
+                    .into_iter()
+                    .filter(|t| seen.insert(t.to_tuple()))
+                    .collect();
             if rescued.is_empty() {
                 break;
             }
