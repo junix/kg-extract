@@ -193,6 +193,68 @@ fn input_format_defaults_to_text_and_accepts_chunks() {
     assert!(matches!(args.input_format, InputFormat::Chunks));
 }
 
+#[test]
+fn describe_and_dry_run_flags_parse() {
+    let m = Args::command().get_matches_from(["kg-extract", "--describe", "--json"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(args.describe);
+    assert!(args.json);
+
+    let m = Args::command().get_matches_from(["kg-extract", "--dryrun", "--json"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(args.dry_run);
+    assert!(args.json);
+
+    let m = Args::command().get_matches_from(["kg-extract", "--dry-run"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(args.dry_run);
+}
+
+#[test]
+fn describe_value_reports_json_and_dry_run_support() {
+    let value = describe_value();
+    assert_eq!(value["name"], "kg-extract");
+    assert_eq!(value["supports"]["describe"], true);
+    assert!(value["supports"]["json"]
+        .as_str()
+        .unwrap()
+        .contains("--json"));
+    assert!(value["supports"]["dry_run"]
+        .as_str()
+        .unwrap()
+        .contains("plan"));
+}
+
+#[test]
+fn dry_run_value_reports_no_input_or_backend_side_effects() {
+    let m = Args::command().get_matches_from([
+        "kg-extract",
+        "--dry-run",
+        "--json",
+        "-e",
+        "schema-json",
+        "-b",
+        "agent",
+        "--agent",
+        "glmcc",
+        "-f",
+        "doc.md",
+        "-o",
+        "stats",
+    ]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    let cfg = resolve(&m, &args, FileConfig::default());
+    let value = dry_run_value(&args, &cfg, false);
+    assert_eq!(value["dry_run"], true);
+    assert_eq!(value["will_read_input"], false);
+    assert_eq!(value["will_call_backend"], false);
+    assert_eq!(value["input"]["source"], "doc.md");
+    assert_eq!(value["config"]["engine"], "schema-json");
+    assert_eq!(value["config"]["backend"], "agent");
+    assert_eq!(value["config"]["agent"], "glmcc");
+    assert_eq!(value["config"]["output"], "stats");
+}
+
 /// An explicit CLI value flag overrides a differing config value.
 #[test]
 fn precedence_cli_flag_overrides_config() {

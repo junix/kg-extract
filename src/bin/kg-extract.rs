@@ -14,6 +14,7 @@ use anyhow::Context;
 use clap::parser::ValueSource;
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser, ValueEnum};
 use serde::Deserialize;
+use serde_json::json;
 
 use kg_extract::backend::{
     LlmBackend, MockBackend, PiAgentBackend, SdkAgentBackend, ToolInvocation,
@@ -233,6 +234,14 @@ struct Args {
     #[arg(long)]
     list_presets: bool,
 
+    /// Describe CLI capabilities and output contracts, then exit.
+    #[arg(long)]
+    describe: bool,
+
+    /// Print the resolved extraction plan without reading input or calling a backend.
+    #[arg(long = "dry-run", alias = "dryrun")]
+    dry_run: bool,
+
     /// Tool-call engine: max tool-calling rounds (1 = single-round collection).
     #[arg(long, default_value_t = 1)]
     max_rounds: usize,
@@ -271,6 +280,10 @@ struct Args {
     /// Output format.
     #[arg(short, long, value_enum, default_value_t = OutFmt::Json)]
     output: OutFmt,
+
+    /// Machine-readable JSON for --describe and --dry-run only.
+    #[arg(long)]
+    json: bool,
 }
 
 /// Resolved settings after merging CLI flags over the config file.
@@ -543,6 +556,160 @@ fn print_presets() {
     }
 }
 
+fn engine_name(v: Engine) -> &'static str {
+    match v {
+        Engine::Simple => "simple",
+        Engine::SchemaJson => "schema-json",
+        Engine::Toolcall => "toolcall",
+        Engine::Agentic => "agentic",
+    }
+}
+
+fn backend_name(v: Backend) -> &'static str {
+    match v {
+        Backend::Llms => "llms",
+        Backend::Agent => "agent",
+        Backend::Mock => "mock",
+    }
+}
+
+fn chunker_name(v: Chunker) -> &'static str {
+    match v {
+        Chunker::Char => "char",
+        Chunker::Recursive => "recursive",
+        Chunker::Token => "token",
+    }
+}
+
+fn input_format_name(v: InputFormat) -> &'static str {
+    match v {
+        InputFormat::Text => "text",
+        InputFormat::Chunks => "chunks",
+    }
+}
+
+fn schema_mode_name(v: SchemaModeArg) -> &'static str {
+    match v {
+        SchemaModeArg::Open => "open",
+        SchemaModeArg::Fixed => "fixed",
+        SchemaModeArg::Evolving => "evolving",
+    }
+}
+
+fn merge_strategy_name(v: MergeStrategyArg) -> &'static str {
+    match v {
+        MergeStrategyArg::KeepExisting => "keep-existing",
+        MergeStrategyArg::KeepIncoming => "keep-incoming",
+        MergeStrategyArg::FieldUnion => "field-union",
+        MergeStrategyArg::Llm => "llm",
+    }
+}
+
+fn output_name(v: OutFmt) -> &'static str {
+    match v {
+        OutFmt::Json => "json",
+        OutFmt::Jsonl => "jsonl",
+        OutFmt::KgProtocol => "kg-protocol",
+        OutFmt::NodeLink => "node-link",
+        OutFmt::LadybugImport => "ladybug-import",
+        OutFmt::Mermaid => "mermaid",
+        OutFmt::Stats => "stats",
+    }
+}
+
+fn describe_value() -> serde_json::Value {
+    json!({
+        "name": "kg-extract",
+        "summary": "Extract a knowledge graph from text with simple, schema-json, toolcall, or agentic engines.",
+        "supports": {
+            "describe": true,
+            "json": "use --json with --describe or --dry-run; extraction JSON is selected with -o json/jsonl/kg-protocol/node-link/ladybug-import/stats",
+            "dry_run": "prints the resolved extraction plan without reading input or calling a backend"
+        },
+        "examples": [
+            "kg-extract --describe --json",
+            "kg-extract --dry-run --json -e schema-json -b agent --agent minimaxcc -f doc.md",
+            "kg-extract -e simple -b mock --mock-response '{\"entities\":{},\"relationships\":[]}' -f doc.txt -o json"
+        ],
+        "outputs": [
+            "json",
+            "jsonl",
+            "kg-protocol",
+            "node-link",
+            "ladybug-import",
+            "mermaid",
+            "stats"
+        ]
+    })
+}
+
+fn print_describe(as_json: bool) -> anyhow::Result<()> {
+    if as_json {
+        println!("{}", serde_json::to_string_pretty(&describe_value())?);
+    } else {
+        println!("kg-extract");
+        println!("  Extract a knowledge graph from text.");
+        println!();
+        println!("Supports:");
+        println!("  --describe        show CLI capabilities");
+        println!("  --dry-run         print the resolved plan without reading input or calling a backend");
+        println!("  --json            machine-readable describe/dry-run output");
+        println!("  -o json|jsonl|... extraction output format");
+    }
+    Ok(())
+}
+
+fn dry_run_value(args: &Args, cfg: &Resolved, template_loaded: bool) -> serde_json::Value {
+    json!({
+        "dry_run": true,
+        "will_read_input": false,
+        "will_call_backend": false,
+        "input": {
+            "source": args.file.as_deref().unwrap_or("stdin"),
+            "format": input_format_name(args.input_format)
+        },
+        "config": {
+            "engine": engine_name(cfg.engine),
+            "model": cfg.model.as_deref(),
+            "backend": backend_name(cfg.backend),
+            "agent": cfg.agent.as_str(),
+            "chunker": chunker_name(cfg.chunker),
+            "schema_mode": schema_mode_name(cfg.schema_mode),
+            "schema": cfg.schema.as_deref(),
+            "preset": cfg.preset.as_deref(),
+            "preset_file": cfg.preset_file.as_deref(),
+            "template_loaded": template_loaded,
+            "lang": cfg.lang.as_deref(),
+            "max_rounds": cfg.max_rounds,
+            "merge_strategy": merge_strategy_name(cfg.merge_strategy),
+            "coref": cfg.coref,
+            "max_concurrency": cfg.max_concurrency,
+            "relation_gleaning": cfg.relation_gleaning,
+            "output": output_name(cfg.output)
+        }
+    })
+}
+
+fn print_dry_run(args: &Args, cfg: &Resolved, template_loaded: bool) -> anyhow::Result<()> {
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&dry_run_value(args, cfg, template_loaded))?
+        );
+    } else {
+        println!("kg-extract dry-run");
+        println!("  input: {}", args.file.as_deref().unwrap_or("stdin"));
+        println!("  input_format: {}", input_format_name(args.input_format));
+        println!("  engine: {}", engine_name(cfg.engine));
+        println!("  backend: {}", backend_name(cfg.backend));
+        println!("  agent: {}", cfg.agent);
+        println!("  output: {}", output_name(cfg.output));
+        println!("  will_read_input: false");
+        println!("  will_call_backend: false");
+    }
+    Ok(())
+}
+
 /// Render the extracted graph in the requested output format to stdout. The
 /// seven formats are mutually-exclusive terminal printing, split out of `main`
 /// so the dispatch arm-per-format complexity lives in one tested-by-wiring
@@ -606,6 +773,11 @@ async fn main() -> anyhow::Result<()> {
     let matches = Args::command().get_matches();
     let args = Args::from_arg_matches(&matches)?;
 
+    if args.describe {
+        print_describe(args.json)?;
+        return Ok(());
+    }
+
     if args.list_presets {
         print_presets();
         return Ok(());
@@ -620,6 +792,15 @@ async fn main() -> anyhow::Result<()> {
     if template.is_some() && !matches!(cfg.engine, Engine::SchemaJson) {
         eprintln!("note: --preset/--preset-file routes through the schema-json engine");
         cfg.engine = Engine::SchemaJson;
+    }
+
+    if args.dry_run {
+        print_dry_run(&args, &cfg, template.is_some())?;
+        return Ok(());
+    }
+
+    if args.json {
+        anyhow::bail!("--json is only supported with --describe or --dry-run; use -o json for extraction output");
     }
 
     let text = read_input(&args.file)?;
