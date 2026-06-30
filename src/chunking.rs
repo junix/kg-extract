@@ -211,8 +211,10 @@ mod tests {
     fn char_segment_size_splits() {
         let text = "x".repeat(1000);
         let segs = segment(&text, ChunkStrategy::Char, 100, 0);
-        assert!(
-            segs.len() >= 10,
+        // 1000 chars / size 100 / overlap 0 is exactly 10 deterministic segments.
+        assert_eq!(
+            segs.len(),
+            10,
             "char chunker splits by size, got {}",
             segs.len()
         );

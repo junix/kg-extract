@@ -26,8 +26,9 @@ fn every_bundled_preset_parses() {
     let presets = gallery::list();
     // Sanity: we shipped the full set (40 files; the original 37 plus the
     // Understand-Anything ports — code/codebase_graph,
-    // code/business_domain_flow, knowledge/wiki_graph).
-    assert!(presets.len() >= 40, "only {} presets loaded", presets.len());
+    // code/business_domain_flow, knowledge/wiki_graph). The exact count catches
+    // a silent drop on a parse failure as well as an unexpected duplicate.
+    assert_eq!(presets.len(), 40, "expected the full preset set, got {}", presets.len());
     for p in presets {
         assert!(p.key.contains('/'), "key not domain-qualified: {}", p.key);
         // Each declares at least a target persona.
