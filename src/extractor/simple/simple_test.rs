@@ -359,3 +359,92 @@ fn entity_type_tokens_recovers_raw_types() {
     assert_eq!(tokens.get("widget x").map(String::as_str), Some("GADGET"));
     assert_eq!(tokens.len(), 2, "relationship record must not appear");
 }
+
+/// The shared triple builder applies the passive-`*_BY` swap, stamps
+/// confidence from `rel.strength`, fills the three shared metadata keys, and
+/// (unlike the rescue round) never sets `relation_gleaned`.
+#[test]
+fn build_triple_from_rel_swaps_passive_by_and_stamps_shared_metadata() {
+    use crate::types::{Entity, EntityType};
+    use parse::{build_triple_from_rel, RelData};
+
+    // Source = actor (Organization), target = product; the *_BY predicate must
+    // flip them so the product becomes the triple's subject.
+    let actor = Entity::new("e_actor", "Helio Systems", EntityType::Organization);
+    let product = Entity::new("e_product", "Aurora Portal", EntityType::Product);
+    let rel = RelData {
+        source_id: actor.id.clone(),
+        target_id: product.id.clone(),
+        source_name: "Helio Systems".into(),
+        target_name: "Aurora Portal".into(),
+        predicate: "developed_by".into(),
+        description: "Helio Systems developed Aurora Portal.".into(),
+        strength: 0.42,
+    };
+
+    let t = build_triple_from_rel(&rel, &actor, &product);
+    assert_eq!(t.subject.label, "Aurora Portal");
+    assert_eq!(t.object.label, "Helio Systems");
+    assert_eq!(t.predicate.predicate_type, PredicateType::DevelopedBy);
+    assert_eq!(t.confidence, Some(0.42));
+    assert_eq!(
+        t.metadata.get("description"),
+        Some(&serde_json::json!("Helio Systems developed Aurora Portal."))
+    );
+    assert_eq!(
+        t.metadata.get("source_name"),
+        Some(&serde_json::json!("Helio Systems"))
+    );
+    assert_eq!(
+        t.metadata.get("target_name"),
+        Some(&serde_json::json!("Aurora Portal"))
+    );
+    assert!(
+        !t.metadata.contains_key("relation_gleaned"),
+        "base builder must not stamp relation_gleaned"
+    );
+}
+
+/// `parse_relations_against` (rescue round) reuses the shared builder and then
+/// adds `relation_gleaned=true`; `parse_output` does not. Pins that contract so
+/// the two paths cannot drift.
+#[test]
+fn parse_relations_against_marks_relation_gleaned_but_parse_output_does_not() {
+    use crate::types::ExtractionConfig;
+    use parse::{parse_output, parse_relations_against};
+
+    let resp = "(entity<|>OpenAI<|>organization<|>An AI lab.<|>)##\
+        (entity<|>GPT-4<|>technology<|>A model.<|>)##\
+        (relationship<|>OpenAI<|>GPT-4<|>uses<|>OpenAI develops GPT-4.<|>0.9)##";
+
+    // parse_output: entities + relationship in one response -> triple, no flag.
+    let parsed = parse_output(resp, &ExtractionConfig::default());
+    assert_eq!(parsed.triples.len(), 1);
+    assert!(
+        !parsed.triples[0].metadata.contains_key("relation_gleaned"),
+        "parse_output must not stamp relation_gleaned"
+    );
+    let known = parsed.entities;
+
+    // parse_relations_against: relationship-only rescue round against the
+    // already-known entities -> same edge, plus relation_gleaned=true.
+    let rescue = "(relationship<|>OpenAI<|>GPT-4<|>uses<|>OpenAI develops GPT-4.<|>0.9)##";
+    let rescued = parse_relations_against(rescue, &known);
+    assert_eq!(rescued.len(), 1);
+    assert_eq!(
+        rescued[0].metadata.get("relation_gleaned"),
+        Some(&serde_json::json!(true)),
+        "rescue round must stamp relation_gleaned"
+    );
+    // Sanity: rescue endpoints resolve to the entities above (lowercased —
+    // clean_entity_name title-cases "OpenAI" -> "Openai"), no hallucination.
+    let mut labels = [
+        rescued[0].subject.label.to_lowercase(),
+        rescued[0].object.label.to_lowercase(),
+    ];
+    labels.sort_unstable();
+    assert_eq!(
+        labels, ["gpt-4", "openai"],
+        "rescue endpoints must resolve to the known entities"
+    );
+}

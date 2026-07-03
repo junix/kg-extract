@@ -448,12 +448,7 @@ impl Extractor for ToolCallExtractor {
             .await;
         }
         // Tool calls see the whole text at once, so provenance is whole-document.
-        {
-            let li = crate::citation::LineIndex::new(text);
-            let cite =
-                crate::citation::Citation::new(self.config.source_doc.clone(), 1, li.total_lines());
-            crate::citation::stamp_graph(&mut kg, &cite);
-        }
+        crate::citation::stamp_whole_document(&mut kg, &self.config.source_doc, text);
         let mut response = ExtractionResponse::new(kg);
         response.config = Some(self.config.clone());
         response

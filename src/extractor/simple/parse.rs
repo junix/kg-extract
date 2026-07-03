@@ -59,23 +59,7 @@ pub(crate) fn parse_output(output: &str, _config: &ExtractionConfig) -> ParsedRe
         else {
             continue;
         };
-        let predicate_type = infer_predicate_type(&rel.predicate);
-        let label: String = rel.predicate.chars().take(50).collect();
-        let predicate = Predicate::with_label(predicate_type, label);
-        let (subject, object) = if should_swap_passive_by(s, &predicate, o) {
-            (o.clone(), s.clone())
-        } else {
-            (s.clone(), o.clone())
-        };
-        let mut t = Triple::new(subject, predicate, object);
-        t.confidence = Some(rel.strength);
-        t.metadata
-            .insert("description".into(), serde_json::json!(rel.description));
-        t.metadata
-            .insert("source_name".into(), serde_json::json!(rel.source_name));
-        t.metadata
-            .insert("target_name".into(), serde_json::json!(rel.target_name));
-        triples.push(t);
+        triples.push(build_triple_from_rel(rel, s, o));
     }
 
     let mut metadata = HashMap::new();
@@ -164,28 +148,38 @@ pub(crate) fn parse_relations_against(
         let (Some(s), Some(o)) = (known.get(&rel.source_id), known.get(&rel.target_id)) else {
             continue;
         };
-        // Mirror `parse_output`'s triple construction exactly.
-        let predicate_type = infer_predicate_type(&rel.predicate);
-        let label: String = rel.predicate.chars().take(50).collect();
-        let predicate = Predicate::with_label(predicate_type, label);
-        let (subject, object) = if should_swap_passive_by(s, &predicate, o) {
-            (o.clone(), s.clone())
-        } else {
-            (s.clone(), o.clone())
-        };
-        let mut t = Triple::new(subject, predicate, object);
-        t.confidence = Some(rel.strength);
-        t.metadata
-            .insert("description".into(), serde_json::json!(rel.description));
-        t.metadata
-            .insert("source_name".into(), serde_json::json!(rel.source_name));
-        t.metadata
-            .insert("target_name".into(), serde_json::json!(rel.target_name));
+        let mut t = build_triple_from_rel(&rel, s, o);
         t.metadata
             .insert("relation_gleaned".into(), serde_json::json!(true));
         triples.push(t);
     }
     triples
+}
+
+/// Materialize one parsed relationship into a [`Triple`], applying the
+/// predicate-type inference, 50-char label clamp, passive-`*_BY` swap, and the
+/// shared `description` / `source_name` / `target_name` metadata that every
+/// simple-extractor edge carries. Shared by [`parse_output`] and
+/// [`parse_relations_against`]; the rescue round stamps an extra
+/// `relation_gleaned` flag on the returned triple.
+pub(super) fn build_triple_from_rel(rel: &RelData, subject: &Entity, object: &Entity) -> Triple {
+    let predicate_type = infer_predicate_type(&rel.predicate);
+    let label: String = rel.predicate.chars().take(50).collect();
+    let predicate = Predicate::with_label(predicate_type, label);
+    let (subject, object) = if should_swap_passive_by(subject, &predicate, object) {
+        (object.clone(), subject.clone())
+    } else {
+        (subject.clone(), object.clone())
+    };
+    let mut t = Triple::new(subject, predicate, object);
+    t.confidence = Some(rel.strength);
+    t.metadata
+        .insert("description".into(), serde_json::json!(rel.description));
+    t.metadata
+        .insert("source_name".into(), serde_json::json!(rel.source_name));
+    t.metadata
+        .insert("target_name".into(), serde_json::json!(rel.target_name));
+    t
 }
 
 /// One parsed relationship record, before it is materialized into a [`Triple`].

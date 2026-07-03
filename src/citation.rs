@@ -137,6 +137,18 @@ pub fn stamp_graph(kg: &mut KnowledgeGraph, citation: &Citation) {
     }
 }
 
+/// Stamp whole-document provenance onto every entity and triple of `kg`: one
+/// citation spanning line 1 through the last line of `text`. This is the
+/// convention used by single-shot engines (SchemaJson, ToolCall) that feed the
+/// entire document through in one pass. Multi-slice engines (e.g. Agentic)
+/// cite per-slice instead and must not use this — `text`'s line count would
+/// not match any individual slice.
+pub fn stamp_whole_document(kg: &mut KnowledgeGraph, source_doc: &Option<String>, text: &str) {
+    let li = LineIndex::new(text);
+    let cite = Citation::new(source_doc.clone(), 1, li.total_lines());
+    stamp_graph(kg, &cite);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,5 +234,60 @@ mod tests {
         attach_citation(&mut b, &Citation::new(None, 2, 2));
         union_citations(&mut a, &b);
         assert!(a.contains_key(CITATIONS_KEY));
+    }
+
+    #[test]
+    fn stamp_whole_document_covers_full_line_range_on_every_record() {
+        use crate::types::{Entity, EntityType, Predicate, PredicateType, Triple};
+
+        // 3 lines -> the whole-document citation must span [1, 3].
+        let text = "alpha line\nbeta line\ngamma line";
+        assert_eq!(LineIndex::new(text).total_lines(), 3);
+
+        let mut kg = KnowledgeGraph::new();
+        kg.add_entity(Entity::new("e1", "Alpha", EntityType::Organization));
+        kg.add_entity(Entity::new("e2", "Beta", EntityType::Technology));
+        kg.add_triple(Triple::new(
+            Entity::new("e1", "Alpha", EntityType::Organization),
+            Predicate::new(PredicateType::RelatedTo),
+            Entity::new("e2", "Beta", EntityType::Technology),
+        ));
+
+        stamp_whole_document(&mut kg, &Some("doc.md".into()), text);
+
+        let expected = json!({"doc": "doc.md", "lines": [1, 3]});
+        for e in kg.entities.values() {
+            assert_eq!(
+                e.metadata
+                    .get(CITATIONS_KEY)
+                    .and_then(|v| v.as_array())
+                    .and_then(|a| a.first()),
+                Some(&expected),
+                "entity {} must carry the whole-doc citation",
+                e.label
+            );
+        }
+        for t in &kg.triples {
+            assert_eq!(
+                t.metadata
+                    .get(CITATIONS_KEY)
+                    .and_then(|v| v.as_array())
+                    .and_then(|a| a.first()),
+                Some(&expected),
+                "triple must carry the whole-doc citation"
+            );
+            for endpoint in [&t.subject, &t.object] {
+                assert_eq!(
+                    endpoint
+                        .metadata
+                        .get(CITATIONS_KEY)
+                        .and_then(|v| v.as_array())
+                        .and_then(|a| a.first()),
+                    Some(&expected),
+                    "triple endpoint {} must carry the whole-doc citation",
+                    endpoint.label
+                );
+            }
+        }
     }
 }
