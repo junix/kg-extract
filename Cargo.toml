@@ -49,11 +49,11 @@ nanoid = "0.4"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util"] }
 clap = { version = "4", features = ["derive"] }
 
-chonkie = { path = "../chonkie", default-features = false, features = ["tokenizer"] }
-core-types-rs = { path = "../core-types-rs" }
-llms = { path = "../llms", optional = true }
+chonkie = { git = "https://github.com/junix/chonkie.git", package = "chonkie", default-features = false }
+core-types-rs = { git = "https://github.com/junix/core-types-rs.git", package = "core-types-rs" }
+llms = { git = "https://github.com/junix/llms-rs.git", package = "llms", optional = true }
 # Structured Claude-Code-CLI driver (stream-json) — the default `agent` backend.
-claude-agent-sdk-rs = { path = "../claude-agent-sdk-rs" }
+claude-agent-sdk-rs = { git = "https://github.com/junix/claude-agent-sdk-rs.git", package = "claude-agent-sdk-rs" }
 
 # MCP server (feature = "mcp"). rmcp is the official MCP Rust SDK, matching the
 # workspace convention (gitnexus / mcp2cmd / openmemory).
