@@ -10,6 +10,16 @@ EXPECTED="${EXPECTED:-"$FIXTURES/${FIXTURE}_expected.json"}"
 SIMPLE_MOCK_FILE="${SIMPLE_MOCK_FILE:-"$FIXTURES/${FIXTURE}_simple.mock.txt"}"
 SCHEMA_MOCK_FILE="${SCHEMA_MOCK_FILE:-"$FIXTURES/${FIXTURE}_schema.mock.json"}"
 
+platform="$(uname -s):$(uname -m)"
+case "$platform" in
+  Darwin:arm64|Darwin:aarch64) native_dir=macos-arm64-bin ;;
+  Darwin:x86_64|Darwin:amd64)  native_dir=macos-x86-bin ;;
+  Linux:arm64|Linux:aarch64)    native_dir=linux-arm64-bin ;;
+  Linux:x86_64|Linux:amd64)     native_dir=linux-x86-bin ;;
+  *) native_dir= ;;
+esac
+NATIVE_BIN_DIR="${SYNC_BIN_DIR:-${native_dir:+$HOME/sync/$native_dir}}"
+
 for required in "$DOC" "$EXPECTED" "$SIMPLE_MOCK_FILE" "$SCHEMA_MOCK_FILE"; do
   if [[ ! -f "$required" ]]; then
     echo "required fixture file not found: $required" >&2
@@ -24,8 +34,8 @@ if [[ -x "${CHONKIE:-}" ]]; then
   CHONKIE_CMD=("$CHONKIE")
 elif command -v chonkie >/dev/null 2>&1; then
   CHONKIE_CMD=("$(command -v chonkie)")
-elif [[ -x "$HOME/sync/bin_arm64/chonkie" ]]; then
-  CHONKIE_CMD=("$HOME/sync/bin_arm64/chonkie")
+elif [[ -n "$NATIVE_BIN_DIR" && -x "$NATIVE_BIN_DIR/chonkie" ]]; then
+  CHONKIE_CMD=("$NATIVE_BIN_DIR/chonkie")
 else
   CHONKIE_CMD=(cargo run --quiet --manifest-path "$CRATES_ROOT/chonkie/Cargo.toml" --)
 fi

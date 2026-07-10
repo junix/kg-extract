@@ -15,7 +15,7 @@ The repo uses a `justfile`; feature flags gate the heavy backends:
 just build          # cargo build --release --features "llms-backend mcp"
 just test           # cargo test --features mcp
 just lint           # cargo clippy --all-targets --features "llms-backend mcp"
-just install        # copies kg-extract + kg-extract-mcp to ~/sync/bin_<arch>/
+just install        # copies kg-extract + kg-extract-mcp to ~/sync/<os>-<arch>-bin/ (override with SYNC_BIN_DIR)
 ```
 
 Without `--features llms-backend` only the agent-CLI and Mock backends build.
