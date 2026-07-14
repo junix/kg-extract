@@ -5,7 +5,7 @@
 
 use crate::types::{Entity, EntityType, ParsedResult, Predicate, PredicateType, Triple};
 use regex::Regex;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
 /// Parse an LLM response into a [`ParsedResult`] (entities + relationship tuples).
@@ -145,13 +145,25 @@ pub fn parse_entities_and_triples(
                 }
             }
         } else if let Some(arr) = ents.as_array() {
+            let reserved_ids: HashSet<&str> = arr
+                .iter()
+                .filter_map(|entity| entity.get("id").and_then(|id| id.as_str()))
+                .collect();
+            let mut next_generated_id = 0usize;
             for ent in arr {
                 if let Some(o) = ent.as_object() {
-                    let id = o
-                        .get("id")
-                        .and_then(|v| v.as_str())
-                        .map(String::from)
-                        .unwrap_or_else(|| format!("entity_{}", entities.len()));
+                    let id = match o.get("id").and_then(|v| v.as_str()) {
+                        Some(id) => id.to_string(),
+                        None => loop {
+                            let candidate = format!("entity_{next_generated_id}");
+                            next_generated_id += 1;
+                            if !reserved_ids.contains(candidate.as_str())
+                                && !entities.contains_key(&candidate)
+                            {
+                                break candidate;
+                            }
+                        },
+                    };
                     let label = o
                         .get("label")
                         .or_else(|| o.get("name"))
@@ -384,5 +396,22 @@ mod tests {
             triples[0].predicate.predicate_type,
             PredicateType::DevelopedBy
         );
+    }
+
+    #[test]
+    fn generated_entity_ids_do_not_overwrite_explicit_ids() {
+        let json = serde_json::json!({
+            "entities": [
+                {"id": "entity_1", "name": "Explicit"},
+                {"name": "Generated"}
+            ]
+        });
+
+        let (entities, relationships) = parse_entities_and_triples(&json);
+
+        assert!(relationships.is_empty());
+        assert_eq!(entities.len(), 2);
+        assert_eq!(entities["entity_1"].label, "Explicit");
+        assert!(entities.values().any(|entity| entity.label == "Generated"));
     }
 }
