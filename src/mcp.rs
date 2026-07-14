@@ -284,6 +284,9 @@ impl KgStore {
         )
     }
 
+    // The flat argument list is the public MCP tool contract; grouping these
+    // fields would make the programmatic API diverge from the wire schema.
+    #[allow(clippy::too_many_arguments)]
     pub fn add_relation_with_citation(
         &self,
         rel_path: &str,

@@ -312,7 +312,7 @@ impl SimpleExtractor {
         let per_chunk: Vec<(Vec<ParsedResult>, KnowledgeGraph)> = stream::iter(chunks)
             .map(|seg| async move {
                 let result = self.extract_chunk(&seg.content).await;
-                let result = match seg.lines {
+                match seg.lines {
                     Some((start_line, end_line)) => {
                         let (prs, mut kg) = result;
                         let cite = crate::citation::Citation::new(
@@ -324,8 +324,7 @@ impl SimpleExtractor {
                         (prs, kg)
                     }
                     None => result,
-                };
-                result
+                }
             })
             .buffered(max_conc)
             .collect()

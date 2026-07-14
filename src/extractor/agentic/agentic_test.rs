@@ -382,8 +382,8 @@ fn assemble_response_off_policy_has_no_schema_metadata() {
     assert_eq!(resp.metadata["tool_uses"], serde_json::json!(3));
     assert_eq!(resp.metadata["schema_mode"], serde_json::json!("open"));
     // Off arm sets neither fixed- nor evolving-specific keys.
-    assert!(resp.metadata.get("schema_dropped_records").is_none());
-    assert!(resp.metadata.get("new_schema_types").is_none());
+    assert!(!resp.metadata.contains_key("schema_dropped_records"));
+    assert!(!resp.metadata.contains_key("new_schema_types"));
     // The single Product entity made it into the knowledge graph.
     assert_eq!(resp.knowledge_graph.entities.len(), 1);
 }
@@ -416,7 +416,7 @@ fn assemble_response_fixed_policy_records_drops() {
         serde_json::json!(["ORGANIZATION", "PERSON"])
     );
     // Fixed arm must not emit the evolving `new_schema_types` shape.
-    assert!(resp.metadata.get("new_schema_types").is_none());
+    assert!(!resp.metadata.contains_key("new_schema_types"));
 }
 
 #[test]
@@ -447,8 +447,8 @@ fn assemble_response_evolving_policy_proposes_new_types() {
     assert_eq!(nst["relations"], serde_json::json!(["DEPENDS_ON"]));
     assert_eq!(nst["attributes"], serde_json::json!([]));
     // Evolving arm must not emit the fixed drop-count keys.
-    assert!(resp.metadata.get("schema_dropped_records").is_none());
-    assert!(resp.metadata.get("schema_dropped_types").is_none());
+    assert!(!resp.metadata.contains_key("schema_dropped_records"));
+    assert!(!resp.metadata.contains_key("schema_dropped_types"));
 }
 
 #[test]
@@ -457,7 +457,7 @@ fn assemble_response_carries_config_and_parsed_results() {
     let mut o = outcome();
     // parsed_results survives into the response verbatim (empty here, but the
     // field wiring is what we're checking).
-    let _ = std::mem::replace(&mut o.parsed_results, Vec::new());
+    let _ = std::mem::take(&mut o.parsed_results);
     let resp =
         AgenticExtractor::assemble_response(o, &SchemaPolicy::Off, true, SchemaMode::Open, &cfg);
     assert!(resp.config.is_some(), "config is stamped on the response");
