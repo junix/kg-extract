@@ -234,7 +234,10 @@ impl AgenticExtractor {
                 index: 0,
                 start: 0,
                 end: text.chars().count(),
-                lines: None,
+                range: Some(core_types_rs::SourceRange {
+                    char_span: core_types_rs::CharSpan::new(0, text.chars().count()),
+                    ..core_types_rs::SourceRange::default()
+                }),
             }]
         }
     }
@@ -343,7 +346,8 @@ impl Extractor for AgenticExtractor {
         let doc_lines = {
             let line_index = crate::citation::LineIndex::new(text);
             for s in slices.iter_mut() {
-                s.lines = Some(line_index.line_range(s.start, s.end));
+                let (start, end) = line_index.line_range(s.start, s.end);
+                s.set_line_span(start, end);
             }
             Some((1, line_index.total_lines()))
         };
@@ -366,13 +370,14 @@ impl Extractor for AgenticExtractor {
             .join("\n\n");
         // Whole-document provenance (used by the final gleaning pass) is the
         // overall span the chunks cover — when any of them knows its lines.
-        let doc_lines = chunks.iter().filter_map(|s| s.lines).fold(
-            None,
-            |acc: Option<(usize, usize)>, (s, e)| match acc {
+        let doc_lines = chunks
+            .iter()
+            .filter_map(Segment::line_span)
+            .map(|line| (line.start as usize, line.end as usize))
+            .fold(None, |acc: Option<(usize, usize)>, (s, e)| match acc {
                 Some((lo, hi)) => Some((lo.min(s), hi.max(e))),
                 None => Some((s, e)),
-            },
-        );
+            });
         self.extract_slices(&document, chunks.to_vec(), doc_lines)
             .await
     }
@@ -592,11 +597,10 @@ impl AgenticExtractor {
                     continue 'slices;
                 }
                 let mut parsed = parse_output(&output, &self.config);
-                if let Some((start_line, end_line)) = seg.lines {
-                    let cite = crate::citation::Citation::new(
+                if let Some(range) = seg.evidence_range() {
+                    let cite = crate::citation::Citation::from_range(
                         self.config.source_doc.clone(),
-                        start_line,
-                        end_line,
+                        range.clone(),
                     );
                     stamp_slice_citations(&mut parsed, &cite);
                 }

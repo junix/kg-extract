@@ -198,7 +198,7 @@ async fn prechunked_extracts_each_given_chunk_without_rechunking() {
             index: i,
             start: i * 13,
             end: (i + 1) * 13,
-            lines: None,
+            range: None,
         })
         .collect();
     let out = ex.extract_prechunked(&chunks).await.unwrap();
@@ -246,14 +246,17 @@ async fn prechunked_citations_use_chunk_metadata_lines() {
             index: 0,
             start: 0,
             end: 13,
-            lines: Some((5, 9)),
+            range: Some(core_types_rs::SourceRange {
+                line: core_types_rs::LineSpan::new(5, 9),
+                ..core_types_rs::SourceRange::default()
+            }),
         },
         Segment {
             content: "Beta exists.".into(),
             index: 1,
             start: 13,
             end: 25,
-            lines: None, // no metadata → no stamp
+            range: None, // no metadata → no stamp
         },
     ];
     let out = ex.extract_prechunked(&chunks).await.unwrap();
@@ -277,6 +280,77 @@ async fn prechunked_citations_use_chunk_metadata_lines() {
         by_label("Beta").is_none(),
         "a chunk without line metadata must not be stamped"
     );
+}
+
+#[tokio::test]
+async fn prechunked_multimodal_range_survives_as_entity_and_relation_evidence() {
+    use core_types_rs::{BBox, CharSpan, Chunk, LineSpan, PageSpan, SourceRange};
+
+    use crate::chunking::parse_prechunked;
+    use crate::citation::CITATIONS_KEY;
+
+    let response = "(entity<|>OpenAI<|>organization<|>An AI lab.<|>)##\
+        (entity<|>GPT-4<|>technology<|>A language model.<|>)##\
+        (relationship<|>OpenAI<|>GPT-4<|>uses<|>OpenAI uses GPT-4.<|>0.9)##";
+    let backend = Arc::new(MockBackend::new(vec![response.into()]));
+    let expected_range = SourceRange {
+        char_span: CharSpan::new(20, 44),
+        line: LineSpan::new(11, 12),
+        page: PageSpan::new(7, 7),
+        bbox: Some(BBox::new(10.5, 20.25, 300.75, 440.0)),
+    };
+    let chunk = Chunk {
+        source_file: Some("page-7.pdf".into()),
+        range: Some(expected_range.clone()),
+        text: Some("OpenAI uses GPT-4.".into()),
+        ..Chunk::default()
+    };
+    let chunks = parse_prechunked(&serde_json::to_string(&chunk).unwrap()).unwrap();
+
+    let mut cfg = SimpleExtractor::default_config();
+    cfg.max_concurrency = 1;
+    cfg.source_doc = chunks.source.clone();
+    let mut extractor = SimpleExtractor::with_config(backend, cfg);
+    extractor.max_gleanings = 0;
+
+    let extracted = extractor
+        .extract_prechunked(&chunks.segments)
+        .await
+        .unwrap()
+        .knowledge_graph
+        .to_kg_document();
+
+    assert_eq!(extracted.entities.len(), 2);
+    assert_eq!(extracted.relations.len(), 1);
+    assert!(extracted
+        .entities
+        .iter()
+        .all(|entity| !entity.properties.contains_key(CITATIONS_KEY)));
+    assert!(extracted
+        .relations
+        .iter()
+        .all(|relation| !relation.properties.contains_key(CITATIONS_KEY)));
+    let evidence = extracted
+        .entities
+        .iter()
+        .flat_map(|entity| &entity.evidence)
+        .chain(
+            extracted
+                .relations
+                .iter()
+                .flat_map(|relation| &relation.evidence),
+        )
+        .collect::<Vec<_>>();
+    assert_eq!(
+        evidence.len(),
+        3,
+        "both entities and the relation need evidence"
+    );
+    for evidence in evidence {
+        assert_eq!(evidence.source_file.as_deref(), Some("page-7.pdf"));
+        let range = evidence.range.as_ref().expect("evidence must have a range");
+        assert_eq!(range, &expected_range);
+    }
 }
 
 /// End-to-end provenance: chunked extraction stamps every record with the
@@ -444,7 +518,8 @@ fn parse_relations_against_marks_relation_gleaned_but_parse_output_does_not() {
     ];
     labels.sort_unstable();
     assert_eq!(
-        labels, ["gpt-4", "openai"],
+        labels,
+        ["gpt-4", "openai"],
         "rescue endpoints must resolve to the known entities"
     );
 }

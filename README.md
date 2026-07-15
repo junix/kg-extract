@@ -222,26 +222,30 @@ let response = extractor.extract("OpenAI built GPT-4.").await?;
 
 ## Provenance citations
 
-Every extracted entity and triple carries **where it came from**: a `citations`
-array in its `metadata`, each entry
-`{"doc": <name|null>, "lines": [start, end]}` (1-based, inclusive).
+Every extracted entity and triple carries **where it came from** in its
+`metadata.citations` array. Line-only provenance keeps the legacy, JSON-wire
+compatible shape `{"doc": <name|null>, "lines": [start, end]}` (1-based,
+inclusive). A citation with page or bounding-box coordinates uses
+`{"doc": <name|null>, "range": <SourceRange>}`, where `SourceRange` is the
+shared `core-types-rs` range (`char_span`, `line`, `page`, `bbox`).
 
 ```bash
 cargo build --release
 kg-extract -e agentic --agent minimaxcc -f doc.md -o json   # records now carry metadata.citations
 ```
 
-Line ranges are computed **by the code, never by the model**: the chunker
-already tracks each chunk/slice's char offsets, and a per-document line index
-maps offsets to lines — so citations cannot be hallucinated. Granularity
-follows the engine: `simple`/`agentic` cite the chunk/slice containing the
-mention (agentic relation-gleaning records, which look at the whole document,
-cite the full range); single-shot `schema-json`/`toolcall` cite the whole
-document. The CLI sets the doc name from `-f` (stdin → `null`); with
-`--input-format chunks` it comes from the chunks' `metadata.source` instead,
-and line ranges from their `metadata.start_line`/`end_line` (see
-[Pre-chunked input](#pre-chunked-input---input-format-chunks)). Library users
-set `config.source_doc`.
+Provenance is computed **by the code, never by the model**: for plain text, the
+chunker tracks char offsets and a per-document line index derives the line
+span. For pre-chunked input, page/bbox selects the rich citation form and the
+complete supplied protocol `range` is preserved; otherwise the derived or
+supplied line span uses the legacy form.
+Granularity follows the engine: `simple`/`agentic` are chunk-aware and cite the
+chunk/slice containing the mention (agentic relation-gleaning records, which
+look at the whole document, cite the full line range). Single-shot
+`schema-json`/`toolcall` join chunk texts and can provide only document-level
+provenance, not per-chunk page/bbox attribution. The CLI sets the doc name from
+`-f` (stdin → `null`); with `--input-format chunks` it comes from the chunks'
+top-level `source_file` instead. Library users set `config.source_doc`.
 
 A record seen in several places accumulates **multiple citations**: slice-level
 recurrences union within the agentic session, and every dedup/merge path
@@ -315,7 +319,11 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 
 `-o kg-protocol` emits the portable `core-types-rs` `kg.protocol.v1` shape:
 entities and relations use open string vocabularies, relations reference entity
-ids, and citation metadata is lifted into first-class evidence ranges.
+ids, and fully recognized legacy or rich citation arrays are lifted into
+first-class `Evidence` ranges. A recognized `citations` key is removed from
+protocol `properties`, so provenance is not serialized twice; malformed or
+foreign user metadata under that name is left in `properties` and is not
+misclassified as evidence.
 
 ### LadybugDB import output
 
@@ -377,29 +385,44 @@ crate — feed the chunks straight in instead of letting kg-extract re-chunk:
 
 ```bash
 # chonkie cuts doc.md into chunks; kg-extract extracts per given chunk.
-chonkie --jsonl --chunker recursive --chunk-size 512 -f doc.md \
+chonkie --jsonl --with-source --chunker recursive --chunk-size 512 -f doc.md \
   | kg-extract -F chunks -e simple -b llms
 ```
 
 Accepted shapes: a JSON array (`chonkie --json`), JSONL (`chonkie --jsonl`,
 whose trailing `{"truncated": ...}` metadata line is skipped), or the
 `{"chunks": [...]}` truncation wrapper. Each chunk needs a `text` field;
-`start_index`/`end_index` and `metadata.{source,start_line,end_line}` are used
-when present.
+`range.char_span` supplies char offsets (otherwise synthesized cumulatively),
+top-level `source_file` names the source, and optional `range.line/page/bbox`
+supplies evidence coordinates.
+
+One invocation represents one source document. If non-empty top-level
+`source_file` values disagree across chunks, parsing fails instead of
+misattributing every extracted fact to the first file.
 
 Engine behaviour:
 
-- **`simple` / `agentic`** (the chunking engines): the given chunks ARE the
+- **`simple` / `agentic`** (the chunk-aware engines): the given chunks ARE the
   chunks/slices — no internal segmentation, no `min_segment_size` filtering.
-  `--chunker` and segment sizing are ignored.
+  `--chunker` and segment sizing are ignored. Records receive either the
+  chunk's rich page/bbox range or its legacy line span.
 - **`schema-json` / `toolcall`** (single-shot engines): the chunk texts are
-  joined (`\n\n`) and extracted in one call, exactly as for plain text.
+  joined (`\n\n`) and extracted in one call, exactly as for plain text. With
+  more than one chunk, results have document-level provenance only; the engine
+  cannot truthfully attribute a result to one input chunk.
 
-Provenance comes from the chunks themselves: `metadata.source` names the cited
-document (the *original* file the chunks were cut from — `-f` names the chunks
-file, so it is not used as the doc) and
-`metadata.start_line`/`end_line` become each record's cited line range. Chunks
-without line metadata (e.g. `chonkie --no-lines`) yield unstamped records.
+For `simple`/`agentic`, provenance comes from the protocol chunks themselves:
+top-level `source_file` names the cited document (the *original* file the
+chunks were cut from — `-f` names the chunks file, so it is not used as the
+doc). A range with page/bbox is stored in the rich
+`{"doc": <name|null>, "range": <SourceRange>}` shape,
+preserving all supplied char/line/page/bbox coordinates together. Without
+page/bbox, only `range.line` is stored in the legacy
+`{"doc": <name|null>, "lines": [start, end]}` shape;
+the char span is used for positioning/line derivation, not emitted as citation
+metadata. A chunk with only a char span has no evidence coordinates and yields
+unstamped records. Single-shot engines do not preserve these per-chunk ranges
+after joining.
 
 ### Agentic engine (`-e agentic`)
 
@@ -498,9 +521,11 @@ For provenance, `add_entity` and `add_relation` accept these fields as a group:
 When provided, `source_file` must be a relative path under `source_root`
 (absolute paths and `..` are rejected), and the line range must fit the source
 file. The store validates this before writing and returns a tool error if the
-client needs to correct the path or lines. Valid citations are written to
+client needs to correct the path or lines. Valid MCP citations are line-only
+and therefore use the legacy `{"doc": <name>, "lines": [start, end]}` entry in
 `metadata.citations`. Repeated calls for the same entity or relation merge
-citations rather than duplicating the graph record.
+citations rather than duplicating the graph record; `kg-protocol` output later
+promotes them to first-class evidence.
 
 ```bash
 kg-extract -e agentic --agent minimaxcc --schema-mode fixed --schema schema.json -f doc.txt -o json

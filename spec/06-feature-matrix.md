@@ -56,8 +56,8 @@ contract. Rows MUST NOT be read as RFC 2119 promises.
 
 | ID | Feature | Surfaces | Maturity | Flag | Tests | Spec |
 |----|---------|----------|----------|------|-------|------|
-| P-01 | Code-computed line citations | lib | stable | — | prechunked_citations_* | done → 02,03 |
-| P-02 | Pre-chunked provenance from chunk metadata | cli | stable | `-F chunks` | prechunked_citations_* | done → 03,04 |
+| P-01 | Legacy line / rich SourceRange citations | lib | stable | — | citation tests | done → 02,03 |
+| P-02 | Chunk-aware pre-chunked page/bbox provenance | lib, cli | stable | `-F chunks` | prechunked_multimodal_range_* | done → 02,03 |
 | P-03 | Multi-citation accumulation | lib | stable | — | citations_stamp_* | done → 02 |
 
 ### Chunking & input
@@ -65,7 +65,7 @@ contract. Rows MUST NOT be read as RFC 2119 promises.
 | ID | Feature | Surfaces | Maturity | Flag | Tests | Spec |
 |----|---------|----------|----------|------|-------|------|
 | C-01 | Char / Recursive / Token chunking | lib, cli | stable | `-c/--chunker` | char_segment_size_splits, recursive_honors_segment_size | done → 03 |
-| C-02 | Pre-chunked input parsing | cli | stable | `-F chunks` | prechunked_* | done → 03,04 |
+| C-02 | Pre-chunked input parsing (one source, full SourceRange) | cli | stable | `-F chunks` | prechunked_* | done → 03,04 |
 
 ### Output formats
 
@@ -73,7 +73,7 @@ contract. Rows MUST NOT be read as RFC 2119 promises.
 |----|---------|----------|----------|------|-------|------|
 | O-01 | JSON | cli | stable | `-o json` | (default) | done → 04 |
 | O-02 | JSONL | cli | stable | `-o jsonl` | print_response wiring | partial → 04 |
-| O-03 | kg-protocol | cli | stable | `-o kg-protocol` | protocol::knowledge_graph_* | done → 04 |
+| O-03 | kg-protocol (citations → Evidence, no property duplicate) | cli | stable | `-o kg-protocol` | protocol::knowledge_graph_*, prechunked_multimodal_range_* | done → 02,04 |
 | O-04 | node-link | cli | stable | `-o node-link` | to_node_link_* | done → 04 |
 | O-05 | LadybugDB import | cli | stable | `-o ladybug-import` | ladybug e2e scripts | partial → 04 |
 | O-06 | Mermaid | cli | stable | `-o mermaid` | (via mermaid emit) | done → 04 |

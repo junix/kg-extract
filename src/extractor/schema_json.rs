@@ -512,12 +512,14 @@ mod tests {
     async fn schema_based_extraction() {
         let json = r#"{"entities": {"OpenAI": {"type": "ORGANIZATION"},
                                       "GPT-4": {"type": "TECHNOLOGY"}},
-                        "relationships": [["OpenAI", "DEVELOPED_BY", "GPT-4"]]}"#;
+                        "relationships": [["GPT-4", "DEVELOPED_BY", "OpenAI"]]}"#;
         let backend = Arc::new(MockBackend::single(json));
         let ex = SchemaJsonExtractor::new(backend);
         let out = ex.extract("OpenAI developed GPT-4.").await.unwrap();
         assert_eq!(out.num_entities(), 2);
         assert_eq!(out.num_triples(), 1);
+        assert_eq!(out.knowledge_graph.triples[0].subject.label, "GPT-4");
+        assert_eq!(out.knowledge_graph.triples[0].object.label, "OpenAI");
     }
 
     #[tokio::test]
@@ -592,14 +594,20 @@ mod tests {
                 index: 0,
                 start: 0,
                 end: 20,
-                lines: Some((1, 1)),
+                range: Some(core_types_rs::SourceRange {
+                    line: core_types_rs::LineSpan::new(1, 1),
+                    ..core_types_rs::SourceRange::default()
+                }),
             },
             Segment {
                 content: "It developed GPT-4.".into(),
                 index: 1,
                 start: 20,
                 end: 39,
-                lines: Some((2, 2)),
+                range: Some(core_types_rs::SourceRange {
+                    line: core_types_rs::LineSpan::new(2, 2),
+                    ..core_types_rs::SourceRange::default()
+                }),
             },
         ];
         let out = ex.extract_prechunked(&chunks).await.unwrap();
@@ -759,7 +767,7 @@ mod tests {
             "OpenAI": {"type": "ORGANIZATION"},
             "GPT-4": {"type": "TECHNOLOGY"}
         }, "relationships": [
-            ["OpenAI", "DEVELOPED_BY", "GPT-4"],
+            ["GPT-4", "DEVELOPED_BY", "OpenAI"],
             ["OpenAI", "USES", "OpenAI"]
         ]}"#;
         let cfg = ExtractionConfig::from_schema(Schema::new(
@@ -793,7 +801,7 @@ mod tests {
     async fn fixed_mode_keeps_in_schema_records() {
         // Everything is in-schema → nothing dropped, the drop metadata reports 0.
         let json = r#"{"entities": {"OpenAI": {"type": "ORGANIZATION"}, "GPT-4": {"type": "TECHNOLOGY"}},
-                       "relationships": [["OpenAI", "DEVELOPED_BY", "GPT-4"]]}"#;
+                       "relationships": [["GPT-4", "DEVELOPED_BY", "OpenAI"]]}"#;
         let cfg = ExtractionConfig::from_schema(Schema::new(
             vec!["ORGANIZATION".into(), "TECHNOLOGY".into()],
             vec!["DEVELOPED_BY".into()],
@@ -806,6 +814,8 @@ mod tests {
             .unwrap();
         assert_eq!(out.num_entities(), 2);
         assert_eq!(out.num_triples(), 1);
+        assert_eq!(out.knowledge_graph.triples[0].subject.label, "GPT-4");
+        assert_eq!(out.knowledge_graph.triples[0].object.label, "OpenAI");
         assert_eq!(out.metadata["schema_dropped_records"], serde_json::json!(0));
     }
 

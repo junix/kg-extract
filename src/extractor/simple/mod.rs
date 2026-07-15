@@ -17,6 +17,7 @@ use crate::backend::{ChatSession, CompletionOptions, LlmBackend, ReplaySession};
 use crate::chunking::{segment, Segment};
 use crate::merger::{merge_all, merge_all_dedup_coref, merge_all_dedup_llm};
 use crate::types::{ExtractionConfig, ExtractionResponse, KnowledgeGraph, ParsedResult};
+use core_types_rs::{CharSpan, SourceRange};
 
 #[cfg(test)]
 use crate::types::PredicateType;
@@ -274,7 +275,10 @@ impl Extractor for SimpleExtractor {
                 index: 0,
                 start: 0,
                 end: text.chars().count(),
-                lines: None,
+                range: Some(SourceRange {
+                    char_span: CharSpan::new(0, text.chars().count()),
+                    ..SourceRange::default()
+                }),
             }]
         };
 
@@ -283,7 +287,8 @@ impl Extractor for SimpleExtractor {
         {
             let line_index = crate::citation::LineIndex::new(text);
             for c in chunks.iter_mut() {
-                c.lines = Some(line_index.line_range(c.start, c.end));
+                let (start, end) = line_index.line_range(c.start, c.end);
+                c.set_line_span(start, end);
             }
         }
 
@@ -291,8 +296,8 @@ impl Extractor for SimpleExtractor {
     }
 
     /// Pre-chunked input: the given chunks ARE the segments — no re-chunking,
-    /// no `min_segment_size` filtering. Provenance lines come from the chunks'
-    /// own metadata (chunks without it are simply not stamped).
+    /// no `min_segment_size` filtering. Provenance comes from the chunks' full
+    /// protocol ranges (chunks with only a char span are not stamped).
     async fn extract_prechunked(&self, chunks: &[Segment]) -> anyhow::Result<ExtractionResponse> {
         if chunks.is_empty() {
             anyhow::bail!("No pre-chunked input provided");
@@ -312,13 +317,12 @@ impl SimpleExtractor {
         let per_chunk: Vec<(Vec<ParsedResult>, KnowledgeGraph)> = stream::iter(chunks)
             .map(|seg| async move {
                 let result = self.extract_chunk(&seg.content).await;
-                match seg.lines {
-                    Some((start_line, end_line)) => {
+                match seg.evidence_range().cloned() {
+                    Some(range) => {
                         let (prs, mut kg) = result;
-                        let cite = crate::citation::Citation::new(
+                        let cite = crate::citation::Citation::from_range(
                             self.config.source_doc.clone(),
-                            start_line,
-                            end_line,
+                            range,
                         );
                         crate::citation::stamp_graph(&mut kg, &cite);
                         (prs, kg)

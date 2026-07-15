@@ -13,12 +13,21 @@ Four engines implement `Extractor::extract(text) → ExtractionResponse`:
 
 Pre-chunked input (`extract_prechunked`):
 
+- One input represents one source document. Conflicting non-empty
+  `source_file` values are rejected rather than silently collapsed to the
+  first source. [T] (`chunking::prechunked_rejects_conflicting_source_files`)
+
 - Simple / Agentic (chunking engines): the given chunks ARE the segments — no
-  re-chunking, no `min_segment_size` filtering. Empty input is an error.
+  re-chunking, no `min_segment_size` filtering. Page/bbox ranges remain
+  attributable to each chunk; line-only ranges retain the legacy citation
+  shape. Empty input is an error.
   [T] (`simple::prechunked_extracts_each_given_chunk_without_rechunking`,
-  `simple::prechunked_empty_input_errors`)
+  `simple::prechunked_empty_input_errors`,
+  `simple::prechunked_multimodal_range_survives_as_entity_and_relation_evidence`)
 - SchemaJson / ToolCall (single-shot engines): chunk texts are joined with
-  `\n\n` and extracted in one call, exactly like plain text.
+  `\n\n` and extracted in one call, exactly like plain text. The result has
+  document-level provenance only; no result is assigned to an individual
+  input chunk or its page/bbox.
   [T] (`schema_json::prechunked_default_joins_chunks_into_one_call`)
 
 ## 10.1 Simple engine
@@ -27,8 +36,8 @@ Pre-chunked input (`extract_prechunked`):
 Algorithm 1  SimpleExtract
 Require: text T (UTF-8, non-empty after trim), config C
 Ensure:  returns ExtractionResponse whose graph is the per-chunk graphs folded
-         per C.spec.merge_duplicates / merge_strategy / coref; every record
-         carries citations computed from chunk offsets
+         per C.spec.merge_duplicates / merge_strategy / coref; each record
+         with evidence coordinates carries code-owned provenance
  1: if T.trim() is empty then error "No input text provided"
  2: if T.chars().count() < C.min_segment_size ∧ ¬C.quiet then warn (non-fatal)
  3: if input is pre-chunked then segments ← given chunks
@@ -36,11 +45,13 @@ Ensure:  returns ExtractionResponse whose graph is the per-chunk graphs folded
          then segments ← Segment(T, C.chunker, C.segment_size, C.overlap)
                   filtered by min_segment_size on non-first segments
     else segments ← [whole text as one segment with offsets [0, |T|])]
- 4: for each segment derive lines ← LineIndex(T).line_range(seg.start, seg.end)
-    (pre-chunked: lines come from chunk metadata)
+ 4: for each plain-text segment set seg.range.line ←
+      LineIndex(T).line_range(seg.start, seg.end), preserving seg.range.char_span
+    (pre-chunked: retain the supplied SourceRange)
  5: graphs ← segments mapped concurrently (max C.max_concurrency in flight,
     order preserved) through PerChunkSession (Algorithm 2), each stamped with
-    Citation(C.source_doc, seg.lines)
+    Citation(C.source_doc, seg.range): page/bbox → rich `{doc,range}`;
+    otherwise line → legacy `{doc,lines}`; char-only → no stamp
  6: kg ← Fold(graphs) per Algorithm 4
  7: return ExtractionResponse(kg, parsed_results)
 ```
@@ -121,11 +132,20 @@ not resolve directly still produces a deterministic predicate.
 
 ### 10.1.x Citation granularity
 
-- Simple / Agentic: each record cites the chunk/slice range containing the
-  mention. Relation-gleaning records that look at the whole session cite the
-  full range.
-- SchemaJson / ToolCall (single-shot): every record cites the whole document
-  `[1, total_lines]`.
+- Simple / Agentic: each record cites the chunk/slice containing the mention.
+  A page/bbox citation preserves the complete supplied `SourceRange`; a
+  line-only citation preserves the legacy `{doc,lines}` wire shape. Agentic
+  relation-gleaning records that look at the whole session cite its aggregate
+  line range.
+- SchemaJson / ToolCall (single-shot): every record cites the joined document
+  `[1, total_lines]`. For multi-chunk input this is document-level provenance,
+  not per-chunk attribution; input page/bbox ranges are not assigned to output
+  records.
+
+`KnowledgeGraph::to_kg_document` accepts a fully recognized array in either
+citation shape, creates first-class `KgEvidence.range` values, and excludes the
+internal key from entity and relation properties so provenance is emitted
+once. Foreign or mixed values remain properties and are not partially lifted.
 
 ## 10.2 SchemaJson engine
 
@@ -133,7 +153,7 @@ not resolve directly still produces a deterministic predicate.
 Algorithm 5  SchemaJsonExtract
 Require: text T (non-empty), config C
 Ensure:  returns graph from one model call; Fixed mode hard-drops out-of-schema
-         records and reports them; citations = whole document
+         records and reports them; citation = whole joined document only
  1: validate input; if mode ∈ {Fixed,Evolving} ∧ schema empty ∧ no template:
       error "schema mode X requires a non-empty schema"
  2: prompt ← template-rendered OR (system prompt shaped by mode + "Text:\n{T}")
@@ -143,7 +163,8 @@ Ensure:  returns graph from one model call; Fixed mode hard-drops out-of-schema
  6: kg ← BuildGraph(data): entities keyed by lowercased name (merge_strategy
       applies to within-response duplicates); relations resolved
       case-insensitively; dangling dropped; entity-type fallback = PHYSICAL_OBJECT
- 7: stamp whole-document citation; record metadata (mode, schema_mode, drops…)
+ 7: stamp legacy line-only whole-document citation; record metadata
+      (mode, schema_mode, drops…)
  8: return ExtractionResponse(kg)
 ```
 
@@ -188,7 +209,8 @@ Ensure:  graph from accumulated tool calls; Fixed = enum-constrained;
       resolved by name (dangling dropped); strength clamped [0,1] (default 0.8);
       attributes applied last (survive triple re-inserts)
  5: if merge_duplicates: kg ← dedup per merge_strategy/coref
- 6: stamp whole-document citation; record mode/schema_mode/new_schema_types
+ 6: stamp legacy line-only whole-document citation; record
+      mode/schema_mode/new_schema_types
 ```
 
 | Tool call | Effect | Required args |
@@ -225,6 +247,9 @@ The Agentic engine is strictly sequential (no chunk concurrency). Its exact
 slice-count, sandbox tool list, and correction-prompt wording are
 **implementation-defined**; the contract is the single-session, cross-slice
 coreference + per-slice Fixed validation + whole-graph gleaning shape above.
+For pre-chunked input, each slice retains its supplied rich page/bbox range or
+legacy line span; the reconstructed on-disk document does not replace that
+per-slice attribution.
 
 ## 10.5 Graph fold (merge)
 

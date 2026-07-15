@@ -199,19 +199,69 @@ The corporate-suffix and leading-article token lists are
 **implementation-defined**; the contract is the normalization observable
 above plus the length/type/similarity gates.
 
-## 8.8 Citation
+## 8.8 Segment
 
 ```
-Citation { doc: string?, start_line: int (1-based), end_line: int (1-based, inclusive) }
+Segment {
+  content: string
+  index: int
+  start, end: int                  // char offsets in the combined input
+  range: SourceRange?              // char_span, line, page, bbox
+}
 ```
 
-Stored under `metadata["citations"]` as a JSON array of
-`{"doc": <name|null>, "lines": [start, end]}`. A record seen in several
-places carries several citations; merging unions them (duplicates skipped by
-value equality). [T] (`citation::attach_deduplicates_identical_citations`,
+`Segment.range` replaces the former public `Segment.lines` field. This is a
+**Rust source-breaking** API change for callers that construct `Segment`
+literals or access the old field. The pre-chunked JSON wire remains compatible:
+it already carries the optional protocol `range`, and adding optional page/bbox
+coordinates does not invalidate line-only inputs.
+
+Plain-text extraction uses the char offsets to derive a line span. Pre-chunked
+parsing retains the complete supplied range on the segment. When records are
+stamped, page/bbox selects the rich citation form and preserves that complete
+range; otherwise only the line span is serialized in the legacy form (the char
+span remains segment-local positioning data).
+
+## 8.9 Citation
+
+```
+Citation { doc: string?, range: SourceRange }
+```
+
+The public fields `start_line` / `end_line` were replaced by `range`; direct
+field access and struct literals are therefore Rust source-breaking. `Citation`
+also no longer implements `Eq` because `SourceRange.bbox` uses floating-point
+coordinates. The `Citation::new(doc, start_line, end_line)` constructor remains
+source-compatible for valid 1-based ranges. Zero or inverted ranges now fail
+`LineSpan` validation and do not serialize as a legacy `{doc,lines}` entry.
+
+Stored under `metadata["citations"]` as a JSON array with two accepted shapes:
+
+- line-only provenance keeps the legacy wire shape
+  `{"doc": <name|null>, "lines": [start, end]}`;
+- a citation carrying page or bbox uses
+  `{"doc": <name|null>, "range": <SourceRange>}` and preserves the supplied
+  char/line/page/bbox coordinates together.
+
+A record seen in several places carries several citations; merging unions them
+(duplicates skipped by value equality). [T]
+(`citation::attach_deduplicates_identical_citations`,
 `citation::union_merges_distinct_and_skips_duplicate_citations`)
 
-## 8.9 Extraction response metadata keys
+`KnowledgeGraph::to_kg_document` accepts an array only when every item matches
+one of these citation shapes, promotes each to first-class `KgEvidence.range`,
+and removes the recognized `citations` key from entity and relation
+`properties`. A malformed, foreign, or mixed array is preserved verbatim as a
+property and is not partially promoted. Protocol output therefore avoids both
+duplicate provenance and silent user-data loss. [T]
+(`protocol::knowledge_graph_converts_to_portable_kg_protocol`,
+`protocol::foreign_citation_object_list_is_not_promoted_or_dropped`,
+`protocol::mixed_internal_and_foreign_citations_are_preserved_as_user_metadata`,
+`protocol::rich_citation_with_foreign_nested_range_field_is_preserved`,
+`protocol::legacy_citation_with_extra_line_value_is_preserved`,
+`simple::prechunked_multimodal_range_survives_as_entity_and_relation_evidence`)
+
+## 8.10 Extraction response metadata keys
 
 | Key | Meaning | Produced by |
 |-----|---------|-------------|

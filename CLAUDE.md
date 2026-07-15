@@ -72,10 +72,16 @@ Key modules under `src/`:
   suffixes/articles) → fuzzy edit-distance gated at `FUZZY_MIN_LEN=6` /
   threshold `0.85`. `MergeStrategy`: `KeepExisting` (default) / `KeepIncoming` /
   `FieldUnion` / `Llm`.
-- `chunking.rs` — thin layer over the sibling `chonkie` crate.
-- `citation.rs` — provenance (`{doc, lines:[start,end]}` in `metadata.citations`).
-  Line ranges are computed **from chunker char offsets by our code** — the model
-  is never asked to count lines, so citations can't be hallucinated.
+- `chunking.rs` — thin layer over the sibling `chonkie` crate. Public `Segment`
+  carries `range: Option<core_types_rs::SourceRange>` so pre-chunked char, line,
+  page, and bbox coordinates survive the extraction boundary.
+- `citation.rs` / `protocol.rs` — provenance. Legacy line-only entries remain
+  `{doc, lines:[start,end]}`; entries with page/bbox use
+  `{doc, range:SourceRange}`. `to_kg_document` promotes a fully recognized
+  citation array to first-class `Evidence` and removes that internal key from
+  protocol properties; malformed/foreign user values stay untouched.
+  Plain-text line ranges are computed from chunker char offsets by our code;
+  the model is never asked to count lines.
 - `template/` + `presets/` — extraction **templates/presets**: richer than a flat
   `Schema` (output structure + multilingual guideline + identifier conventions).
   `presets/**.yaml` are embedded into the binary via `include_dir`; load by
@@ -98,8 +104,11 @@ Key modules under `src/`:
 (`simple`|`schema-json`|`toolcall`|`agentic`), `-b/--backend`
 (`llms`|`agent`|`mock`), `--agent` (`minimaxcc`|`glmcc`|`mimocc`), `--chunker`
 (`recursive`|`char`|`token`), `--schema-mode`, `--schema`, `-f/--input-format`
-(`text`|`chunks` — pre-chunked chonkie output is consumed as-is by chunking
-engines, joined by single-shot engines), `-o/--output` (`json`|`mermaid`|`node-link`|`stats`).
+(`text`|`chunks` — chunk-aware Simple/Agentic consume supplied ranges as-is:
+page/bbox emits the complete rich range, line-only stays legacy;
+SchemaJson/ToolCall join texts and retain only document-level provenance),
+`-o/--output`
+(`json`|`mermaid`|`node-link`|`stats`).
 
 ## Conventions & gotchas
 
@@ -117,13 +126,22 @@ engines, joined by single-shot engines), `-o/--output` (`json`|`mermaid`|`node-l
 - **Agentic is a consolidation/coref strategy, not a recall one** — its
   extraction-time dedup is *not* reproducible by a post-hoc merge pass (see the
   README trade-off table). Keep slices strictly sequential.
-- **Citations are computed, not model-emitted** — never wire a model to produce
-  line numbers.
-- **`kg-vocab`/`kg-community` deps are LOCAL PATH OVERRIDES** in `Cargo.toml`
-  (ADR-987 Step 5 verification). Before publishing, swap them to git URLs
-  (`kg-vocab` needs a new GitHub repo; `kg-community` is already published).
-  Don't commit the `path = "../…"` lines to the shared history.
-- Design specs live in `spec/` (`00-glossary.md` … `06-feature-matrix.md` +
-  `CHANGELOG.md`) — read these before non-trivial design changes.
+- **Citations are code-owned, not model-emitted** — derive plain-text lines
+  from offsets, retain pre-chunked ranges on `Segment`, and apply the rich vs
+  legacy encoding rule above; never ask a model to invent coordinates.
+- **`Segment.lines` became `Segment.range`.** This is a Rust source-breaking
+  public-struct change; update struct literals and field access. The accepted
+  pre-chunked JSON remains wire-compatible because `range` and its optional
+  coordinates are protocol fields.
+- **`Citation` now stores `range`, not public `start_line` / `end_line`, and is
+  `PartialEq` but not `Eq`** because bbox coordinates are floating-point.
+  `Citation::new(doc, start, end)` remains compatible for valid line ranges.
+- **Protocol-facing Git dependencies use exact `rev` pins and a tracked
+  `Cargo.lock`.** Verify shared changes with `cargo test --lib --locked`. A
+  local path patch may be supplied transiently through Cargo `--config`, but
+  path overrides MUST NOT be committed to `Cargo.toml` or the lockfile.
+- Design specs live in `spec/` (`00-glossary.md` …
+  `07-protocol-contract-lock.md` + `CHANGELOG.md`) — read these before
+  non-trivial design changes.
 - Reference: every project under `~/projects` must have a `README.md` (this one
   is extensive; keep it in sync with engine behaviour).

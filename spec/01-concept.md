@@ -66,8 +66,9 @@ The current code does the following:
 - Three orthogonal schema modes constrain (or do not constrain) extraction.
 - Entities carry a deterministic id so graphs are interchangeable across
   engines and the MCP store.
-- Provenance (document + 1-based inclusive line range) is computed by the
-  code from chunk offsets, never by the model.
+- Provenance is code-owned, never model-emitted: plain-text line spans are
+  derived from chunk offsets; chunk-aware engines preserve a pre-chunked full
+  `SourceRange` when page/bbox is present and otherwise retain its line span.
 - Duplicate recognition (exact or fuzzy coreference) and four merge
   strategies fold per-chunk graphs into one.
 - The graph is emitted as JSON, node-link, kg-protocol, LadybugDB import,
@@ -98,8 +99,17 @@ The code enforces these invariants:
 - **Open-schema is lossless.** When no schema constrains a type token, the
   raw model token is preserved (`raw_type`); the enum normalization is a
   separate, auditable field.
-- **Provenance is code-computed.** Line ranges derive from chunk char
-  offsets; the model is never asked to count lines.
+- **Provenance is code-owned.** Plain-text line ranges derive from chunk char
+  offsets; pre-chunked spatial coordinates come from the input protocol. The
+  model is never asked to invent provenance coordinates.
+- **Protocol provenance has one representation without stealing user data.**
+  `to_kg_document` promotes a fully recognized array of legacy line-only or
+  rich citations to first-class `Evidence`, then removes that internal key so
+  provenance is not duplicated. Malformed or foreign `citations` values remain
+  ordinary properties and are not partially promoted.
+- **Attribution follows the engine boundary.** Simple and Agentic are
+  chunk-aware; SchemaJson and ToolCall join pre-chunked text and therefore
+  provide document-level, not per-chunk, attribution.
 - **Dangling endpoints are dropped, never stubbed.** A relation whose
   endpoint is unknown is discarded (engines) or rejected (MCP store).
 - **Passive `*_BY` predicates point from the thing acted on to the doer.**
@@ -113,8 +123,8 @@ The code enforces these invariants:
 kg-extract depends on the following companion *capabilities* (named by
 interface, not product):
 
-- **A text chunker** able to segment text into spans carrying char offsets
-  and (optionally) line ranges.
+- **A text chunker** able to segment text into spans carrying protocol
+  `SourceRange` coordinates (char span and optional line/page/bbox).
 - **A completion backend** exposing: one-shot chat, optional tool/function
   calling, and an optional stateful multi-turn session. A replay-session
   fallback covers backends without a native session.

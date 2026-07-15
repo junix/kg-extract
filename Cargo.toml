@@ -51,12 +51,12 @@ nanoid = "0.4"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util"] }
 clap = { version = "4", features = ["derive"] }
 
-chonkie = { git = "https://github.com/junix/chonkie.git", package = "chonkie", default-features = false, features = ["tokenizer"] }
-core-types-rs = { git = "https://github.com/junix/core-types-rs.git", package = "core-types-rs" }
+chonkie = { git = "https://github.com/junix/chonkie.git", rev = "6ec54a05649a29988c10bc83cd4f22c5f0b78275", package = "chonkie", default-features = false, features = ["tokenizer"] }
+core-types-rs = { git = "https://github.com/junix/core-types-rs.git", rev = "fdd7096b66c66d9dd81fb414df2c30c205cb977d", package = "core-types-rs" }
 # ADR-987 Step 5: single vocabulary source of truth (EntityType/PredicateType).
-kg-vocab = { git = "https://github.com/junix/kg-vocab.git", package = "kg-vocab" }
+kg-vocab = { git = "https://github.com/junix/kg-vocab.git", rev = "310f6d4cc9e10c81037a43f49d36de3365b628d8", package = "kg-vocab" }
 # Optional community detection over extracted graphs (feature = "community").
-kg-community = { git = "https://github.com/junix/kg-community.git", package = "kg-community", optional = true }
+kg-community = { git = "https://github.com/junix/kg-community.git", rev = "9f12ba13e62e0cde98bdfa3112c1243f24cd021b", package = "kg-community", optional = true }
 llms = { git = "https://github.com/junix/llms-rs.git", package = "llms", optional = true }
 # Structured Claude-Code-CLI driver (stream-json) — the default `agent` backend.
 claude-agent-sdk-rs = { git = "https://github.com/junix/claude-agent-sdk-rs.git", package = "claude-agent-sdk-rs" }

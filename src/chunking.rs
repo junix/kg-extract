@@ -7,6 +7,7 @@
 
 use crate::types::ChunkStrategy;
 use chonkie::{CharChunker, Chunker, RecursiveChunker, TiktokenTokenizer, TokenChunker};
+use core_types_rs::{BBox, CharSpan, LineSpan, PageSpan, SourceRange};
 
 /// A single segment of text plus its char offsets in the combined input.
 #[derive(Debug, Clone)]
@@ -15,12 +16,42 @@ pub struct Segment {
     pub index: usize,
     pub start: usize,
     pub end: usize,
-    /// 1-based inclusive line range of this segment in the source document,
-    /// when known. [`segment`] leaves it `None` (extractors derive lines from
-    /// the char offsets, which they can because they hold the full text);
-    /// pre-chunked input carries it from chonkie's protocol `range.line`
-    /// field, the only line information available without the text.
-    pub lines: Option<(usize, usize)>,
+    /// Complete protocol provenance for this segment. Plain-text chunking
+    /// starts with a char span and lets extractors derive its line span;
+    /// pre-chunked input preserves every supplied range coordinate, including
+    /// page and bbox.
+    pub range: Option<SourceRange>,
+}
+
+impl Segment {
+    /// Add a derived 1-based line span without replacing char/page/bbox
+    /// provenance already carried by the segment.
+    pub fn set_line_span(&mut self, start: usize, end: usize) {
+        let line = u32::try_from(start)
+            .ok()
+            .zip(u32::try_from(end).ok())
+            .and_then(|(start, end)| LineSpan::new(start, end));
+        let char_span = CharSpan::new(self.start, self.end);
+        self.range
+            .get_or_insert_with(|| SourceRange {
+                char_span,
+                ..SourceRange::default()
+            })
+            .line = line;
+    }
+
+    /// Return the range when it carries evidence coordinates. A synthesized
+    /// char span alone retains chunk positioning but preserves the historical
+    /// behavior that chunks without line/spatial metadata are not cited.
+    pub fn evidence_range(&self) -> Option<&SourceRange> {
+        self.range
+            .as_ref()
+            .filter(|range| range.line.is_some() || range.page.is_some() || range.bbox.is_some())
+    }
+
+    pub fn line_span(&self) -> Option<LineSpan> {
+        self.range.as_ref().and_then(|range| range.line)
+    }
 }
 
 /// Segment `text` according to `strategy`. `segment_size`/`overlap` are used by
@@ -58,16 +89,34 @@ pub fn segment(
                 .and_then(|r| r.char_span.as_ref())
                 .map(|cs| (cs.start, cs.end))
                 .unwrap_or((0, 0));
-            let lines = c.range.as_ref().and_then(|r| r.line.as_ref()).map(|l| {
-                // LineSpan uses 0-based internally; convert to 1-based inclusive.
-                (l.start as usize + 1, l.end as usize + 1)
+            // chonkie and kg-extract can resolve core-types-rs through
+            // different Cargo source IDs. Copy the public fields explicitly so
+            // Segment owns kg-extract's protocol type while preserving the
+            // complete range.
+            let range = c.range.as_ref().map(|r| SourceRange {
+                char_span: r
+                    .char_span
+                    .as_ref()
+                    .and_then(|span| CharSpan::new(span.start, span.end)),
+                line: r
+                    .line
+                    .as_ref()
+                    .and_then(|span| LineSpan::new(span.start, span.end)),
+                page: r
+                    .page
+                    .as_ref()
+                    .and_then(|span| PageSpan::new(span.start, span.end)),
+                bbox: r
+                    .bbox
+                    .as_ref()
+                    .map(|bbox| BBox::new(bbox.x0, bbox.y0, bbox.x1, bbox.y1)),
             });
             Segment {
                 content: c.text.unwrap_or_default(),
                 index: i,
                 start,
                 end,
-                lines,
+                range,
             }
         })
         .collect()
@@ -144,29 +193,41 @@ pub fn parse_prechunked(input: &str) -> anyhow::Result<PreChunked> {
             .and_then(Value::as_u64)
             .map(|n| n as usize)
             .unwrap_or_else(|| start + text.chars().count());
+        if start > end {
+            anyhow::bail!(
+                "chunk {} has invalid char span: start {start} exceeds end {end}",
+                i + 1
+            );
+        }
         cursor = end;
 
-        // Protocol format: range.line.start / range.line.end
-        let range_obj = v.get("range");
-        let line_val = |key: &str| {
-            range_obj
-                .and_then(|r| r.get("line"))
-                .and_then(|l| l.get(key))
-                .and_then(Value::as_u64)
-                .map(|n| n as usize)
-        };
-        let lines = match (line_val("start"), line_val("end")) {
-            (Some(s), Some(e)) => Some((s, e)),
-            _ => None,
-        };
+        // Deserialize the protocol range as one unit so new first-class
+        // coordinates (for example page and bbox) cannot be accidentally
+        // discarded by a field-by-field parser.
+        let mut range = v
+            .get("range")
+            .filter(|value| !value.is_null())
+            .map(|value| serde_json::from_value::<SourceRange>(value.clone()))
+            .transpose()
+            .map_err(|e| anyhow::anyhow!("chunk {} has invalid range: {e}", i + 1))?
+            .unwrap_or_default();
+        range.char_span = CharSpan::new(start, end);
 
-        // Protocol format: source_file (top-level field)
-        if source.is_none() {
-            source = v
-                .get("source_file")
-                .and_then(Value::as_str)
-                .filter(|s| !s.is_empty() && *s != "<stdin>")
-                .map(str::to_string);
+        // `PreChunked` represents one source document. Reject conflicting
+        // source labels instead of silently attributing every fact to the
+        // first chunk's file.
+        let chunk_source = v
+            .get("source_file")
+            .and_then(Value::as_str)
+            .filter(|s| !s.is_empty() && *s != "<stdin>");
+        if let Some(chunk_source) = chunk_source {
+            match source.as_deref() {
+                Some(existing) if existing != chunk_source => anyhow::bail!(
+                    "pre-chunked input mixes source files {existing:?} and {chunk_source:?}"
+                ),
+                Some(_) => {}
+                None => source = Some(chunk_source.to_string()),
+            }
         }
 
         segments.push(Segment {
@@ -174,7 +235,7 @@ pub fn parse_prechunked(input: &str) -> anyhow::Result<PreChunked> {
             index: segments.len(),
             start,
             end,
-            lines,
+            range: Some(range),
         });
     }
 
@@ -232,7 +293,10 @@ mod tests {
         let s = &p.segments[1];
         assert_eq!(s.content, "Second chunk.");
         assert_eq!((s.index, s.start, s.end), (1, 12, 25));
-        assert_eq!(s.lines, Some((3, 4)));
+        assert_eq!(
+            s.range.as_ref().and_then(|range| range.line),
+            LineSpan::new(3, 4)
+        );
     }
 
     #[test]
@@ -261,13 +325,33 @@ mod tests {
         let p = parse_prechunked(input).unwrap();
         assert_eq!((p.segments[0].start, p.segments[0].end), (0, 5));
         assert_eq!((p.segments[1].start, p.segments[1].end), (5, 8));
-        assert_eq!(p.segments[1].lines, None);
+        assert_eq!(
+            p.segments[1].range.as_ref().and_then(|range| range.line),
+            None
+        );
     }
 
     #[test]
     fn prechunked_stdin_source_is_unknown() {
         let input = r#"{"text":"A","source_file":"<stdin>"}"#;
         assert!(parse_prechunked(input).unwrap().source.is_none());
+    }
+
+    #[test]
+    fn prechunked_rejects_conflicting_source_files() {
+        let input = r#"
+{"text":"A","source_file":"one.md"}
+{"text":"B","source_file":"two.md"}
+"#;
+        let error = parse_prechunked(input).unwrap_err().to_string();
+        assert!(error.contains("one.md") && error.contains("two.md"));
+    }
+
+    #[test]
+    fn prechunked_rejects_inverted_char_span() {
+        let input = r#"{"text":"A","range":{"char_span":{"start":5,"end":2}}}"#;
+        let error = parse_prechunked(input).unwrap_err().to_string();
+        assert!(error.contains("char span") && error.contains("5") && error.contains("2"));
     }
 
     #[test]

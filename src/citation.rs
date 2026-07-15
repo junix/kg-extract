@@ -4,9 +4,11 @@
 //! Citation stamping is part of the default extraction path.
 //!
 //! Citations are stored in the open `metadata` map of [`Entity`] / [`Triple`]
-//! under [`CITATIONS_KEY`], as an array of `{"doc": <name|null>, "lines":
-//! [start, end]}` objects (1-based, inclusive). A record seen in several
-//! places carries several citations; merging unions them.
+//! under [`CITATIONS_KEY`]. Existing line-only citations keep the legacy
+//! `{"doc": <name|null>, "lines": [start, end]}` shape; citations carrying
+//! richer protocol coordinates use `{"doc": ..., "range": SourceRange}`.
+//! Readers accept both shapes. A record seen in several places carries several
+//! citations; merging unions them.
 //!
 //! Line ranges are computed **by our code** from the chunk/slice char offsets
 //! the chunker already tracks — the model is never asked to count lines, so
@@ -15,6 +17,7 @@
 
 use std::collections::HashMap;
 
+use core_types_rs::{LineSpan, SourceRange};
 use serde_json::{json, Value};
 
 use crate::types::KnowledgeGraph;
@@ -22,26 +25,44 @@ use crate::types::KnowledgeGraph;
 /// Metadata key under which citation arrays live.
 pub const CITATIONS_KEY: &str = "citations";
 
-/// One provenance record: a document name (when known) and a 1-based,
-/// inclusive line range within it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// One provenance record: a document name (when known) plus its complete
+/// shared-protocol source range.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Citation {
     pub doc: Option<String>,
-    pub start_line: usize,
-    pub end_line: usize,
+    pub range: SourceRange,
 }
 
 impl Citation {
+    /// Construct a legacy-compatible line-only citation.
     pub fn new(doc: Option<String>, start_line: usize, end_line: usize) -> Self {
-        Citation {
+        let line = u32::try_from(start_line)
+            .ok()
+            .zip(u32::try_from(end_line).ok())
+            .and_then(|(start, end)| LineSpan::new(start, end));
+        Self {
             doc,
-            start_line,
-            end_line,
+            range: SourceRange {
+                line,
+                ..SourceRange::default()
+            },
         }
     }
 
+    pub fn from_range(doc: Option<String>, range: SourceRange) -> Self {
+        Self { doc, range }
+    }
+
     pub fn to_value(&self) -> Value {
-        json!({ "doc": self.doc, "lines": [self.start_line, self.end_line] })
+        // Preserve the public metadata shape used before SourceRange gained
+        // spatial provenance. A page or bbox requires the richer shape; line-
+        // only citations remain byte-shape compatible with existing files.
+        if self.range.page.is_none() && self.range.bbox.is_none() {
+            if let Some(line) = self.range.line {
+                return json!({ "doc": self.doc, "lines": [line.start, line.end] });
+            }
+        }
+        json!({ "doc": self.doc, "range": &self.range })
     }
 }
 

@@ -502,7 +502,7 @@ mod tests {
             ),
             call(
                 "add_relation",
-                serde_json::json!({"source": "OpenAI", "predicate": "DEVELOPED_BY", "target": "GPT-4", "strength": 0.9}),
+                serde_json::json!({"source": "GPT-4", "predicate": "DEVELOPED_BY", "target": "OpenAI", "strength": 0.9}),
             ),
             call(
                 "add_attribute",
@@ -519,6 +519,8 @@ mod tests {
             out.knowledge_graph.triples[0].predicate.predicate_type,
             PredicateType::DevelopedBy
         );
+        assert_eq!(out.knowledge_graph.triples[0].subject.label, "GPT-4");
+        assert_eq!(out.knowledge_graph.triples[0].object.label, "OpenAI");
         let gpt = out
             .knowledge_graph
             .entities
