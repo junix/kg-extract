@@ -1,216 +1,14 @@
-//! Predicate / relationship type definitions for knowledge graph extraction.
+//! Predicate type + the `Predicate` model.
 //!
-//! Ported from `graph/_types/predicates.py`.
+//! `PredicateType` and its resolution logic now live in the shared **kg-vocab**
+//! crate (the single source of truth for the 108-variant predicate vocabulary)
+//! and are re-exported here so callers keep using `crate::types::PredicateType`.
+//! See ADR-987 §D#5.
 
-use super::entity::TypeMatch;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use strum::IntoEnumIterator;
-use strum_macros::{AsRefStr, Display, EnumIter, EnumString};
 
-/// Enumeration of all supported predicate types for relationship extraction.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    Display,
-    EnumString,
-    EnumIter,
-    AsRefStr,
-)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-#[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
-pub enum PredicateType {
-    // Geographic & Location
-    Population,
-    Area,
-    LocatedIn,
-    OriginatesFrom,
-    OccursIn,
-    // Usage & Application
-    UsedIn,
-    IsUsedBy,
-    Uses,
-    AppliesTo,
-    AppliedIn,
-    // Improvement & Enablement
-    Improves,
-    Enables,
-    Optimizes,
-    // Development & Creation
-    DevelopedBy,
-    InventedBy,
-    InventedIn,
-    DiscoveredIn,
-    FormulatedBy,
-    // Effects & Causation
-    Affects,
-    Causes,
-    Prevents,
-    Inhibits,
-    Catalyzes,
-    TransformsInto,
-    // Structural Relations
-    PartOf,
-    Includes,
-    Excludes,
-    ComposedOf,
-    BelongsTo,
-    // Organization & People
-    FoundedBy,
-    WorksFor,
-    SpecializesIn,
-    CollaboratesWith,
-    TeachesAt,
-    // Research & Academia
-    PublishedIn,
-    PublishedBy,
-    Researches,
-    FundedBy,
-    Discovers,
-    PresentedAt,
-    PeerReviewedBy,
-    CitedBy,
-    ConductedBy,
-    ReportedIn,
-    // Dependencies & Requirements
-    Requires,
-    DerivesFrom,
-    DerivedFrom,
-    // Production & Consumption
-    Produces,
-    Consumes,
-    // Representation & Symbolism
-    Symbolizes,
-    Represents,
-    Signifies,
-    Indicates,
-    // Influence & Interaction
-    Attracts,
-    Influences,
-    InteractsWith,
-    CompetesWith,
-    AssociatedWith,
-    RelatedTo,
-    // Ontological Relations
-    IsA,
-    HasProperty,
-    // Contribution & Support
-    ContributesTo,
-    SupportedBy,
-    // Governance & Regulation
-    Governs,
-    Regulates,
-    ApprovedBy,
-    // Preservation & Destruction
-    Preserves,
-    Destroys,
-    Protects,
-    // Temporal Relations
-    Succeeds,
-    Precedes,
-    // Logical Relations
-    Contradicts,
-    Complements,
-    // Validation & Testing
-    ValidatedBy,
-    EvaluatedBy,
-    TestedBy,
-    MeasuredBy,
-    DetectedBy,
-    EvidencedBy,
-    // Analysis & Modeling
-    AnalyzedBy,
-    ModelledBy,
-    SimulatedBy,
-    InferredFrom,
-    ExaminedIn,
-    // Implementation & Deployment
-    ImplementedIn,
-    DeployedIn,
-    IntegratedWith,
-    ModifiedBy,
-    // Machine Learning Relations
-    TrainedOn,
-    ValidatedOn,
-    TestedOn,
-    TunedBy,
-    Predicts,
-    Classifies,
-    Regresses,
-    Clusters,
-    ReducesDimensionality,
-    Performs,
-    Generalizes,
-    Overfits,
-    Underfits,
-    Regularizes,
-    Converges,
-    Diverges,
-    Initializes,
-    // Medical & Treatment
-    Treats,
-    Celebrates,
-    Measures,
-}
-
-impl PredicateType {
-    /// The SCREAMING_SNAKE_CASE string value (matches Python `PredicateType.value`).
-    pub fn value(&self) -> String {
-        self.to_string()
-    }
-
-    /// All variants (mirrors `get_default_predicates`).
-    pub fn all() -> Vec<PredicateType> {
-        PredicateType::iter().collect()
-    }
-
-    /// Map a free-form relation string to a [`PredicateType`], mirroring the
-    /// Python parser: normalise (`upper().replace(" ", "_")`), exact match,
-    /// then substring match either direction, else `RELATED_TO`. Discards the
-    /// resolution provenance; use [`resolve`] when you need it.
-    ///
-    /// [`resolve`]: PredicateType::resolve
-    pub fn from_loose(raw: &str) -> PredicateType {
-        Self::resolve(raw).0
-    }
-
-    /// Like [`from_loose`], but also reports *how* the token resolved: an exact
-    /// variant, an [`Aliased`] substring match, or a [`Fallback`] to
-    /// `RELATED_TO`. Lets callers audit which relation tokens were lost.
-    ///
-    /// [`from_loose`]: PredicateType::from_loose
-    /// [`Aliased`]: TypeMatch::Aliased
-    /// [`Fallback`]: TypeMatch::Fallback
-    pub fn resolve(raw: &str) -> (PredicateType, TypeMatch) {
-        let normalized = raw.trim().to_uppercase().replace([' ', '-'], "_");
-        // A blank predicate must not fuzzy-match: `value.contains("")` is always
-        // true, so the substring loop below would return the first variant.
-        if normalized.is_empty() {
-            return (PredicateType::RelatedTo, TypeMatch::Fallback);
-        }
-        if let Ok(p) = normalized.parse::<PredicateType>() {
-            return (p, TypeMatch::Exact);
-        }
-        for pt in PredicateType::iter() {
-            let v = pt.value();
-            if normalized.contains(&v) || v.contains(&normalized) {
-                return (pt, TypeMatch::Aliased);
-            }
-        }
-        (PredicateType::RelatedTo, TypeMatch::Fallback)
-    }
-}
-
-/// Default list of predicate types for extraction.
-pub fn default_predicates() -> Vec<PredicateType> {
-    PredicateType::all()
-}
+pub use kg_vocab::{default_predicates, PredicateType};
 
 /// Represents a relationship predicate between entities.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -291,7 +89,9 @@ fn title_case(screaming: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    // Behavior-preservation guard: PredicateType now comes from kg-vocab.
     use super::*;
+    use kg_vocab::TypeMatch;
 
     #[test]
     fn roundtrip_values() {
@@ -322,12 +122,10 @@ mod tests {
             PredicateType::resolve("uses"),
             (PredicateType::Uses, TypeMatch::Exact)
         );
-        // Substring match is reported as an alias, not an exact hit.
         assert_eq!(
             PredicateType::resolve("is developed by"),
             (PredicateType::DevelopedBy, TypeMatch::Aliased)
         );
-        // Unknown / blank fall back.
         assert_eq!(
             PredicateType::resolve("no such thing"),
             (PredicateType::RelatedTo, TypeMatch::Fallback)
@@ -340,9 +138,6 @@ mod tests {
 
     #[test]
     fn loose_empty_relation_is_related_to() {
-        // An empty / whitespace-only relation must not fuzzy-match the first
-        // variant: `"POPULATION".contains("")` is always true, which previously
-        // returned `Population` for any blank predicate.
         assert_eq!(PredicateType::from_loose(""), PredicateType::RelatedTo);
         assert_eq!(PredicateType::from_loose("   "), PredicateType::RelatedTo);
     }
@@ -358,5 +153,6 @@ mod tests {
     #[test]
     fn variant_count() {
         assert_eq!(PredicateType::all().len(), 108);
+        assert_eq!(default_predicates().len(), 108);
     }
 }

@@ -36,6 +36,8 @@
 pub mod backend;
 pub mod chunking;
 pub mod citation;
+#[cfg(feature = "community")]
+pub mod community;
 pub mod extractor;
 pub(crate) mod graph_build;
 pub mod ladybug_export;

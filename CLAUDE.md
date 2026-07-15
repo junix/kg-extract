@@ -82,7 +82,13 @@ Key modules under `src/`:
   `{domain}/{name}` key (e.g. `general/concept_graph`).
 - `types/` — `KnowledgeGraph`, `Entity`, `Triple`, `Predicate`, `Schema`,
   `ExtractionConfig`, `ExtractionSpec` (the declarative spec holds `SchemaMode`
-  to avoid a types→extractor cycle).
+  to avoid a types→extractor cycle). **`EntityType`/`PredicateType`/`TypeMatch`
+  are re-exported from the `kg-vocab` crate** (single source of truth for the
+  122/108 vocabulary; ADR-987 Step 5) — `types/entity.rs`/`predicate.rs` keep
+  only the rich `Entity`/`Predicate` structs.
+- `community.rs` *(feature `community`)* — `KnowledgeGraph → kg_community::Graph`
+  adapter + `detect_communities*`. Wires the extraction output into the
+  (previously orphan) `kg-community` detectors (ADR-987 §D#2).
 - `ladybug_export.rs` — export to the `graphdb-ladybug` graph store (e2e flows).
 
 ## CLI essentials
@@ -113,6 +119,10 @@ engines, joined by single-shot engines), `-o/--output` (`json`|`mermaid`|`node-l
   README trade-off table). Keep slices strictly sequential.
 - **Citations are computed, not model-emitted** — never wire a model to produce
   line numbers.
+- **`kg-vocab`/`kg-community` deps are LOCAL PATH OVERRIDES** in `Cargo.toml`
+  (ADR-987 Step 5 verification). Before publishing, swap them to git URLs
+  (`kg-vocab` needs a new GitHub repo; `kg-community` is already published).
+  Don't commit the `path = "../…"` lines to the shared history.
 - Design specs live in `spec/` (`00-glossary.md` … `06-feature-matrix.md` +
   `CHANGELOG.md`) — read these before non-trivial design changes.
 - Reference: every project under `~/projects` must have a `README.md` (this one

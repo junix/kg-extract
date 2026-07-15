@@ -30,6 +30,8 @@ default = []
 llms-backend = ["dep:llms"]
 # Build the `kg-extract-mcp` stdio MCP server (rmcp SDK + schemars).
 mcp = ["dep:rmcp", "dep:schemars"]
+# Community detection over extracted graphs (KnowledgeGraph -> kg-community).
+community = ["dep:kg-community"]
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -51,6 +53,10 @@ clap = { version = "4", features = ["derive"] }
 
 chonkie = { git = "https://github.com/junix/chonkie.git", package = "chonkie", default-features = false, features = ["tokenizer"] }
 core-types-rs = { git = "https://github.com/junix/core-types-rs.git", package = "core-types-rs" }
+# ADR-987 Step 5: single vocabulary source of truth (EntityType/PredicateType).
+kg-vocab = { git = "https://github.com/junix/kg-vocab.git", package = "kg-vocab" }
+# Optional community detection over extracted graphs (feature = "community").
+kg-community = { git = "https://github.com/junix/kg-community.git", package = "kg-community", optional = true }
 llms = { git = "https://github.com/junix/llms-rs.git", package = "llms", optional = true }
 # Structured Claude-Code-CLI driver (stream-json) — the default `agent` backend.
 claude-agent-sdk-rs = { git = "https://github.com/junix/claude-agent-sdk-rs.git", package = "claude-agent-sdk-rs" }
