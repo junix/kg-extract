@@ -326,7 +326,7 @@ impl From<SchemaModeArg> for SchemaMode {
 
 /// stdio MCP server for incremental knowledge-graph building.
 #[derive(Parser, Debug)]
-#[command(name = "kg-extract-mcp", version, about)]
+#[command(name = "kg-extract-mcp", version, about, after_help = concat!("Source: ", env!("PROJECT_SOURCE_PATH")))]
 struct Args {
     /// Config file path, or inline JSON. Defaults to ~/.kg-extract/config.json when
     /// present. Accepted for parity with `kg-extract`; the store tools are

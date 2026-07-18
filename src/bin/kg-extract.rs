@@ -164,7 +164,7 @@ struct FileConfig {
 
 /// Extract a knowledge graph from text.
 #[derive(Parser, Debug)]
-#[command(name = "kg-extract", version, about)]
+#[command(name = "kg-extract", version, about, after_help = concat!("Source: ", env!("PROJECT_SOURCE_PATH")))]
 struct Args {
     /// Config file path, or an inline JSON object (a value starting with '{').
     /// Defaults to ~/.kg-extract/config.json when present.
@@ -639,7 +639,8 @@ fn describe_value() -> serde_json::Value {
             "ladybug-import",
             "mermaid",
             "stats"
-        ]
+        ],
+        "source": env!("PROJECT_SOURCE_PATH")
     })
 }
 
@@ -655,6 +656,8 @@ fn print_describe(as_json: bool) -> anyhow::Result<()> {
         println!("  --dry-run         print the resolved plan without reading input or calling a backend");
         println!("  --json            machine-readable describe/dry-run output");
         println!("  -o json|jsonl|... extraction output format");
+        println!();
+        println!("Source: {}", env!("PROJECT_SOURCE_PATH"));
     }
     Ok(())
 }
