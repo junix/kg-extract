@@ -5,7 +5,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 os_suffix := if os() == "macos" { "macos" } else { "linux" }
 arch_suffix := if arch() == "aarch64" { "arm64" } else { "x86" }
 install_bin := env("SYNC_BIN_DIR", home_directory() / "sync" / (os_suffix + "-" + arch_suffix + "-bin"))
-target_dir := env("CARGO_TARGET_DIR", justfile_directory() / ".." / "target")
+target_dir := `cargo metadata --format-version 1 --no-deps | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])'`
 
 # 构建（含 llms 后端 + mcp server）
 build:
