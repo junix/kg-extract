@@ -2591,7 +2591,7 @@ dependencies = [
 [[package]]
 name = "llm-bill"
 version = "0.1.0"
-source = "git+https://github.com/junix/llm-bill.git#36c689b3a14c7b83351a317c977fa9952be11522"
+source = "git+https://github.com/junix/llm-bill.git#9083364b82ed0ebee438c0cf5275cacdeb8cd929"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2608,7 +2608,7 @@ dependencies = [
 [[package]]
 name = "llms"
 version = "0.1.0"
-source = "git+https://github.com/junix/llms-rs.git#5b5e8b15c6749ccd4748d2206e10ee57ab411b6a"
+source = "git+https://github.com/junix/llms-rs.git#ce4aa35fdf9a6c7a76943ff1b2f5af175f3c6180"
 dependencies = [
  "anyhow",
  "arboard",
@@ -2753,7 +2753,7 @@ dependencies = [
 [[package]]
 name = "model-info-rs"
 version = "0.1.0"
-source = "git+https://github.com/junix/model-info-rs.git#cc7a0793f6794dcf2188012835e2e90fd6754abd"
+source = "git+https://github.com/junix/model-info-rs.git#1dd8f1766f48b293425c139cbf5b334a1c5ec131"
 dependencies = [
  "clap",
  "dirs 6.0.0",
