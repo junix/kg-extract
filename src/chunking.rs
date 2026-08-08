@@ -8,6 +8,8 @@
 use crate::types::ChunkStrategy;
 use chonkie::{CharChunker, Chunker, RecursiveChunker, TiktokenTokenizer, TokenChunker};
 use core_types_rs::{BBox, CharSpan, LineSpan, PageSpan, SourceRange};
+use serde_json::Value;
+use std::collections::BTreeMap;
 
 /// A single segment of text plus its char offsets in the combined input.
 #[derive(Debug, Clone)]
@@ -21,6 +23,14 @@ pub struct Segment {
     /// pre-chunked input preserves every supplied range coordinate, including
     /// page and bbox.
     pub range: Option<SourceRange>,
+    /// Optional chunk title from pre-chunked input (kg-multimodal puts the
+    /// generated item name here). `None` for plain-text chunking. Chunk-aware
+    /// extractors stamp it onto the records extracted from this segment.
+    pub title: Option<String>,
+    /// Arbitrary chunk metadata from pre-chunked input (kg-multimodal's
+    /// `mm_*` provenance keys, chonkie's `token_count`, …). Empty for
+    /// plain-text chunking.
+    pub metadata: BTreeMap<String, Value>,
 }
 
 impl Segment {
@@ -117,6 +127,8 @@ pub fn segment(
                 start,
                 end,
                 range,
+                title: None,
+                metadata: BTreeMap::new(),
             }
         })
         .collect()
@@ -140,10 +152,11 @@ pub struct PreChunked {
 /// Each chunk needs a `text` field. Character offsets are read from
 /// `range.char_span.start`/`end` (protocol format); if absent, synthesized
 /// cumulatively so offsets stay monotonic. Line ranges are read from
-/// `range.line.start`/`end`; source file from `source_file`.
+/// `range.line.start`/`end`; source file from `source_file`. The optional
+/// `title` and `metadata` (a JSON object, e.g. kg-multimodal's `mm_*`
+/// provenance keys) are preserved on the segment so chunk-aware extractors
+/// can stamp them onto the records extracted from that chunk.
 pub fn parse_prechunked(input: &str) -> anyhow::Result<PreChunked> {
-    use serde_json::Value;
-
     let input = input.trim();
     if input.is_empty() {
         anyhow::bail!("no pre-chunked input (expected chonkie JSON or JSONL chunks)");
@@ -215,7 +228,9 @@ pub fn parse_prechunked(input: &str) -> anyhow::Result<PreChunked> {
 
         // `PreChunked` represents one source document. Reject conflicting
         // source labels instead of silently attributing every fact to the
-        // first chunk's file.
+        // first chunk's file — and say exactly which chunk conflicts and how
+        // to recover, so a multi-document producer (e.g. a kg-multimodal
+        // sidecar spanning several files) is fixable without guesswork.
         let chunk_source = v
             .get("source_file")
             .and_then(Value::as_str)
@@ -223,12 +238,33 @@ pub fn parse_prechunked(input: &str) -> anyhow::Result<PreChunked> {
         if let Some(chunk_source) = chunk_source {
             match source.as_deref() {
                 Some(existing) if existing != chunk_source => anyhow::bail!(
-                    "pre-chunked input mixes source files {existing:?} and {chunk_source:?}"
+                    "chunk {} has source_file {chunk_source:?} but earlier chunks came from \
+                     {existing:?}; kg-extract extracts one source document per run — split the \
+                     input by source_file and run once per document",
+                    i + 1
                 ),
                 Some(_) => {}
                 None => source = Some(chunk_source.to_string()),
             }
         }
+
+        // Optional per-chunk payload: a title (kg-multimodal's generated item
+        // name) and a free-form metadata object. Both are stamped onto the
+        // records the chunk-aware extractors derive from this chunk, so they
+        // reach protocol properties instead of being silently dropped.
+        let title = v
+            .get("title")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .filter(|s| !s.trim().is_empty());
+        let metadata = match v.get("metadata") {
+            None | Some(Value::Null) => BTreeMap::new(),
+            Some(Value::Object(obj)) => obj.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
+            Some(_) => anyhow::bail!(
+                "chunk {} has invalid metadata (expected a JSON object)",
+                i + 1
+            ),
+        };
 
         segments.push(Segment {
             content: text,
@@ -236,6 +272,8 @@ pub fn parse_prechunked(input: &str) -> anyhow::Result<PreChunked> {
             start,
             end,
             range: Some(range),
+            title,
+            metadata,
         });
     }
 
@@ -338,6 +376,29 @@ mod tests {
     }
 
     #[test]
+    fn prechunked_preserves_title_and_metadata() {
+        let input = r#"
+{"id":"tbl-1","text":"Revenue grew to $3.8M.","source_file":"doc.pdf","title":"q4_revenue","metadata":{"mm_kind":"table","mm_table_format":"html"}}
+{"id":"chnk_2","text":"Plain chunk."}
+"#;
+        let p = parse_prechunked(input).unwrap();
+        let s = &p.segments[0];
+        assert_eq!(s.title.as_deref(), Some("q4_revenue"));
+        assert_eq!(s.metadata.get("mm_kind").unwrap(), "table");
+        assert_eq!(s.metadata.get("mm_table_format").unwrap(), "html");
+        // A chunk without the optional payload stays empty, not an error.
+        assert_eq!(p.segments[1].title, None);
+        assert!(p.segments[1].metadata.is_empty());
+    }
+
+    #[test]
+    fn prechunked_rejects_non_object_metadata() {
+        let input = r#"{"text":"A","metadata":"not-an-object"}"#;
+        let error = parse_prechunked(input).unwrap_err().to_string();
+        assert!(error.contains("metadata"), "got: {error}");
+    }
+
+    #[test]
     fn prechunked_rejects_conflicting_source_files() {
         let input = r#"
 {"text":"A","source_file":"one.md"}
@@ -345,6 +406,9 @@ mod tests {
 "#;
         let error = parse_prechunked(input).unwrap_err().to_string();
         assert!(error.contains("one.md") && error.contains("two.md"));
+        // Actionable: names the offending chunk and how to recover.
+        assert!(error.contains("chunk 2"), "got: {error}");
+        assert!(error.contains("split the input by source_file"), "got: {error}");
     }
 
     #[test]

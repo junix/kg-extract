@@ -14,6 +14,12 @@
 //! the chunker already tracks — the model is never asked to count lines, so
 //! the ranges cannot be hallucinated. Granularity is therefore the chunk (or
 //! slice) that contained the mention, not the mention itself.
+//!
+//! A parallel chunk-level channel carries pre-chunked *payloads*: a chunk's
+//! optional `title`/`metadata` (e.g. kg-multimodal's `mm_*` provenance keys)
+//! is stamped onto every record extracted from that chunk under
+//! [`CHUNK_TITLE_KEY`] / [`CHUNK_METADATA_KEY`] (see [`stamp_chunk_metadata`]),
+//! so it survives the input boundary into protocol properties.
 
 use std::collections::HashMap;
 
@@ -24,6 +30,14 @@ use crate::types::KnowledgeGraph;
 
 /// Metadata key under which citation arrays live.
 pub const CITATIONS_KEY: &str = "citations";
+
+/// Metadata key under which a record's source-chunk title lives (pre-chunked
+/// input only; kg-multimodal chunks carry the generated item name here).
+pub const CHUNK_TITLE_KEY: &str = "chunk_title";
+
+/// Metadata key under which a record's source-chunk metadata object lives
+/// (pre-chunked input only — e.g. kg-multimodal's `mm_*` provenance keys).
+pub const CHUNK_METADATA_KEY: &str = "chunk_metadata";
 
 /// One provenance record: a document name (when known) plus its complete
 /// shared-protocol source range.
@@ -158,6 +172,47 @@ pub fn stamp_graph(kg: &mut KnowledgeGraph, citation: &Citation) {
     }
 }
 
+/// Attach a pre-chunked segment's `title`/`metadata` to one record's metadata
+/// map under [`CHUNK_TITLE_KEY`] / [`CHUNK_METADATA_KEY`]. This is the
+/// chunk-level provenance channel parallel to citations: chunk-aware
+/// extractors stamp the payload of the chunk a record was extracted from, so
+/// producer metadata (kg-multimodal's `mm_*` keys, the chunk title) survives
+/// into protocol properties instead of being dropped at the input boundary.
+/// A no-op for segments that carry neither (plain-text chunking).
+pub fn attach_chunk_metadata(metadata: &mut HashMap<String, Value>, segment: &crate::chunking::Segment) {
+    if let Some(title) = &segment.title {
+        metadata.insert(CHUNK_TITLE_KEY.to_string(), json!(title));
+    }
+    if !segment.metadata.is_empty() {
+        metadata.insert(
+            CHUNK_METADATA_KEY.to_string(),
+            Value::Object(
+                segment
+                    .metadata
+                    .iter()
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect(),
+            ),
+        );
+    }
+}
+
+/// Stamp a pre-chunked segment's title/metadata onto every entity and triple
+/// of `kg` — same coverage as [`stamp_graph`], endpoint snapshots included.
+pub fn stamp_chunk_metadata(kg: &mut KnowledgeGraph, segment: &crate::chunking::Segment) {
+    if segment.title.is_none() && segment.metadata.is_empty() {
+        return;
+    }
+    for e in kg.entities.values_mut() {
+        attach_chunk_metadata(&mut e.metadata, segment);
+    }
+    for t in kg.triples.iter_mut() {
+        attach_chunk_metadata(&mut t.metadata, segment);
+        attach_chunk_metadata(&mut t.subject.metadata, segment);
+        attach_chunk_metadata(&mut t.object.metadata, segment);
+    }
+}
+
 /// Stamp whole-document provenance onto every entity and triple of `kg`: one
 /// citation spanning line 1 through the last line of `text`. This is the
 /// convention used by single-shot engines (SchemaJson, ToolCall) that feed the
@@ -193,6 +248,73 @@ mod tests {
     fn line_range_of_empty_slice_cites_its_start_line() {
         let li = LineIndex::new("a\nb\nc");
         assert_eq!(li.line_range(2, 2), (2, 2));
+    }
+
+    #[test]
+    fn stamp_chunk_metadata_attaches_title_and_metadata_to_every_record() {
+        use crate::chunking::Segment;
+        use crate::types::{Entity, EntityType, Predicate, PredicateType, Triple};
+        use std::collections::BTreeMap;
+
+        let mut chunk_meta = BTreeMap::new();
+        chunk_meta.insert("mm_kind".to_string(), json!("table"));
+        let seg = Segment {
+            content: "Revenue grew.".into(),
+            index: 0,
+            start: 0,
+            end: 13,
+            range: None,
+            title: Some("q4_revenue".into()),
+            metadata: chunk_meta,
+        };
+
+        let mut kg = KnowledgeGraph::new();
+        kg.add_entity(Entity::new("e1", "Alpha", EntityType::Organization));
+        kg.add_triple(Triple::new(
+            Entity::new("e1", "Alpha", EntityType::Organization),
+            Predicate::new(PredicateType::RelatedTo),
+            Entity::new("e2", "Beta", EntityType::Technology),
+        ));
+        stamp_chunk_metadata(&mut kg, &seg);
+
+        let stored = kg.get_entity("e1").unwrap();
+        assert_eq!(stored.metadata[CHUNK_TITLE_KEY], json!("q4_revenue"));
+        assert_eq!(
+            stored.metadata[CHUNK_METADATA_KEY],
+            json!({"mm_kind": "table"})
+        );
+        assert_eq!(kg.triples[0].metadata[CHUNK_TITLE_KEY], json!("q4_revenue"));
+        // endpoint snapshots are stamped too (add_triple re-inserts them)
+        assert_eq!(
+            kg.triples[0].object.metadata[CHUNK_METADATA_KEY],
+            json!({"mm_kind": "table"})
+        );
+    }
+
+    #[test]
+    fn stamp_chunk_metadata_is_noop_without_payload() {
+        use crate::chunking::Segment;
+        use crate::types::{Entity, EntityType};
+        use std::collections::BTreeMap;
+
+        let seg = Segment {
+            content: "plain".into(),
+            index: 0,
+            start: 0,
+            end: 5,
+            range: None,
+            title: None,
+            metadata: BTreeMap::new(),
+        };
+        let mut kg = KnowledgeGraph::new();
+        kg.add_entity(Entity::new("e1", "Alpha", EntityType::Organization));
+        stamp_chunk_metadata(&mut kg, &seg);
+        assert!(!kg.get_entity("e1").unwrap().metadata.contains_key(CHUNK_TITLE_KEY));
+        assert!(!kg
+            .get_entity("e1")
+            .unwrap()
+            .metadata
+            .contains_key(CHUNK_METADATA_KEY));
     }
 
     #[test]

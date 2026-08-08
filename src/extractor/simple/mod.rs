@@ -279,6 +279,8 @@ impl Extractor for SimpleExtractor {
                     char_span: CharSpan::new(0, text.chars().count()),
                     ..SourceRange::default()
                 }),
+                title: None,
+                metadata: std::collections::BTreeMap::new(),
             }]
         };
 
@@ -297,7 +299,9 @@ impl Extractor for SimpleExtractor {
 
     /// Pre-chunked input: the given chunks ARE the segments — no re-chunking,
     /// no `min_segment_size` filtering. Provenance comes from the chunks' full
-    /// protocol ranges (chunks with only a char span are not stamped).
+    /// protocol ranges (chunks with only a char span are not stamped), and each
+    /// chunk's `title`/`metadata` payload is stamped onto the records extracted
+    /// from it (`chunk_title` / `chunk_metadata`).
     async fn extract_prechunked(&self, chunks: &[Segment]) -> anyhow::Result<ExtractionResponse> {
         if chunks.is_empty() {
             anyhow::bail!("No pre-chunked input provided");
@@ -316,19 +320,17 @@ impl SimpleExtractor {
         let max_conc = self.config.max_concurrency.max(1);
         let per_chunk: Vec<(Vec<ParsedResult>, KnowledgeGraph)> = stream::iter(chunks)
             .map(|seg| async move {
-                let result = self.extract_chunk(&seg.content).await;
-                match seg.evidence_range().cloned() {
-                    Some(range) => {
-                        let (prs, mut kg) = result;
-                        let cite = crate::citation::Citation::from_range(
-                            self.config.source_doc.clone(),
-                            range,
-                        );
-                        crate::citation::stamp_graph(&mut kg, &cite);
-                        (prs, kg)
-                    }
-                    None => result,
+                let (prs, mut kg) = self.extract_chunk(&seg.content).await;
+                if let Some(range) = seg.evidence_range().cloned() {
+                    let cite =
+                        crate::citation::Citation::from_range(self.config.source_doc.clone(), range);
+                    crate::citation::stamp_graph(&mut kg, &cite);
                 }
+                // Pre-chunked chunks may carry a title/metadata payload
+                // (kg-multimodal's mm_* provenance); stamp it alongside the
+                // citation so it survives into protocol properties.
+                crate::citation::stamp_chunk_metadata(&mut kg, &seg);
+                (prs, kg)
             })
             .buffered(max_conc)
             .collect()

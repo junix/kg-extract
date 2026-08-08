@@ -598,6 +598,8 @@ mod tests {
                     line: core_types_rs::LineSpan::new(1, 1),
                     ..core_types_rs::SourceRange::default()
                 }),
+                title: None,
+                metadata: std::collections::BTreeMap::new(),
             },
             Segment {
                 content: "It developed GPT-4.".into(),
@@ -608,6 +610,8 @@ mod tests {
                     line: core_types_rs::LineSpan::new(2, 2),
                     ..core_types_rs::SourceRange::default()
                 }),
+                title: None,
+                metadata: std::collections::BTreeMap::new(),
             },
         ];
         let out = ex.extract_prechunked(&chunks).await.unwrap();

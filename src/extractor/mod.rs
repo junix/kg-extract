@@ -51,10 +51,12 @@ pub trait Extractor {
     /// Extract from pre-chunked input (e.g. chonkie chunks parsed by
     /// [`crate::chunking::parse_prechunked`]). The chunking engines
     /// ([`SimpleExtractor`], [`AgenticExtractor`]) override this to consume the
-    /// chunks **as-is** instead of re-chunking; this default — for the
-    /// single-shot engines that never chunk ([`SchemaJsonExtractor`],
-    /// [`ToolCallExtractor`]) — joins the chunk texts and extracts over them
-    /// exactly as it would over plain-text input.
+    /// chunks **as-is** instead of re-chunking, stamping each chunk's evidence
+    /// range and its `title`/`metadata` payload onto the records derived from
+    /// it; this default — for the single-shot engines that never chunk
+    /// ([`SchemaJsonExtractor`], [`ToolCallExtractor`]) — joins the chunk texts
+    /// and extracts over them exactly as it would over plain-text input,
+    /// keeping document-level provenance only.
     async fn extract_prechunked(&self, chunks: &[Segment]) -> anyhow::Result<ExtractionResponse> {
         let text = chunks
             .iter()

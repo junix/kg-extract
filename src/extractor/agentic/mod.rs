@@ -136,6 +136,23 @@ fn stamp_slice_citations(parsed: &mut ParsedResult, cite: &crate::citation::Cita
     }
 }
 
+/// Stamp a slice's pre-chunked title/metadata payload onto every record it
+/// produced — the same coverage as [`stamp_slice_citations`]. No-op for
+/// plain-text slices, which carry neither.
+fn stamp_slice_chunk_metadata(parsed: &mut ParsedResult, seg: &Segment) {
+    if seg.title.is_none() && seg.metadata.is_empty() {
+        return;
+    }
+    for e in parsed.entities.values_mut() {
+        crate::citation::attach_chunk_metadata(&mut e.metadata, seg);
+    }
+    for t in parsed.triples.iter_mut() {
+        crate::citation::attach_chunk_metadata(&mut t.metadata, seg);
+        crate::citation::attach_chunk_metadata(&mut t.subject.metadata, seg);
+        crate::citation::attach_chunk_metadata(&mut t.object.metadata, seg);
+    }
+}
+
 /// Commit one slice's parse into the running accumulators without any schema
 /// filtering — the shared tail of the `SchemaPolicy::Off` and `Evolving` arms
 /// (both keep everything; Evolving additionally records new types first).
@@ -238,6 +255,8 @@ impl AgenticExtractor {
                     char_span: core_types_rs::CharSpan::new(0, text.chars().count()),
                     ..core_types_rs::SourceRange::default()
                 }),
+                title: None,
+                metadata: std::collections::BTreeMap::new(),
             }]
         }
     }
@@ -358,7 +377,8 @@ impl Extractor for AgenticExtractor {
     /// Pre-chunked input: the given chunks ARE the slices — no re-slicing, no
     /// `min_segment_size` filtering. The on-disk `document.md` the agent can
     /// grep is reconstructed by joining the chunks; provenance lines come from
-    /// the chunks' own metadata (chunks without it are simply not stamped).
+    /// the chunks' own metadata (chunks without it are simply not stamped), and
+    /// a chunk's `title`/`metadata` payload is stamped onto its records.
     async fn extract_prechunked(&self, chunks: &[Segment]) -> anyhow::Result<ExtractionResponse> {
         if chunks.is_empty() {
             anyhow::bail!("No pre-chunked input provided");
@@ -604,6 +624,7 @@ impl AgenticExtractor {
                     );
                     stamp_slice_citations(&mut parsed, &cite);
                 }
+                stamp_slice_chunk_metadata(&mut parsed, seg);
                 let parsed = parsed;
 
                 let f = match &policy {

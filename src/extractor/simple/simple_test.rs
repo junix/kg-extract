@@ -199,6 +199,8 @@ async fn prechunked_extracts_each_given_chunk_without_rechunking() {
             start: i * 13,
             end: (i + 1) * 13,
             range: None,
+            title: None,
+            metadata: std::collections::BTreeMap::new(),
         })
         .collect();
     let out = ex.extract_prechunked(&chunks).await.unwrap();
@@ -250,6 +252,8 @@ async fn prechunked_citations_use_chunk_metadata_lines() {
                 line: core_types_rs::LineSpan::new(5, 9),
                 ..core_types_rs::SourceRange::default()
             }),
+            title: None,
+            metadata: std::collections::BTreeMap::new(),
         },
         Segment {
             content: "Beta exists.".into(),
@@ -257,6 +261,8 @@ async fn prechunked_citations_use_chunk_metadata_lines() {
             start: 13,
             end: 25,
             range: None, // no metadata → no stamp
+            title: None,
+            metadata: std::collections::BTreeMap::new(),
         },
     ];
     let out = ex.extract_prechunked(&chunks).await.unwrap();
@@ -351,6 +357,73 @@ async fn prechunked_multimodal_range_survives_as_entity_and_relation_evidence() 
         let range = evidence.range.as_ref().expect("evidence must have a range");
         assert_eq!(range, &expected_range);
     }
+}
+
+/// The chunk title/metadata payload (kg-multimodal's `mm_*` provenance) must
+/// not be dropped at the input boundary: chunk-aware extraction stamps it onto
+/// every record derived from that chunk, so it surfaces as protocol properties.
+#[tokio::test]
+async fn prechunked_title_and_metadata_reach_protocol_properties() {
+    use core_types_rs::{CharSpan, Chunk, PageSpan, SourceRange};
+
+    use crate::chunking::parse_prechunked;
+    use crate::citation::{CHUNK_METADATA_KEY, CHUNK_TITLE_KEY};
+
+    let response = "(entity<|>OpenAI<|>organization<|>An AI lab.<|>)##\
+        (entity<|>GPT-4<|>technology<|>A language model.<|>)##\
+        (relationship<|>OpenAI<|>GPT-4<|>uses<|>OpenAI uses GPT-4.<|>0.9)##";
+    let backend = Arc::new(MockBackend::new(vec![response.into()]));
+    let chunk = Chunk {
+        id: Some("tbl-1".into()),
+        source_file: Some("doc.pdf".into()),
+        title: Some("q4_revenue".into()),
+        range: Some(SourceRange {
+            char_span: CharSpan::new(0, 18),
+            page: PageSpan::new(4, 4),
+            ..SourceRange::default()
+        }),
+        text: Some("OpenAI uses GPT-4.".into()),
+        metadata: [
+            ("mm_kind".to_string(), serde_json::json!("table")),
+            ("mm_table_format".to_string(), serde_json::json!("html")),
+        ]
+        .into_iter()
+        .collect(),
+        ..Chunk::default()
+    };
+    let chunks = parse_prechunked(&serde_json::to_string(&chunk).unwrap()).unwrap();
+    assert_eq!(chunks.segments[0].title.as_deref(), Some("q4_revenue"));
+
+    let mut cfg = SimpleExtractor::default_config();
+    cfg.max_concurrency = 1;
+    cfg.source_doc = chunks.source.clone();
+    let mut extractor = SimpleExtractor::with_config(backend, cfg);
+    extractor.max_gleanings = 0;
+
+    let extracted = extractor
+        .extract_prechunked(&chunks.segments)
+        .await
+        .unwrap()
+        .knowledge_graph
+        .to_kg_document();
+
+    let expected_meta = serde_json::json!({"mm_kind": "table", "mm_table_format": "html"});
+    assert_eq!(extracted.entities.len(), 2);
+    assert_eq!(extracted.relations.len(), 1);
+    for entity in &extracted.entities {
+        assert_eq!(
+            entity.properties[CHUNK_TITLE_KEY],
+            serde_json::json!("q4_revenue"),
+            "entity {} must carry the chunk title",
+            entity.label
+        );
+        assert_eq!(entity.properties[CHUNK_METADATA_KEY], expected_meta);
+    }
+    assert_eq!(
+        extracted.relations[0].properties[CHUNK_TITLE_KEY],
+        serde_json::json!("q4_revenue")
+    );
+    assert_eq!(extracted.relations[0].properties[CHUNK_METADATA_KEY], expected_meta);
 }
 
 /// End-to-end provenance: chunked extraction stamps every record with the
