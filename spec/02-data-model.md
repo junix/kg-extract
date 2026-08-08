@@ -78,9 +78,13 @@ Triple {
 }
 ```
 
-`to_tuple = (subject.id, predicate.output_type, object.id)` is the **dedup key**.
+`to_tuple = (subject.id, predicate.predicate_type.value, object.id)` is the
+**dedup key** — the middle component is the *normalized* predicate value, never
+the raw surface token, so `"uses"` and `"USES"` (or `"founded by"` vs
+`"FOUNDED_BY"`) collapse to one edge across chunks.
 Two triples with the same tuple are considered identical for deduplication.
-[T] (`graph::merge_dedups_identical_triples_within_other`)
+[T] (`graph::merge_dedups_identical_triples_within_other`,
+`graph::merge_dedups_surface_variant_predicates_across_chunks`)
 
 ### Predicate
 
@@ -182,18 +186,33 @@ Orthogonal to MergeStrategy. Decides which entities count as "the same":
 | Mode | Recognizes as same |
 |------|--------------------|
 | `off` *(default)* | exact case-insensitive label only |
-| `fuzzy` | + label normalized by: lowercase, non-alphanumeric→space, drop leading article, strip trailing corporate-suffix token; + near-identical (similarity ≥ 0.85 over Unicode chars) AND type-compatible, for normalized labels of length ≥ 6 |
+| `fuzzy` | + label normalized by: lowercase, non-alphanumeric→space, drop leading article, strip trailing corporate-suffix token; + near-identical (similarity ≥ 0.85 over Unicode chars) AND type-compatible, for normalized labels of length ≥ 6; + token-set overlap (see below) AND type-compatible |
 
 Normalization rules (observable): `"Open AI" → "open ai"`,
 `"Anthropic, PBC" → "anthropic"`, `"Google Inc." → "google"`,
 `"The New York Times" → "new york times"`, a bare suffix token (e.g. `"Inc"`)
 is **never** stripped to empty. [T] (`merger::normalize_label_strips_punctuation_articles_and_suffixes`)
 
-Fuzzy never fuses normalized labels shorter than 6 characters. Two types are
-compatible if equal or either is `Other`. On a tie the earliest-inserted
-entity wins (deterministic, independent of map iteration order).
+Fuzzy never fuses normalized labels shorter than 6 characters **via edit
+distance**. Two types are compatible if equal or either is `Other`. On a tie
+the earliest-inserted entity wins (deterministic, independent of map
+iteration order).
 [T] (`merger::coref_fuzzy_merges_normalized_variant_and_remaps_triples`,
 `merger::coref_fuzzy_merges_near_typo_but_respects_type_and_length`)
+
+The **token-set channel** catches surfaces edit distance cannot — reorderings,
+dropped/added qualifier tokens, and containment. Over the normalized token
+sets, a pair is coreferent when (a) the smaller set is fully contained in the
+larger **and has ≥ 2 tokens** (score 1.0 — single-token containment like
+`"Apple"` ⊂ `"Apple Store"` is rejected as too generic), or (b) the Jaccard
+similarity |∩|/|∪| is **≥ 0.6**. The channel has no length gate (short names
+cannot reach near-total token overlap accidentally) but keeps the
+type-compatibility gate. When both channels match, the higher score wins;
+ties still resolve to the earliest-inserted entity.
+[T] (`merger::token_set_similarity_subset_and_jaccard`,
+`merger::coref_fuzzy_token_set_merges_subset_and_jaccard_surfaces`,
+`merger::coref_fuzzy_token_set_respects_type_gate_and_short_names`,
+`merger::coref_fuzzy_token_set_is_deterministic_earliest_wins`)
 
 The corporate-suffix and leading-article token lists are
 **implementation-defined**; the contract is the normalization observable
@@ -207,6 +226,8 @@ Segment {
   index: int
   start, end: int                  // char offsets in the combined input
   range: SourceRange?              // char_span, line, page, bbox
+  title: string?                   // pre-chunked payload (kg-multimodal's item name)
+  metadata: map<string, json>      // pre-chunked payload (e.g. mm_* keys); empty for plain text
 }
 ```
 
@@ -214,13 +235,18 @@ Segment {
 **Rust source-breaking** API change for callers that construct `Segment`
 literals or access the old field. The pre-chunked JSON wire remains compatible:
 it already carries the optional protocol `range`, and adding optional page/bbox
-coordinates does not invalidate line-only inputs.
+coordinates does not invalidate line-only inputs. `title`/`metadata` are a
+later additive change with the same profile: struct literals need the new
+fields, the wire format only grew optional keys.
 
 Plain-text extraction uses the char offsets to derive a line span. Pre-chunked
 parsing retains the complete supplied range on the segment. When records are
 stamped, page/bbox selects the rich citation form and preserves that complete
 range; otherwise only the line span is serialized in the legacy form (the char
-span remains segment-local positioning data).
+span remains segment-local positioning data). The `title`/`metadata` payload is
+stamped alongside: chunk-aware engines attach it to every record extracted from
+that segment as the `chunk_title` / `chunk_metadata` metadata keys (§9.5),
+which the protocol projection passes through to properties.
 
 ## 8.9 Citation
 
@@ -273,3 +299,18 @@ duplicate provenance and silent user-data loss. [T]
 | `schema_dropped_types` | list of type names removed | schema-json (Fixed) |
 | `model` | model name | schema-json |
 | `type_normalization` | alias/fallback audit (present only when non-trivial) | CLI annotation |
+
+## 8.11 Community detection mapping (feature `community`)
+
+`to_community_graph` maps a `KnowledgeGraph` onto `kg_community::Graph`:
+entities become nodes in insertion order; **each triple becomes one undirected
+edge of weight 1.0, and edges are NOT deduplicated** — `kg-community` sums
+parallel edges, so N triples between the same pair act as an edge of weight N
+(KG edge multiplicity is a community-strength signal and must survive the
+adapter). Self-loops and triples with unregistered endpoints are skipped.
+`detect_communities*` returns a stable `entity_id → community` map;
+`communities_json` renders `{num_communities, communities: {"0": [ids…]}}`
+with ascending community keys and sorted member ids (deterministic).
+[T] (`community::multiplicity_produces_parallel_weighted_edges`,
+`community::multiplicity_weights_change_the_partition`,
+`community::communities_json_groups_members_by_community`)

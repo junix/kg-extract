@@ -48,7 +48,7 @@ contract. Rows MUST NOT be read as RFC 2119 promises.
 | ID | Feature | Surfaces | Maturity | Flag | Tests | Spec |
 |----|---------|----------|----------|------|-------|------|
 | M-01 | Four merge strategies | lib, cli | stable | `--merge-strategy` | merger tests | done → 02,03 |
-| M-02 | Fuzzy cross-chunk coreference | lib, cli | stable | `--coref` | coref_fuzzy_* | done → 02,03 |
+| M-02 | Fuzzy cross-chunk coreference (edit-distance + token-set channels) | lib, cli | stable | `--coref` | coref_fuzzy_*, token_set_* | done → 02,03 |
 | M-03 | LLM-synthesised description merge | lib, cli | stable | `--merge-strategy llm` | llm_strategy_synthesizes_* | done → 02,03 |
 | M-04 | Citation union on merge | lib | stable | — | citations_stamp_*_union_on_merge | done → 02,03 |
 
@@ -78,6 +78,13 @@ contract. Rows MUST NOT be read as RFC 2119 promises.
 | O-05 | LadybugDB import | cli | stable | `-o ladybug-import` | ladybug e2e scripts | partial → 04 |
 | O-06 | Mermaid | cli | stable | `-o mermaid` | (via mermaid emit) | done → 04 |
 | O-07 | stats | cli | stable | `-o stats` | (get_stats) | done → 04 |
+| O-08 | communities (label propagation, multiplicity-weighted) | cli | stable | `-o communities`, `--features community` | communities_json_*, print_response_communities_* | done → 02,04 |
+
+### Community detection
+
+| ID | Feature | Surfaces | Maturity | Flag | Tests | Spec |
+|----|---------|----------|----------|------|-------|------|
+| D-01 | KnowledgeGraph → kg-community adapter (multiplicity-weighted edges) | lib | stable | `--features community` | multiplicity_* | done → 02 |
 
 ### MCP server
 
@@ -109,7 +116,7 @@ contract. Rows MUST NOT be read as RFC 2119 promises.
 
 | Spec status | Count |
 |-------------|-------|
-| done | 26 |
+| done | 28 |
 | partial | 11 |
 | missing | 0 |
 | n/a | 0 |

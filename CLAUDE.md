@@ -12,9 +12,9 @@ MCP server (`kg-extract-mcp`).
 The repo uses a `justfile`; feature flags gate the heavy backends:
 
 ```bash
-just build          # cargo build --release --features "llms-backend mcp"
+just build          # cargo build --release --features "llms-backend mcp community"
 just test           # cargo test --features mcp
-just lint           # cargo clippy --all-targets --features "llms-backend mcp"
+just lint           # cargo clippy --all-targets --features "llms-backend mcp community"
 just install        # copies kg-extract + kg-extract-mcp to ~/sync/<os>-<arch>-bin/ (override with SYNC_BIN_DIR)
 ```
 
@@ -69,19 +69,25 @@ Key modules under `src/`:
   site (engines differ in fallback semantics).
 - `merger.rs` — dedup/merge of entities (lowercased label) and triples
   (`(subj_id, predicate, obj_id)`). Coref: exact → normalised (strips corp
-  suffixes/articles) → fuzzy edit-distance gated at `FUZZY_MIN_LEN=6` /
-  threshold `0.85`. `MergeStrategy`: `KeepExisting` (default) / `KeepIncoming` /
+  suffixes/articles) → two similarity channels under `CorefMode::Fuzzy`, both
+  gated on type compatibility: edit distance (`FUZZY_MIN_LEN=6` / threshold
+  `0.85`) and token-set (multi-token subset, or Jaccard ≥ 0.6; no length
+  gate). `MergeStrategy`: `KeepExisting` (default) / `KeepIncoming` /
   `FieldUnion` / `Llm`.
 - `chunking.rs` — thin layer over the sibling `chonkie` crate. Public `Segment`
   carries `range: Option<core_types_rs::SourceRange>` so pre-chunked char, line,
-  page, and bbox coordinates survive the extraction boundary.
+  page, and bbox coordinates survive the extraction boundary, plus the optional
+  pre-chunked `title`/`metadata` payload (kg-multimodal's `mm_*` keys).
 - `citation.rs` / `protocol.rs` — provenance. Legacy line-only entries remain
   `{doc, lines:[start,end]}`; entries with page/bbox use
   `{doc, range:SourceRange}`. `to_kg_document` promotes a fully recognized
   citation array to first-class `Evidence` and removes that internal key from
   protocol properties; malformed/foreign user values stay untouched.
   Plain-text line ranges are computed from chunker char offsets by our code;
-  the model is never asked to count lines.
+  the model is never asked to count lines. Pre-chunked `title`/`metadata`
+  payloads ride the same chunk→record stamping channel: chunk-aware engines
+  attach them as `chunk_title` / `chunk_metadata` metadata keys, which
+  `to_kg_document` passes through to protocol properties.
 - `template/` + `presets/` — extraction **templates/presets**: richer than a flat
   `Schema` (output structure + multilingual guideline + identifier conventions).
   `presets/**.yaml` are embedded into the binary via `include_dir`; load by
@@ -93,8 +99,12 @@ Key modules under `src/`:
   122/108 vocabulary; ADR-987 Step 5) — `types/entity.rs`/`predicate.rs` keep
   only the rich `Entity`/`Predicate` structs.
 - `community.rs` *(feature `community`)* — `KnowledgeGraph → kg_community::Graph`
-  adapter + `detect_communities*`. Wires the extraction output into the
-  (previously orphan) `kg-community` detectors (ADR-987 §D#2).
+  adapter + `detect_communities*`. Every triple becomes one weight-1.0 edge and
+  parallel edges are summed by the detectors, so triple multiplicity acts as
+  edge weight (do NOT reintroduce `Graph::from_edges` dedup here). CLI surface:
+  `-o communities` (label propagation → `community id → member ids` JSON).
+  Wires the extraction output into the (previously orphan) `kg-community`
+  detectors (ADR-987 §D#2).
 - `ladybug_export.rs` — export to the `graphdb-ladybug` graph store (e2e flows).
 
 ## CLI essentials
@@ -105,10 +115,12 @@ Key modules under `src/`:
 (`llms`|`agent`|`mock`), `--agent` (`minimaxcc`|`glmcc`|`mimocc`), `--chunker`
 (`recursive`|`char`|`token`), `--schema-mode`, `--schema`, `-f/--input-format`
 (`text`|`chunks` — chunk-aware Simple/Agentic consume supplied ranges as-is:
-page/bbox emits the complete rich range, line-only stays legacy;
+page/bbox emits the complete rich range, line-only stays legacy, and the
+chunk's `title`/`metadata` payload is stamped as `chunk_title`/`chunk_metadata`;
 SchemaJson/ToolCall join texts and retain only document-level provenance),
 `-o/--output`
-(`json`|`mermaid`|`node-link`|`stats`).
+(`json`|`jsonl`|`kg-protocol`|`node-link`|`ladybug-import`|`communities`|`mermaid`|`stats`;
+`communities` requires `--features community`).
 
 ## Conventions & gotchas
 
@@ -132,7 +144,9 @@ SchemaJson/ToolCall join texts and retain only document-level provenance),
 - **`Segment.lines` became `Segment.range`.** This is a Rust source-breaking
   public-struct change; update struct literals and field access. The accepted
   pre-chunked JSON remains wire-compatible because `range` and its optional
-  coordinates are protocol fields.
+  coordinates are protocol fields. `Segment` later also gained `title` /
+  `metadata` (the pre-chunked payload) — same story: struct literals need the
+  new fields, the wire format only grew optional keys.
 - **`Citation` now stores `range`, not public `start_line` / `end_line`, and is
   `PartialEq` but not `Eq`** because bbox coordinates are floating-point.
   `Citation::new(doc, start, end)` remains compatible for valid line ranges.

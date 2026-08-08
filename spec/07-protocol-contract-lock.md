@@ -16,6 +16,11 @@ Amendment log (append-only):
   one input chunk.
 - `VAL-KG-PROTOCOL-008` was added after review found that the first golden
   relation contradicted both its passive predicate and its evidence quote.
+- `VAL-KG-PROTOCOL-009` was added after review found that kg-extract's
+  pre-chunked input boundary silently discarded the protocol `Chunk`'s `title`
+  and `metadata` — the payload kg-multimodal produces (item name plus `mm_*`
+  provenance) was unreachable downstream, breaking the cross-package contract
+  documented in kg-multimodal's README.
 
 ## Validation Contract
 
@@ -58,3 +63,8 @@ Amendment log (append-only):
   - **Verify**: Parse the shared golden fixture and inspect its `DEVELOPED_BY` relation.
   - **Evidence**: Subject is the developed product (`entity_gpt4`) and object is the developer (`entity_openai`).
   - **Expected**: The fixture agrees with its quote, `GPT-4 DEVELOPED_BY OpenAI`.
+
+- [x] **VAL-KG-PROTOCOL-009 (BLOCKING)**: A pre-chunked `Chunk`'s `title` and `metadata` survive `kg-extract` and appear on emitted entity and relation properties.
+  - **Verify**: Feed one protocol `Chunk` carrying `title` and a `metadata` object (kg-multimodal's `mm_*` keys) through `SimpleExtractor::extract_prechunked`, then convert the resulting graph to `KgDocument`.
+  - **Evidence**: Every extracted record carries `chunk_title` and `chunk_metadata` in its protocol properties with the supplied values.
+  - **Expected**: The chunk-aware extraction path preserves the chunk payload; single-shot engines, which join chunks, are exempt per the document-level-provenance rule already stated for VAL-KG-PROTOCOL-007.

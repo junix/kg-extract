@@ -82,7 +82,7 @@ schema-mode = "open" / "fixed" / "evolving"
 merge-strat = "keep-existing" / "keep-incoming" / "field-union" / "llm"
 input-fmt   = "text" / "chunks"
 out-fmt     = "json" / "jsonl" / "kg-protocol" / "node-link"
-            / "ladybug-import" / "mermaid" / "stats"
+            / "ladybug-import" / "communities" / "mermaid" / "stats"
 ```
 
 Key flag contracts:
@@ -107,6 +107,7 @@ Key flag contracts:
 | `kg-protocol` | portable `KgDocument` (`schema_version`, `entities`, `relations`, `evidence`); relations reference entity ids; citations → first-class evidence ranges |
 | `node-link` | `{directed:true, nodes:[{id,label,…}], links:[{source,target,type,…}]}` — `source`/`target` reference node `id`s; no RDF `subject`/`object` keys leak |
 | `ladybug-import` | generic `KgEntity` node table + one relationship table per predicate; metadata stored as JSON strings |
+| `communities` | `{num_communities, communities: {"0": [entity_id, …], …}}` — label-propagation community detection over the multiplicity-weighted graph; community keys ascend from `"0"`, member ids sorted. Requires `--features community` (the value parses without it but the run fails with an actionable error, mirroring `--backend llms` without `llms-backend`) |
 | `mermaid` | `graph LR`; entity ids/labels cleaned of `[`/`]`; one `-->| label |` line per triple; fixed styling trailer |
 | `stats` | `{num_entities, num_triples, entity_types:{}, predicate_types:{}, num_segments_processed}` |
 
@@ -126,9 +127,28 @@ Each chunk **MUST** have a `text` field. Character offsets are read from
 `range.char_span.start`/`end`; if absent, synthesized cumulatively (monotonic).
 Line ranges come from `range.line.start`/`end` (1-based). Source file from
 top-level `source_file` (`"<stdin>"` treated as unknown). A chunk without a
-`text` field is an error; empty input and `[]` are errors.
+`text` field is an error; empty input and `[]` are errors. A non-object
+`metadata` is an error.
+
+One run **MUST** cover a single source document: conflicting non-empty
+`source_file` values are rejected with an actionable error naming the
+offending chunk index, both files, and the remedy (split the input by
+`source_file`, run once per document).
+
+The optional `title` (string) and `metadata` (JSON object — e.g.
+kg-multimodal's `mm_*` provenance keys) **MUST NOT** be dropped at the input
+boundary: the chunk-aware engines (Simple/Agentic) stamp them onto every
+record extracted from that chunk as the metadata keys `chunk_title` /
+`chunk_metadata`, which the protocol projection passes through to
+entity/relation properties. Single-shot engines (SchemaJson/ToolCall) join the
+chunk texts and therefore retain document-level provenance only — the
+per-chunk payload is not preserved there.
 [T] (`chunking::prechunked_parses_jsonl_with_metadata`,
-`chunking::prechunked_rejects_chunk_without_text_and_empty_input`)
+`chunking::prechunked_rejects_chunk_without_text_and_empty_input`,
+`chunking::prechunked_preserves_title_and_metadata`,
+`chunking::prechunked_rejects_non_object_metadata`,
+`chunking::prechunked_rejects_conflicting_source_files`,
+`simple::tests::prechunked_title_and_metadata_reach_protocol_properties`)
 
 ## 9.6 MCP server (`kg-extract-mcp`)
 

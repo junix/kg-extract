@@ -315,7 +315,8 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 | `--relation-gleaning` | simple/agentic: targeted rounds that re-question orphan entities to recover edges (0 = off) |
 | `--mock-tool-calls` | mock backend only: scripted tool calls for `-e toolcall` offline/e2e tests |
 | `-F, --input-format` | `text` (default) \| `chunks` — input is chonkie chunk JSON/JSONL, consumed without re-chunking |
-| `-o, --output` | `json` (default) \| `kg-protocol` \| `node-link` \| `ladybug-import` \| `mermaid` \| `stats` |
+| `--coref` | fuzzy cross-chunk coreference: normalized-label, edit-distance (≥6 chars, similarity ≥ 0.85), and token-set (multi-token subset / Jaccard ≥ 0.6) channels, all type-gated |
+| `-o, --output` | `json` (default) \| `jsonl` \| `kg-protocol` \| `node-link` \| `ladybug-import` \| `communities` \| `mermaid` \| `stats` |
 
 `-o kg-protocol` emits the portable `core-types-rs` `kg.protocol.v1` shape:
 entities and relations use open string vocabularies, relations reference entity
@@ -339,6 +340,31 @@ lbug /tmp/kg-doc query "MATCH (a:KgEntity)-[r:DEVELOPED_BY]->(b:KgEntity) RETURN
 The export uses one generic node table (`KgEntity`) and one relationship table
 per extracted predicate. Entity and relation metadata are stored as JSON strings
 so the import stays compatible with Ladybug's scalar property binding.
+
+### Community detection output
+
+`-o communities` (requires building with `--features community`) runs
+label-propagation community detection over the extracted graph and emits the
+community id → member entity ids mapping as deterministic JSON:
+
+```bash
+kg-extract -e schema-json -b agent --agent minimaxcc -f doc.md -o communities
+```
+
+```json
+{
+  "num_communities": 2,
+  "communities": { "0": ["entity_1a2b3c4d", "entity_5e6f7a8b"], "1": ["entity_9c8d7e6f"] }
+}
+```
+
+Edges are weighted by **triple multiplicity**: every triple contributes one
+weight-1.0 undirected edge between its endpoints and parallel edges are summed,
+so two entities linked by five triples bind more strongly than two linked by
+one. Community keys ascend from `"0"`; member ids are sorted, so the output is
+stable across runs. The library API lives in `kg_extract::community`
+(`to_community_graph`, `detect_communities`, `detect_communities_label_propagation`,
+`communities_json`).
 
 For a deterministic local smoke test that avoids live LLM calls:
 
@@ -394,22 +420,31 @@ whose trailing `{"truncated": ...}` metadata line is skipped), or the
 `{"chunks": [...]}` truncation wrapper. Each chunk needs a `text` field;
 `range.char_span` supplies char offsets (otherwise synthesized cumulatively),
 top-level `source_file` names the source, and optional `range.line/page/bbox`
-supplies evidence coordinates.
+supplies evidence coordinates. The optional `title` and `metadata` (a JSON
+object — e.g. kg-multimodal's `mm_*` provenance keys) are preserved and
+stamped onto every record the chunk-aware engines extract from that chunk as
+`metadata.chunk_title` / `metadata.chunk_metadata`, so they reach protocol
+properties; single-shot engines join the chunks and drop this per-chunk
+payload.
 
 One invocation represents one source document. If non-empty top-level
-`source_file` values disagree across chunks, parsing fails instead of
-misattributing every extracted fact to the first file.
+`source_file` values disagree across chunks, parsing fails — naming the
+offending chunk and both files, and advising to split the input by
+`source_file` — instead of misattributing every extracted fact to the first
+file.
 
 Engine behaviour:
 
 - **`simple` / `agentic`** (the chunk-aware engines): the given chunks ARE the
   chunks/slices — no internal segmentation, no `min_segment_size` filtering.
   `--chunker` and segment sizing are ignored. Records receive either the
-  chunk's rich page/bbox range or its legacy line span.
+  chunk's rich page/bbox range or its legacy line span, plus the chunk's
+  `title`/`metadata` payload as `chunk_title`/`chunk_metadata` when present.
 - **`schema-json` / `toolcall`** (single-shot engines): the chunk texts are
   joined (`\n\n`) and extracted in one call, exactly as for plain text. With
   more than one chunk, results have document-level provenance only; the engine
-  cannot truthfully attribute a result to one input chunk.
+  cannot truthfully attribute a result to one input chunk, so per-chunk ranges
+  and the title/metadata payload are not preserved.
 
 For `simple`/`agentic`, provenance comes from the protocol chunks themselves:
 top-level `source_file` names the cited document (the *original* file the

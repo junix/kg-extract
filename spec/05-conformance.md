@@ -98,7 +98,12 @@ Behaviors are grouped into clusters. `[T]` = covered by an existing test
 - E.4 `coref=off` keeps surface variants separate; `coref=fuzzy` collapses
      normalized variants and near-typo (length≥6, type-compatible) and remaps
      triples onto the canonical id. `[T]`
-- E.5 Fuzzy never fuses labels shorter than 6 chars. `[T]`
+- E.5 Fuzzy never fuses labels shorter than 6 chars via edit distance. `[T]`
+- E.6 The fuzzy token-set channel fuses multi-token containment
+     (`"New York"` ⊂ `"New York Times"`) and Jaccard ≥ 0.6 overlaps, keeps
+     incompatible types and single-token containment (`"Apple"` ⊂
+     `"Apple Store"`) apart, and resolves ties deterministically to the
+     earliest-inserted entity. `[T]`
 
 ### F. Simple engine specifics
 
@@ -147,6 +152,9 @@ Behaviors are grouped into clusters. `[T]` = covered by an existing test
      leak. `[T]`
 - J.2 `kg-protocol` lifts citations into first-class evidence ranges and
      carries `normalized_*_type` properties. `[T]`
+- J.3 `communities` emits `{num_communities, communities: {"0": [ids…]}}`
+     (deterministic); without `--features community` the value parses but the
+     run fails with an actionable error. `[T]`
 
 ### K. MCP KgStore
 
@@ -162,3 +170,10 @@ Behaviors are grouped into clusters. `[T]` = covered by an existing test
 > (in-tree, not read in detail for this pass). They are marked `[U]` here
 > pending an explicit Test↔DoD mapping pass; the contract statements above
 > are derived from the implementation and the README and are normative.
+
+### L. Community detection adapter
+
+- L.1 Every triple becomes one weight-1.0 undirected edge; parallel edges are
+     kept and summed by detectors, so triple multiplicity acts as edge weight. `[T]`
+- L.2 Multiplicity weights change the partition where a flat (deduped) graph
+     would not. `[T]`
