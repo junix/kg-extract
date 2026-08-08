@@ -81,7 +81,13 @@ impl MergeStrategy {
 /// (exact lowercased-label match only). `Fuzzy` additionally collapses surface
 /// variants of the same name — the main lever for cross-chunk coreference, where
 /// the same entity surfaces as `"OpenAI"`, `"Open AI"` and `"OpenAI, Inc."` in
-/// different segments and would otherwise fragment into three nodes.
+/// different segments and would otherwise fragment into three nodes. Fuzzy
+/// recognition runs three channels after the exact-label check: exact-normalised
+/// equality (case/punctuation/corporate suffixes/articles), a length-gated
+/// edit-distance similarity, and a token-set channel (multi-token subset
+/// containment or Jaccard ≥ 0.6) that catches reorderings and qualifier drops
+/// edit distance cannot (`"New York"` ⊂ `"New York Times"`). Every similarity
+/// channel is gated on type compatibility.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum CorefMode {
@@ -89,8 +95,10 @@ pub enum CorefMode {
     #[default]
     Off,
     /// Also merge labels that match after normalisation (case, punctuation,
-    /// corporate suffixes, articles) or that are near-identical (high
-    /// edit-distance similarity) and type-compatible.
+    /// corporate suffixes, articles), that are near-identical (high
+    /// edit-distance similarity, length-gated), or whose token sets overlap
+    /// almost completely (multi-token subset / high Jaccard) — always
+    /// type-compatible.
     Fuzzy,
 }
 

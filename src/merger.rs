@@ -24,6 +24,19 @@ const FUZZY_MIN_LEN: usize = 6;
 /// rather than wrongly fusing two distinct entities.
 const FUZZY_SIMILARITY_THRESHOLD: f64 = 0.85;
 
+/// Minimum token count of the *smaller* side for a pure subset match
+/// (`"new york"` ⊂ `"new york times"`). Single-token subsets are rejected:
+/// almost every long name contains some short generic token, so a bare
+/// one-token containment would fuse far too eagerly.
+const TOKEN_SET_MIN_SUBSET_TOKENS: usize = 2;
+
+/// Jaccard similarity (|∩| / |∪| over the normalized token sets) at or above
+/// which two labels are treated as the same entity. Set deliberately higher
+/// than typical fuzzy-token thresholds (~0.5): combined with the
+/// type-compatibility gate, the token-set channel — like edit distance —
+/// errs toward missing a merge rather than wrongly fusing distinct entities.
+const TOKEN_SET_JACCARD_THRESHOLD: f64 = 0.6;
+
 /// Corporate / legal suffix tokens stripped when normalising a label, so
 /// `"Anthropic"`, `"Anthropic PBC"` and `"Anthropic, Inc."` collapse to one.
 #[rustfmt::skip]
@@ -87,6 +100,31 @@ fn similarity(a: &str, b: &str) -> f64 {
     1.0 - levenshtein(a, b) as f64 / max as f64
 }
 
+/// Token-set similarity between two normalised labels, for surfaces that
+/// defeat edit distance: reorderings, dropped/added qualifier tokens, and
+/// containment (`"acme corporation"` ⊇ `"acme corp"` after suffix stripping
+/// leaves multi-token remainders). Returns `Some(score)` when the pair should
+/// be treated as coreferent — `1.0` for a conservative subset relation
+/// (smaller side has ≥ [`TOKEN_SET_MIN_SUBSET_TOKENS`] tokens), else the
+/// Jaccard score when it reaches [`TOKEN_SET_JACCARD_THRESHOLD`] — and `None`
+/// when neither holds. Empty token sets never match.
+fn token_set_similarity(a: &str, b: &str) -> Option<f64> {
+    let toks_a: std::collections::BTreeSet<&str> = a.split_whitespace().collect();
+    let toks_b: std::collections::BTreeSet<&str> = b.split_whitespace().collect();
+    if toks_a.is_empty() || toks_b.is_empty() {
+        return None;
+    }
+    let inter = toks_a.intersection(&toks_b).count();
+    let (small, large) = (toks_a.len().min(toks_b.len()), toks_a.len().max(toks_b.len()));
+    if inter == small && small >= TOKEN_SET_MIN_SUBSET_TOKENS {
+        // One label's tokens are fully contained in the other's.
+        return Some(1.0);
+    }
+    let union = small + large - inter;
+    let jaccard = inter as f64 / union as f64;
+    (jaccard >= TOKEN_SET_JACCARD_THRESHOLD).then_some(jaccard)
+}
+
 /// Two entity types may denote the same entity if they agree, or if either is
 /// the generic `Other` (a chunk that failed to type the entity must still be
 /// allowed to fuse with one that typed it).
@@ -138,7 +176,10 @@ impl DedupIndex {
 
     /// The id of an already-present entity judged identical to `entity`, or
     /// `None`. Exact lowercased label first; then (fuzzy only) exact-normalised,
-    /// then a type-compatible edit-distance match above the threshold.
+    /// then the type-compatible similarity scan: the edit-distance channel
+    /// (length-gated at [`FUZZY_MIN_LEN`]) plus the token-set channel
+    /// (subset / Jaccard, no length gate — it only fires on near-total token
+    /// overlap, which short names cannot reach accidentally).
     fn lookup(&self, g1: &KnowledgeGraph, entity: &Entity) -> Option<String> {
         if let Some(id) = self.label_to_id.get(&entity.label.to_lowercase()) {
             return Some(id.clone());
@@ -153,14 +194,8 @@ impl DedupIndex {
         if let Some(id) = self.norm_to_id.get(&n) {
             return Some(id.clone());
         }
-        if n.chars().count() < FUZZY_MIN_LEN {
-            return None;
-        }
         let mut best: Option<(f64, &str)> = None;
         for (cand, id) in &self.norms {
-            if cand.chars().count() < FUZZY_MIN_LEN {
-                continue;
-            }
             let compatible = g1
                 .entities
                 .get(id)
@@ -168,11 +203,25 @@ impl DedupIndex {
             if !compatible {
                 continue;
             }
-            let sim = similarity(&n, cand);
+            let edit = if n.chars().count() >= FUZZY_MIN_LEN
+                && cand.chars().count() >= FUZZY_MIN_LEN
+            {
+                let sim = similarity(&n, cand);
+                (sim >= FUZZY_SIMILARITY_THRESHOLD).then_some(sim)
+            } else {
+                None
+            };
+            let tokset = token_set_similarity(&n, cand);
+            let score = match (edit, tokset) {
+                (Some(a), Some(b)) => Some(a.max(b)),
+                (a, b) => a.or(b),
+            };
             // `>` (not `>=`) keeps the earliest-inserted entity on ties, so the
             // result is independent of HashMap iteration order.
-            if sim >= FUZZY_SIMILARITY_THRESHOLD && best.is_none_or(|(b, _)| sim > b) {
-                best = Some((sim, id));
+            if let Some(score) = score {
+                if best.is_none_or(|(b, _)| score > b) {
+                    best = Some((score, id));
+                }
             }
         }
         best.map(|(_, id)| id.to_string())
@@ -785,6 +834,133 @@ mod tests {
             CorefMode::Fuzzy,
         );
         assert_eq!(merged.entities.len(), 2, "short labels stay distinct");
+    }
+
+    #[test]
+    fn token_set_similarity_subset_and_jaccard() {
+        // Multi-token containment fuses.
+        assert_eq!(token_set_similarity("new york", "new york times"), Some(1.0));
+        // Non-subset token overlap reaches the Jaccard threshold (3 of 5).
+        let s = token_set_similarity("alpha beta gamma delta", "alpha beta gamma epsilon").unwrap();
+        assert!((s - 0.6).abs() < 1e-9);
+        // Single-token containment is rejected (too generic).
+        assert_eq!(token_set_similarity("apple", "apple store"), None);
+        // Disjoint token sets never match.
+        assert_eq!(token_set_similarity("acme", "globex"), None);
+    }
+
+    #[test]
+    fn coref_fuzzy_token_set_merges_subset_and_jaccard_surfaces() {
+        // Subset relation: "New York" ⊂ "New York Times" (the edit-distance
+        // channel cannot fuse these: similarity is only 0.62).
+        let mut g1 = KnowledgeGraph::new();
+        g1.add_entity(Entity::new("e1", "New York Times", EntityType::Organization));
+        let mut g2 = KnowledgeGraph::new();
+        g2.add_entity(Entity::new("e2", "New York", EntityType::Organization));
+        let merged = merge_with_deduplication_strategy_coref(
+            g1,
+            g2,
+            MergeStrategy::FieldUnion,
+            CorefMode::Fuzzy,
+        );
+        assert_eq!(merged.entities.len(), 1, "multi-token subset fuses");
+        assert!(merged.entities.contains_key("e1"));
+
+        // Token-overlap path: "CSAIL AI Lab" vs "CSAIL Lab" (subset: "csail lab"
+        // ⊂ "csail ai lab") — edit distance alone (0.75) cannot fuse these.
+        let mut g1 = KnowledgeGraph::new();
+        g1.add_entity(Entity::new("e1", "CSAIL AI Lab", EntityType::Organization));
+        let mut g2 = KnowledgeGraph::new();
+        g2.add_entity(Entity::new("e2", "CSAIL Lab", EntityType::Organization));
+        let merged = merge_with_deduplication_strategy_coref(
+            g1,
+            g2,
+            MergeStrategy::FieldUnion,
+            CorefMode::Fuzzy,
+        );
+        assert_eq!(merged.entities.len(), 1, "token-overlapping surfaces fuse");
+    }
+
+    #[test]
+    fn coref_fuzzy_token_set_respects_type_gate_and_short_names() {
+        // Same subset relation, but incompatible types (City vs Organization)
+        // must not fuse.
+        let mut g1 = KnowledgeGraph::new();
+        g1.add_entity(Entity::new("e1", "New York Times", EntityType::Organization));
+        let mut g2 = KnowledgeGraph::new();
+        g2.add_entity(Entity::new("e2", "New York", EntityType::City));
+        let merged = merge_with_deduplication_strategy_coref(
+            g1,
+            g2,
+            MergeStrategy::FieldUnion,
+            CorefMode::Fuzzy,
+        );
+        assert_eq!(merged.entities.len(), 2, "incompatible types stay apart");
+
+        // Single-token containment ("Apple" ⊂ "Apple Store") is too generic to
+        // fuse — and too dissimilar for edit distance.
+        let mut g3 = KnowledgeGraph::new();
+        g3.add_entity(Entity::new("e1", "Apple Store", EntityType::Organization));
+        let mut g4 = KnowledgeGraph::new();
+        g4.add_entity(Entity::new("e2", "Apple", EntityType::Organization));
+        let merged = merge_with_deduplication_strategy_coref(
+            g3,
+            g4,
+            MergeStrategy::FieldUnion,
+            CorefMode::Fuzzy,
+        );
+        assert_eq!(merged.entities.len(), 2, "one-token subset stays apart");
+    }
+
+    #[test]
+    fn coref_fuzzy_token_set_is_deterministic_earliest_wins() {
+        // "New York" is a subset of BOTH seeded labels; the tie must resolve
+        // deterministically to the earliest-inserted entity, on every run.
+        let build = || {
+            let mut g1 = KnowledgeGraph::new();
+            g1.add_entity(Entity::new("e1", "New York Times", EntityType::Organization));
+            g1.add_entity(Entity::new("e9", "New York Post", EntityType::Organization));
+            let mut g2 = KnowledgeGraph::new();
+            g2.add_entity(Entity::new("e2", "New York", EntityType::Organization));
+            merge_with_deduplication_strategy_coref(
+                g1,
+                g2,
+                MergeStrategy::FieldUnion,
+                CorefMode::Fuzzy,
+            )
+        };
+        let first = build();
+        assert_eq!(first.entities.len(), 2);
+        assert!(
+            first.entities.contains_key("e1") && first.entities.contains_key("e9"),
+            "incoming must fuse into the earliest-inserted candidate"
+        );
+        for _ in 0..8 {
+            let again = build();
+            assert_eq!(
+                again.entities.keys().collect::<Vec<_>>(),
+                first.entities.keys().collect::<Vec<_>>(),
+                "repeated merges must pick the same canonical entity"
+            );
+        }
+    }
+
+    #[test]
+    fn coref_fuzzy_merges_abbreviation_with_suffixed_form() {
+        // The motivating alias case: "ACME" and "Acme Corporation" normalize
+        // to the same token string and must collapse under Fuzzy.
+        let mut g1 = KnowledgeGraph::new();
+        g1.add_entity(Entity::new("e1", "Acme Corporation", EntityType::Organization));
+        let mut g2 = KnowledgeGraph::new();
+        g2.add_entity(Entity::new("e2", "ACME", EntityType::Organization));
+        let merged = merge_with_deduplication_strategy_coref(
+            g1,
+            g2,
+            MergeStrategy::FieldUnion,
+            CorefMode::Fuzzy,
+        );
+        assert_eq!(merged.entities.len(), 1);
+        assert!(merged.entities.contains_key("e1"));
     }
 
     #[tokio::test]
