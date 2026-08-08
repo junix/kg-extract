@@ -29,11 +29,17 @@ impl Triple {
         }
     }
 
-    /// `(subject_id, predicate_type_value, object_id)` — the dedup key.
+    /// `(subject_id, normalized_predicate_type_value, object_id)` — the dedup key.
+    ///
+    /// The middle component is the *normalized* `predicate_type.value()`, not the
+    /// raw surface token: `"uses"` and `"USES"` (or `"founded by"` vs
+    /// `"FOUNDED_BY"`) emitted by different chunks both resolve to `USES`, so
+    /// they must dedup to a single edge. `raw_type`/`label` remain on the
+    /// predicate for display and the normalization audit, but never reach the key.
     pub fn to_tuple(&self) -> (String, String, String) {
         (
             self.subject.id.clone(),
-            self.predicate.output_type(),
+            self.predicate.predicate_type.value().to_string(),
             self.object.id.clone(),
         )
     }
@@ -462,6 +468,70 @@ mod tests {
             1,
             "identical triples within `other` must dedup"
         );
+    }
+
+    #[test]
+    fn to_tuple_uses_normalized_predicate_type_not_raw_surface_form() {
+        // Same canonical predicate, different model-emitted surface tokens —
+        // the dedup key must collapse them.
+        let a = ent("e1", "A", None);
+        let b = ent("e2", "B", None);
+        let lower = Triple::new(
+            a.clone(),
+            Predicate::with_label(PredicateType::Uses, "uses"),
+            b.clone(),
+        );
+        let upper = Triple::new(a, Predicate::with_label(PredicateType::Uses, "USES"), b);
+        assert_eq!(lower.to_tuple(), upper.to_tuple());
+        assert_eq!(lower.to_tuple().1, "USES");
+    }
+
+    #[test]
+    fn merge_dedups_surface_variant_predicates_across_chunks() {
+        // Regression: chunk 1 emitted "uses", chunk 2 emitted "USES". The dedup
+        // key used the raw surface token, so both edges survived the merge.
+        let a = ent("e1", "A", None);
+        let b = ent("e2", "B", None);
+        let mut g = KnowledgeGraph::new();
+        g.add_triple(Triple::new(
+            a.clone(),
+            Predicate::with_label(PredicateType::Uses, "uses"),
+            b.clone(),
+        ));
+
+        let mut other = KnowledgeGraph::new();
+        other.add_triple(Triple::new(
+            a,
+            Predicate::with_label(PredicateType::Uses, "USES"),
+            b,
+        ));
+
+        g.merge(other);
+        assert_eq!(
+            g.triples.len(),
+            1,
+            "triples differing only in raw predicate surface form must dedup"
+        );
+    }
+
+    #[test]
+    fn merge_keeps_distinct_normalized_predicates() {
+        // Guard the other direction: same endpoints but different canonical
+        // predicates must NOT dedup.
+        let a = ent("e1", "A", None);
+        let b = ent("e2", "B", None);
+        let mut g = KnowledgeGraph::new();
+        g.add_triple(Triple::new(
+            a.clone(),
+            Predicate::with_label(PredicateType::Uses, "uses"),
+            b.clone(),
+        ));
+        g.add_triple(Triple::new(
+            a,
+            Predicate::with_label(PredicateType::DevelopedBy, "developed by"),
+            b,
+        ));
+        assert_eq!(g.triples.len(), 2);
     }
 
     #[test]
