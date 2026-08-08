@@ -7,9 +7,9 @@ arch_suffix := if arch() == "aarch64" { "arm64" } else { "x86" }
 install_bin := env("SYNC_BIN_DIR", home_directory() / "sync" / (os_suffix + "-" + arch_suffix + "-bin"))
 target_dir := `cargo metadata --format-version 1 --no-deps | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])'`
 
-# 构建（含 llms 后端 + mcp server）
+# 构建（含 llms 后端 + mcp server + 社区检测）
 build:
-    cargo build --release --features "llms-backend mcp"
+    cargo build --release --features "llms-backend mcp community"
 
 # 运行测试（含 mcp 工具与并发测试）
 test:
@@ -45,7 +45,7 @@ ladybug-eval-full-verify agent="minimaxcc" fixture="ladybug_eval":
 
 # Lint
 lint:
-    cargo clippy --all-targets --features "llms-backend mcp"
+    cargo clippy --all-targets --features "llms-backend mcp community"
 
 # 安装到 ~/sync/<os>-<arch>-bin/（含 kg-extract 与 kg-extract-mcp）
 install: build

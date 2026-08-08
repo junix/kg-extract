@@ -133,6 +133,9 @@ enum OutFmt {
     #[serde(rename = "ladybug-import")]
     #[value(name = "ladybug-import", alias = "lbug-import")]
     LadybugImport,
+    /// Community detection over the extracted graph (label propagation,
+    /// multiplicity-weighted). Requires building with `--features community`.
+    Communities,
     Mermaid,
     Stats,
 }
@@ -612,6 +615,7 @@ fn output_name(v: OutFmt) -> &'static str {
         OutFmt::KgProtocol => "kg-protocol",
         OutFmt::NodeLink => "node-link",
         OutFmt::LadybugImport => "ladybug-import",
+        OutFmt::Communities => "communities",
         OutFmt::Mermaid => "mermaid",
         OutFmt::Stats => "stats",
     }
@@ -637,6 +641,7 @@ fn describe_value() -> serde_json::Value {
             "kg-protocol",
             "node-link",
             "ladybug-import",
+            "communities",
             "mermaid",
             "stats"
         ],
@@ -714,7 +719,7 @@ fn print_dry_run(args: &Args, cfg: &Resolved, template_loaded: bool) -> anyhow::
 }
 
 /// Render the extracted graph in the requested output format to stdout. The
-/// seven formats are mutually-exclusive terminal printing, split out of `main`
+/// eight formats are mutually-exclusive terminal printing, split out of `main`
 /// so the dispatch arm-per-format complexity lives in one tested-by-wiring
 /// place rather than inflating main's cyclomatic complexity.
 fn print_response(fmt: OutFmt, response: &ExtractionResponse) -> anyhow::Result<()> {
@@ -767,8 +772,30 @@ fn print_response(fmt: OutFmt, response: &ExtractionResponse) -> anyhow::Result<
         }
         OutFmt::Mermaid => println!("{}", response.get_mermaid_code()),
         OutFmt::Stats => println!("{}", serde_json::to_string_pretty(&response.get_stats())?),
+        OutFmt::Communities => print_communities(response)?,
     }
     Ok(())
+}
+
+/// `-o communities`: label-propagation community detection over the extracted
+/// graph (multiplicity-weighted edges). Without the `community` feature the
+/// format exists but bails — mirroring how `--backend llms` behaves without
+/// `llms-backend`.
+#[cfg(feature = "community")]
+fn print_communities(response: &ExtractionResponse) -> anyhow::Result<()> {
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&kg_extract::community::communities_json(
+            &response.knowledge_graph
+        ))?
+    );
+    Ok(())
+}
+
+/// Without the `community` feature there is no detector to run.
+#[cfg(not(feature = "community"))]
+fn print_communities(_response: &ExtractionResponse) -> anyhow::Result<()> {
+    anyhow::bail!("the `communities` output format requires building with --features community")
 }
 
 #[tokio::main]

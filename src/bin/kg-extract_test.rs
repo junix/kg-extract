@@ -276,7 +276,7 @@ fn precedence_cli_flag_overrides_config() {
 
 // ---- print_response: every output-format arm must terminate Ok on a
 // populated response. The branches are pure printing; this locks the dispatch
-// wiring (no panic, no format mis-route) for all seven formats. ----
+// wiring (no panic, no format mis-route) for all eight formats. ----
 
 use kg_extract::types::{
     Entity, EntityType, ExtractionResponse, KnowledgeGraph, Predicate, PredicateType, Triple,
@@ -321,4 +321,34 @@ fn print_response_all_formats_return_ok() {
             "print_response must succeed for every output format"
         );
     }
+}
+
+#[cfg(feature = "community")]
+#[test]
+fn print_response_communities_returns_ok_with_feature() {
+    let r = populated_response();
+    assert!(print_response(OutFmt::Communities, &r).is_ok());
+}
+
+#[cfg(not(feature = "community"))]
+#[test]
+fn print_response_communities_bails_without_feature() {
+    // The `communities` format parses without the feature (so configs stay
+    // portable) but must refuse to run with an actionable error.
+    let r = populated_response();
+    let err = print_response(OutFmt::Communities, &r).unwrap_err();
+    assert!(
+        err.to_string().contains("--features community"),
+        "error must name the missing feature, got: {err}"
+    );
+}
+
+#[test]
+fn communities_output_format_parses_from_cli_and_config() {
+    let m = Args::command().get_matches_from(["kg-extract", "-o", "communities"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(matches!(args.output, OutFmt::Communities));
+
+    let cfg: FileConfig = serde_json::from_str(r#"{"output": "communities"}"#).unwrap();
+    assert!(matches!(cfg.output, Some(OutFmt::Communities)));
 }
