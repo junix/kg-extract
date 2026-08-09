@@ -1,4 +1,5 @@
 use super::*;
+use kg_extract::provider::parse_mock_tool_rounds;
 
 #[test]
 fn file_config_parses_full_object() {
@@ -475,4 +476,226 @@ fn print_response_communities_hierarchy_accepts_precomputed_summaries() {
         }]
     });
     assert!(print_response(OutFmt::CommunitiesHierarchy, &r, Some(&precomputed)).is_ok());
+}
+
+
+// ---- kg.provider/v1 subcommands + cli_spec render equivalence ----
+
+#[test]
+fn provider_subcommands_parse() {
+    let m = Args::command().get_matches_from(["kg-extract", "describe", "--json"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(matches!(
+        args.command,
+        Some(ProviderCommand::Describe { json: true })
+    ));
+
+    let m = Args::command().get_matches_from(["kg-extract", "available", "--json"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(matches!(
+        args.command,
+        Some(ProviderCommand::Available { json: true })
+    ));
+
+    let m = Args::command().get_matches_from([
+        "kg-extract",
+        "invoke",
+        "extract.entities_relations",
+        "--request",
+        "req.json",
+        "--artifacts-dir",
+        "/tmp/x",
+    ]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    match args.command {
+        Some(ProviderCommand::Invoke {
+            capability_id,
+            request,
+            artifacts_dir,
+        }) => {
+            assert_eq!(capability_id, "extract.entities_relations");
+            assert_eq!(request, "req.json");
+            assert_eq!(artifacts_dir.as_deref(), Some("/tmp/x"));
+        }
+        other => panic!("expected invoke subcommand, got {other:?}"),
+    }
+
+    // --request defaults to '-' (stdin).
+    let m = Args::command().get_matches_from(["kg-extract", "invoke", "detect.communities"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    match args.command {
+        Some(ProviderCommand::Invoke { request, .. }) => assert_eq!(request, "-"),
+        other => panic!("expected invoke subcommand, got {other:?}"),
+    }
+
+    // No subcommand → the classic extraction CLI still parses bare.
+    let m = Args::command().get_matches_from(["kg-extract", "-e", "simple", "-b", "mock"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(args.command.is_none());
+}
+
+/// Render an argv from a cli_spec + request, following the acme convention:
+/// `always ++ subcommand ++ positionals ++ flags(by order, tiebreak flag)`.
+/// Booleans emit when true; other kinds emit `flag value` when the field is
+/// present (`json` values are compact-encoded). This is the same walk the hub
+/// performs, so equivalence here means the hub renders a working argv.
+fn render_cli_spec(cli_spec: &serde_json::Value, request: &serde_json::Value) -> Vec<String> {
+    let mut argv: Vec<String> = vec!["kg-extract".to_string()];
+    let mut push_tokens = |key: &str| {
+        if let Some(tokens) = cli_spec[key].as_array() {
+            argv.extend(tokens.iter().filter_map(|t| t.as_str().map(str::to_string)));
+        }
+    };
+    push_tokens("always");
+    push_tokens("subcommand");
+    push_tokens("positionals");
+
+    let mut flags: Vec<&serde_json::Value> = cli_spec["flags"]
+        .as_array()
+        .map(|a| a.iter().collect())
+        .unwrap_or_default();
+    flags.sort_by(|a, b| {
+        a["order"]
+            .as_u64()
+            .cmp(&b["order"].as_u64())
+            .then_with(|| a["flag"].as_str().cmp(&b["flag"].as_str()))
+    });
+    for flag in flags {
+        let name = flag["name"].as_str().unwrap();
+        let token = flag["flag"].as_str().unwrap();
+        let Some(value) = request.get(name) else {
+            continue; // optional and absent → omitted
+        };
+        match flag["kind"].as_str().unwrap() {
+            "boolean" => {
+                if value.as_bool().unwrap_or(false) {
+                    argv.push(token.to_string());
+                }
+            }
+            "json" => {
+                argv.push(token.to_string());
+                argv.push(serde_json::to_string(value).unwrap());
+            }
+            _ => {
+                argv.push(token.to_string());
+                argv.push(match value {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                });
+            }
+        }
+    }
+    argv
+}
+
+#[test]
+fn extract_cli_spec_renders_argv_equivalent_to_direct_cli() {
+    let doc = kg_extract::provider::describe_document("0.0.0-test");
+    let cap = &doc["capabilities"][0];
+    assert_eq!(cap["capability_id"], "extract.entities_relations");
+
+    let request = serde_json::json!({
+        "text": "OpenAI developed GPT-4.",   // stdin-fed: no flag, no argv token
+        "engine": "schema-json",
+        "backend": "mock",
+        "chunker": "char",
+        "coref": true,
+        "canonical_direction": false,          // false → flag omitted
+        "max_rounds": 2,
+        "mock_response": "{\"entities\":{},\"relationships\":[]}"
+    });
+    let argv = render_cli_spec(&cap["cli_spec"], &request);
+
+    // `always` pins the kg-document artifact format first.
+    assert_eq!(&argv[1..3], &["-o", "kg-protocol"]);
+    let m = Args::command().get_matches_from(&argv);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(matches!(args.engine, Engine::SchemaJson));
+    assert!(matches!(args.backend, Backend::Mock));
+    assert!(matches!(args.chunker, Chunker::Char));
+    assert!(args.coref);
+    assert!(!args.canonical_direction);
+    assert_eq!(args.max_rounds, 2);
+    assert_eq!(
+        args.mock_response.as_deref(),
+        Some("{\"entities\":{},\"relationships\":[]}")
+    );
+    assert!(matches!(args.output, OutFmt::KgProtocol));
+    assert!(args.command.is_none(), "extract renders the flat-flag form");
+}
+
+#[test]
+fn extract_cli_spec_renders_full_surface_without_clap_errors() {
+    // Every cli_spec flag set at once must parse — this locks flag tokens
+    // (`--schema-mode` etc.) against the real clap surface.
+    let doc = kg_extract::provider::describe_document("0.0.0-test");
+    let cap = &doc["capabilities"][0];
+    let request = serde_json::json!({
+        "file": "doc.txt",
+        "input_format": "chunks",
+        "engine": "toolcall",
+        "backend": "agent",
+        "agent": "glmcc",
+        "model": "glm-5.1",
+        "chunker": "token",
+        "schema": "schema.json",
+        "schema_mode": "evolving",
+        "preset": "general/concept_graph",
+        "preset_file": "tpl.yaml",
+        "lang": "zh",
+        "max_rounds": 3,
+        "merge_strategy": "field-union",
+        "coref": true,
+        "canonical_direction": true,
+        "max_concurrency": 4,
+        "relation_gleaning": 2,
+        "mock_response": "canned",
+        "mock_tool_calls": [{"name": "finish", "arguments": {}}]
+    });
+    let argv = render_cli_spec(&cap["cli_spec"], &request);
+    let m = Args::command().get_matches_from(&argv);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(matches!(args.engine, Engine::Toolcall));
+    assert!(matches!(args.schema_mode, SchemaModeArg::Evolving));
+    assert!(matches!(args.merge_strategy, MergeStrategyArg::FieldUnion));
+    assert!(matches!(args.input_format, InputFormat::Chunks));
+    assert_eq!(args.agent, "glmcc");
+    assert_eq!(args.lang.as_deref(), Some("zh"));
+    assert_eq!(args.relation_gleaning, 2);
+}
+
+#[test]
+fn graph_in_cli_specs_render_invoke_argv_that_parses() {
+    let doc = kg_extract::provider::describe_document("0.0.0-test");
+    for cap in doc["capabilities"].as_array().unwrap()[1..].iter() {
+        let id = cap["capability_id"].as_str().unwrap();
+        let argv = render_cli_spec(&cap["cli_spec"], &serde_json::json!({}));
+        // ["kg-extract", "invoke", <id>, "--request", "-"]: subcommand tokens
+        // come from cli_spec, --request - is the rendered default... but the
+        // renderer only emits flags present in the request, so defaults that
+        // match clap's own default are safe to omit.
+        assert_eq!(&argv[1..3], &["invoke", id]);
+        let m = Args::command().get_matches_from(&argv);
+        let args = Args::from_arg_matches(&m).unwrap();
+        match args.command {
+            Some(ProviderCommand::Invoke {
+                capability_id,
+                request,
+                ..
+            }) => {
+                assert_eq!(capability_id, id);
+                assert_eq!(request, "-");
+            }
+            other => panic!("{id}: expected invoke subcommand, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn legacy_describe_points_at_provider_protocol() {
+    let value = describe_value();
+    assert!(value["supports"]["provider_protocol"]
+        .as_str()
+        .unwrap()
+        .contains("kg.provider/v1"));
 }

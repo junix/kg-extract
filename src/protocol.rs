@@ -195,6 +195,118 @@ fn lines_to_source_range(value: &Value) -> Option<SourceRange> {
     })
 }
 
+/// Keys [`to_kg_document`](KnowledgeGraph::to_kg_document) *derives* on export;
+/// on import they are re-derived from the resolved types, so the incoming
+/// values are dropped instead of round-tripped as user metadata.
+const DERIVED_ENTITY_PROPERTY: &str = "normalized_entity_type";
+const DERIVED_RELATION_PROPERTY: &str = "normalized_predicate_type";
+const DERIVED_PREDICATE_PROPERTY: &str = "predicate_metadata";
+
+/// Report of what [`KnowledgeGraph::from_kg_document`] could not carry over,
+/// surfaced as invoke diagnostics by the provider surface.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct ImportReport {
+    /// Relations dropped because an endpoint id is not a declared entity
+    /// (same dangling-drop rule as the extraction-time GraphBuilder).
+    pub dangling_relations: usize,
+    /// Evidence entries dropped because they carry no `range` (only ranged
+    /// evidence round-trips through the internal citation shape).
+    pub range_less_evidence: usize,
+}
+
+impl KnowledgeGraph {
+    /// Import a portable `kg.protocol.v1` document back into the extractor-domain
+    /// graph — the inverse of [`to_kg_document`](Self::to_kg_document), used by
+    /// the provider surface's graph-in/graph-out capabilities
+    /// (`detect.communities*`, `resolve.*`).
+    ///
+    /// Type tokens are re-resolved through `EntityType::resolve` /
+    /// `PredicateType::resolve` (exact → alias → OTHER fallback, same as the
+    /// engines) and the original token is kept as `raw_type`, so a
+    /// `from ∘ to` round trip re-emits the document's own tokens. Properties
+    /// become record metadata minus the derived `normalized_*` keys; ranged
+    /// evidence becomes internal citations (re-promoted on the next export).
+    /// Relations with dangling endpoints are dropped, matching the
+    /// extraction-time rule; drops are counted in the returned
+    /// [`ImportReport`], never silently ignored.
+    pub fn from_kg_document(doc: &KgDocument) -> (KnowledgeGraph, ImportReport) {
+        let mut report = ImportReport::default();
+        let mut kg = KnowledgeGraph::new();
+        kg.metadata = doc
+            .metadata
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect();
+        for e in &doc.entities {
+            let (entity_type, _) = crate::types::EntityType::resolve(&e.entity_type);
+            let mut entity = crate::types::Entity::new(e.id.clone(), e.label.clone(), entity_type)
+                .with_raw_type(e.entity_type.clone());
+            entity.confidence = e.confidence;
+            entity.description = e.description.clone();
+            entity.metadata = import_properties(
+                &e.properties,
+                &[DERIVED_ENTITY_PROPERTY],
+                &e.evidence,
+                &mut report,
+            );
+            kg.add_entity(entity);
+        }
+        for r in &doc.relations {
+            let (Some(subject), Some(object)) =
+                (kg.get_entity(&r.subject), kg.get_entity(&r.object))
+            else {
+                report.dangling_relations += 1;
+                continue;
+            };
+            let (subject, object) = (subject.clone(), object.clone());
+            let (predicate_type, _) = crate::types::PredicateType::resolve(&r.predicate);
+            let mut predicate = crate::types::Predicate::with_label(
+                predicate_type,
+                r.label.clone().unwrap_or_else(|| r.predicate.clone()),
+            );
+            predicate.raw_type = Some(r.predicate.clone());
+            if let Some(Value::Object(map)) = r.properties.get(DERIVED_PREDICATE_PROPERTY) {
+                predicate.metadata = map.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
+            }
+            let mut triple = Triple::new(subject, predicate, object);
+            triple.confidence = r.confidence;
+            triple.metadata = import_properties(
+                &r.properties,
+                &[DERIVED_RELATION_PROPERTY, DERIVED_PREDICATE_PROPERTY],
+                &r.evidence,
+                &mut report,
+            );
+            kg.add_triple(triple);
+        }
+        (kg, report)
+    }
+}
+
+/// Properties → record metadata: derived keys skipped, ranged evidence folded
+/// in as internal citations (deduplicated by [`attach_citation`]).
+fn import_properties(
+    properties: &BTreeMap<String, Value>,
+    derived: &[&str],
+    evidence: &[KgEvidence],
+    report: &mut ImportReport,
+) -> HashMap<String, Value> {
+    let mut metadata: HashMap<String, Value> = properties
+        .iter()
+        .filter(|(k, _)| !derived.contains(&k.as_str()))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    for ev in evidence {
+        match &ev.range {
+            Some(range) => crate::citation::attach_citation(
+                &mut metadata,
+                &crate::citation::Citation::from_range(ev.source_file.clone(), range.clone()),
+            ),
+            None => report.range_less_evidence += 1,
+        }
+    }
+    metadata
+}
+
 #[cfg(test)]
 mod tests {
     use core_types_rs::KG_PROTOCOL_VERSION;
@@ -345,5 +457,86 @@ mod tests {
 
         assert!(doc.entities[0].evidence.is_empty());
         assert_eq!(doc.entities[0].properties[CITATIONS_KEY], foreign);
+    }
+
+    #[test]
+    fn from_kg_document_round_trip_preserves_records_and_tokens() {
+        let mut openai = Entity::new("entity_openai", "OpenAI", EntityType::Organization);
+        openai.confidence = Some(0.9);
+        openai.description = Some("An AI research lab.".into());
+        attach_citation(
+            &mut openai.metadata,
+            &Citation::new(Some("doc.md".into()), 3, 5),
+        );
+        let gpt4 = Entity::new("entity_gpt4", "GPT-4", EntityType::Technology);
+        let triple = Triple::new(
+            gpt4.clone(),
+            Predicate::with_label(PredicateType::DevelopedBy, "developed by"),
+            openai.clone(),
+        );
+
+        let mut kg = KnowledgeGraph::new();
+        kg.add_entity(openai);
+        kg.add_entity(gpt4);
+        kg.add_triple(triple);
+
+        let (imported, report) = KnowledgeGraph::from_kg_document(&kg.to_kg_document());
+        assert_eq!(report, crate::protocol::ImportReport::default());
+        assert_eq!(imported.entities.len(), 2);
+        assert_eq!(imported.triples.len(), 1);
+
+        // Round-trip through the export again: tokens, confidence and evidence
+        // ranges survive the detour through the internal citation shape.
+        let doc = imported.to_kg_document();
+        assert_eq!(doc.entities[0].entity_type, "ORGANIZATION");
+        assert_eq!(doc.entities[0].confidence, Some(0.9));
+        assert_eq!(
+            doc.entities[0].evidence[0]
+                .range
+                .as_ref()
+                .unwrap()
+                .line
+                .unwrap()
+                .start,
+            3
+        );
+        assert_eq!(doc.relations[0].predicate, "developed by");
+        assert_eq!(
+            doc.relations[0].properties["normalized_predicate_type"],
+            json!("DEVELOPED_BY")
+        );
+    }
+
+    #[test]
+    fn from_kg_document_drops_dangling_relations_with_a_count() {
+        let doc: core_types_rs::KgDocument = serde_json::from_value(json!({
+            "schema_version": "kg.protocol.v1",
+            "entities": [{"id": "a", "label": "A", "entity_type": "ORGANIZATION"}],
+            "relations": [
+                {"subject": "a", "predicate": "USES", "object": "ghost"},
+                {"subject": "ghost", "predicate": "USES", "object": "a"}
+            ]
+        }))
+        .unwrap();
+        let (kg, report) = KnowledgeGraph::from_kg_document(&doc);
+        assert_eq!(kg.entities.len(), 1);
+        assert!(kg.triples.is_empty());
+        assert_eq!(report.dangling_relations, 2);
+    }
+
+    #[test]
+    fn from_kg_document_counts_range_less_evidence() {
+        let doc: core_types_rs::KgDocument = serde_json::from_value(json!({
+            "schema_version": "kg.protocol.v1",
+            "entities": [{
+                "id": "a", "label": "A", "entity_type": "ORGANIZATION",
+                "evidence": [{"quote": "no range here"}]
+            }],
+            "relations": []
+        }))
+        .unwrap();
+        let (kg, report) = KnowledgeGraph::from_kg_document(&doc);
+        assert_eq!(kg.entities.len(), 1);
+        assert_eq!(report.range_less_evidence, 1);
     }
 }

@@ -45,6 +45,7 @@ pub mod mcp;
 pub mod merger;
 pub mod parser;
 pub mod protocol;
+pub mod provider;
 pub mod template;
 pub mod types;
 

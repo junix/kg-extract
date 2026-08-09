@@ -16,9 +16,7 @@ use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser, ValueEnum};
 use serde::Deserialize;
 use serde_json::json;
 
-use kg_extract::backend::{
-    LlmBackend, MockBackend, PiAgentBackend, SdkAgentBackend, ToolInvocation,
-};
+use kg_extract::backend::LlmBackend;
 use kg_extract::extractor::{
     AgenticExtractor, Extractor, SchemaJsonExtractor, SchemaMode, SimpleExtractor,
     ToolCallExtractor,
@@ -312,6 +310,48 @@ struct Args {
     /// Machine-readable JSON for --describe and --dry-run only.
     #[arg(long)]
     json: bool,
+
+    /// kg.provider/v1 protocol surface for capability hubs (describe /
+    /// available / invoke). Absent = the normal extraction CLI above.
+    #[command(subcommand)]
+    command: Option<ProviderCommand>,
+}
+
+/// kg.provider/v1 subcommands — the machine-facing contract a capability hub
+/// (kg-acme) consumes. Distinct from the human-oriented `--describe` flag:
+/// these emit the frozen protocol shapes.
+#[derive(clap::Subcommand, Debug)]
+enum ProviderCommand {
+    /// Print the kg.provider/v1 manifest: provider identity, capabilities with
+    /// input_schema / side_effects / output, and per-capability cli_spec.
+    Describe {
+        /// Machine-readable JSON (exactly one JSON document — the form hubs consume).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Probe backend/feature availability (read-only: env vars, PATH, compiled
+    /// features; never a network call). The exit code is always 0; misses are
+    /// reported inside the JSON.
+    Available {
+        /// Machine-readable JSON (the form hubs consume).
+        #[arg(long)]
+        json: bool,
+    },
+    /// Invoke one capability with a JSON request and print exactly one
+    /// kg.execution/v1 envelope on stdout (logs go to stderr). Errors set
+    /// status=error with a machine-readable code and exit non-zero.
+    Invoke {
+        /// Stable capability id from `describe --json`
+        /// (e.g. extract.entities_relations, detect.communities).
+        capability_id: String,
+        /// Request JSON file, or '-' to read the request from stdin.
+        #[arg(long, default_value = "-")]
+        request: String,
+        /// Directory for output artifacts (default: a fresh temp dir; the
+        /// envelope's artifacts[].path points into it).
+        #[arg(long)]
+        artifacts_dir: Option<String>,
+    },
 }
 
 /// Resolved settings after merging CLI flags over the config file.
@@ -469,93 +509,14 @@ fn make_backend(
     mock_response: Option<&str>,
     mock_tool_calls: Option<&str>,
 ) -> anyhow::Result<Arc<dyn LlmBackend>> {
-    match backend {
-        Backend::Agent => {
-            // pi-agent (from pi-rs) has a different CLI contract than the
-            // Claude-Code wrappers, so it gets its own backend. Everything else
-            // is driven through the structured stream-json SDK.
-            if PiAgentBackend::accepts(agent) {
-                return Ok(Arc::new(PiAgentBackend::new()));
-            }
-            Ok(Arc::new(SdkAgentBackend::for_agent(agent)?))
-        }
-        Backend::Mock => {
-            let resp = mock_response.unwrap_or_default().to_string();
-            let mock = MockBackend::single(resp);
-            if let Some(tool_calls) = mock_tool_calls {
-                Ok(Arc::new(
-                    mock.with_tool_rounds(parse_mock_tool_rounds(tool_calls)?),
-                ))
-            } else {
-                Ok(Arc::new(mock))
-            }
-        }
-        Backend::Llms => {
-            #[cfg(feature = "llms-backend")]
-            {
-                Ok(Arc::new(kg_extract::backend::LlmsBackend::new()))
-            }
-            #[cfg(not(feature = "llms-backend"))]
-            {
-                anyhow::bail!(
-                    "the `llms` backend requires building with --features llms-backend; \
-                     use --backend agent or --backend mock instead"
-                )
-            }
-        }
-    }
-}
-
-#[derive(Deserialize)]
-struct RawToolCall {
-    #[serde(default)]
-    id: Option<String>,
-    name: String,
-    #[serde(default, alias = "args")]
-    arguments: serde_json::Value,
-}
-
-fn parse_mock_tool_rounds(input: &str) -> anyhow::Result<Vec<Vec<ToolInvocation>>> {
-    let raw = if input.trim_start().starts_with('[') {
-        input.to_string()
-    } else {
-        let path = expand_tilde(input);
-        std::fs::read_to_string(&path)
-            .with_context(|| format!("reading --mock-tool-calls {}", path.display()))?
-    };
-    let value: serde_json::Value =
-        serde_json::from_str(&raw).context("parsing --mock-tool-calls JSON")?;
-    let rounds = if value
-        .as_array()
-        .and_then(|a| a.first())
-        .is_some_and(|first| first.is_array())
-    {
-        serde_json::from_value::<Vec<Vec<RawToolCall>>>(value)?
-            .into_iter()
-            .enumerate()
-            .map(|(round_idx, round)| raw_round_to_invocations(round_idx, round))
-            .collect()
-    } else {
-        vec![raw_round_to_invocations(
-            0,
-            serde_json::from_value::<Vec<RawToolCall>>(value)?,
-        )]
-    };
-    Ok(rounds)
-}
-
-fn raw_round_to_invocations(round_idx: usize, calls: Vec<RawToolCall>) -> Vec<ToolInvocation> {
-    calls
-        .into_iter()
-        .enumerate()
-        .map(|(call_idx, call)| ToolInvocation {
-            id: call
-                .id
-                .unwrap_or_else(|| format!("mock_{round_idx}_{call_idx}")),
-            name: call.name,
-            arguments: call.arguments,
-        })
-        .collect()
+    // Construction lives in the provider module so `invoke` resolves backends
+    // exactly the way the CLI does (single source of truth).
+    kg_extract::provider::make_backend(
+        backend_name(backend),
+        agent,
+        mock_response,
+        mock_tool_calls,
+    )
 }
 
 /// Resolve a rich template from `--preset-file` (a user YAML, takes precedence)
@@ -660,7 +621,8 @@ fn describe_value() -> serde_json::Value {
         "supports": {
             "describe": true,
             "json": "use --json with --describe or --dry-run; extraction JSON is selected with -o json/jsonl/kg-protocol/node-link/ladybug-import/stats",
-            "dry_run": "prints the resolved extraction plan without reading input or calling a backend"
+            "dry_run": "prints the resolved extraction plan without reading input or calling a backend",
+            "provider_protocol": "kg.provider/v1 for capability hubs: `kg-extract describe --json` (manifest + cli_spec), `available --json`, `invoke <capability_id> --request -`"
         },
         "examples": [
             "kg-extract --describe --json",
@@ -953,10 +915,107 @@ async fn summarize_for_output(
     Ok(None)
 }
 
+/// kg.provider/v1 subcommand dispatch. `describe`/`available` print exactly
+/// one JSON document with `--json` (a human summary otherwise); `invoke`
+/// prints exactly one kg.execution/v1 envelope and exits non-zero when its
+/// status is `error`. `available` never fails: the exit code stays 0.
+async fn run_provider_command(command: &ProviderCommand) -> anyhow::Result<()> {
+    match command {
+        ProviderCommand::Describe { json } => {
+            let doc = kg_extract::provider::describe_document(env!("CARGO_PKG_VERSION"));
+            if *json {
+                println!("{}", serde_json::to_string(&doc)?);
+            } else {
+                println!("{} {}", doc["provider"]["id"], doc["provider"]["version"]);
+                println!("  {}", doc["provider"]["description"]);
+                println!();
+                println!("Protocol: {} (versions {:?})", doc["protocol"], doc["protocol_versions"]);
+                println!("Capabilities:");
+                for cap in doc["capabilities"].as_array().into_iter().flatten() {
+                    let side_effects = cap["side_effects"]
+                        .as_array()
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|v| v.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        })
+                        .filter(|s| !s.is_empty())
+                        .unwrap_or_else(|| "none".into());
+                    println!(
+                        "  {:32} {} (side effects: {})",
+                        cap["capability_id"], cap["title"], side_effects
+                    );
+                }
+                println!();
+                println!("Run with --json for the machine-readable manifest.");
+            }
+            Ok(())
+        }
+        ProviderCommand::Available { json } => {
+            let report = kg_extract::provider::available_report();
+            if *json {
+                println!("{}", serde_json::to_string(&report)?);
+            } else {
+                println!("available: {}", report["available"]);
+                for entry in report["ready"].as_array().into_iter().flatten() {
+                    println!("  ready   {} ({})", entry["name"], entry["kind"]);
+                }
+                for entry in report["missing"].as_array().into_iter().flatten() {
+                    println!("  missing {} ({})", entry["name"], entry["kind"]);
+                }
+            }
+            Ok(())
+        }
+        ProviderCommand::Invoke {
+            capability_id,
+            request,
+            artifacts_dir,
+        } => {
+            let raw = match request.as_str() {
+                "-" => {
+                    let mut s = String::new();
+                    std::io::stdin().read_to_string(&mut s)?;
+                    s
+                }
+                path => {
+                    let path = expand_tilde(path);
+                    std::fs::read_to_string(&path).with_context(|| {
+                        format!("reading --request file {}", path.display())
+                    })?
+                }
+            };
+            let outcome = kg_extract::provider::invoke(
+                capability_id,
+                &raw,
+                artifacts_dir.as_deref().map(PathBuf::from).as_deref(),
+            )
+            .await;
+            println!("{}", serde_json::to_string(&outcome.envelope)?);
+            if !outcome.ok {
+                // The envelope already carries the machine-readable error;
+                // mirror it on stderr for humans and signal failure via code.
+                if let Some(error) = outcome.envelope.get("error") {
+                    eprintln!(
+                        "invoke {} failed: {} ({})",
+                        capability_id, error["message"], error["code"]
+                    );
+                }
+                std::process::exit(1);
+            }
+            Ok(())
+        }
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let matches = Args::command().get_matches();
     let args = Args::from_arg_matches(&matches)?;
+
+    if let Some(command) = &args.command {
+        return run_provider_command(command).await;
+    }
 
     if args.describe {
         print_describe(args.json)?;
