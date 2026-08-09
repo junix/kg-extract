@@ -168,11 +168,13 @@ mod tests {
     }
 
     #[test]
-    fn kg_vocab_v3_parse_semantics() {
+    fn kg_vocab_v4_parse_semantics() {
         // kg-vocab v2 (`kg.vocab.v2`) intentionally changed loose predicate
-        // parsing, and v3 (`kg.vocab.v3`) refined it again — these assertions
-        // pin the current upstream behaviour:
-        assert_eq!(kg_vocab::VOCAB_VERSION, "kg.vocab.v3");
+        // parsing, v3 (`kg.vocab.v3`) refined it again, and v4 (`kg.vocab.v4`)
+        // widened the curated disambiguation table (4 → 67 entries) from a
+        // tie-only pin to a general curated surface-form mapping — these
+        // assertions pin the current upstream behaviour:
+        assert_eq!(kg_vocab::VOCAB_VERSION, "kg.vocab.v4");
         // Inputs normalising to <3 chars fall back without fuzzy matching
         // (v1 aliased "in" to LOCATED_IN).
         assert_eq!(
