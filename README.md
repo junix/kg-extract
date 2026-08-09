@@ -316,7 +316,8 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 | `--mock-tool-calls` | mock backend only: scripted tool calls for `-e toolcall` offline/e2e tests |
 | `-F, --input-format` | `text` (default) \| `chunks` — input is chonkie chunk JSON/JSONL, consumed without re-chunking |
 | `--coref` | fuzzy cross-chunk coreference: normalized-label, edit-distance (≥6 chars, similarity ≥ 0.85), and token-set (multi-token subset / Jaccard ≥ 0.6) channels, all type-gated |
-| `-o, --output` | `json` (default) \| `jsonl` \| `kg-protocol` \| `node-link` \| `ladybug-import` \| `communities` \| `mermaid` \| `stats` |
+| `--community-summaries` | with `-o communities` / `-o communities-hierarchy`: one backend call per community (per level) generates a GraphRAG-style `{name, summary}` report merged into the community JSON; a failed community degrades to null fields with a stderr warning |
+| `-o, --output` | `json` (default) \| `jsonl` \| `kg-protocol` \| `node-link` \| `ladybug-import` \| `communities` \| `communities-hierarchy` \| `mermaid` \| `stats` |
 
 `-o kg-protocol` emits the portable `core-types-rs` `kg.protocol.v1` shape:
 entities and relations use open string vocabularies, relations reference entity
@@ -354,17 +355,87 @@ kg-extract -e schema-json -b agent --agent minimaxcc -f doc.md -o communities
 ```json
 {
   "num_communities": 2,
+  "quality": null,
   "communities": { "0": ["entity_1a2b3c4d", "entity_5e6f7a8b"], "1": ["entity_9c8d7e6f"] }
 }
 ```
+
+`quality` carries the detector-reported score; label propagation reports
+none, so it is `null` here.
 
 Edges are weighted by **triple multiplicity**: every triple contributes one
 weight-1.0 undirected edge between its endpoints and parallel edges are summed,
 so two entities linked by five triples bind more strongly than two linked by
 one. Community keys ascend from `"0"`; member ids are sorted, so the output is
-stable across runs. The library API lives in `kg_extract::community`
+stable across runs.
+
+`-o communities-hierarchy` (requires building with `--features
+community-leiden`, which forwards to `kg-community`'s `leiden` feature) runs
+hierarchical Leiden and emits one entry per aggregation level, ordered
+**coarse → fine** (`level` 0 is the root and matches a flat Leiden run's
+grouping), each with its modularity `quality` score:
+
+```json
+{
+  "detector": "hierarchical-leiden",
+  "num_levels": 2,
+  "levels": [
+    { "level": 0, "quality": 0.41, "num_communities": 2,
+      "communities": { "0": ["entity_1a2b3c4d"], "1": ["entity_9c8d7e6f", "entity_5e6f7a8b"] } },
+    { "level": 1, "quality": 0.42, "num_communities": 3,
+      "communities": { "0": ["entity_1a2b3c4d"], "1": ["entity_5e6f7a8b"], "2": ["entity_9c8d7e6f"] } }
+  ]
+}
+```
+
+Detection runs with a fixed seed and member ids are sorted, so the output is
+deterministic across runs. Both community formats parse without their feature
+(so configs stay portable) but then fail with an actionable error naming the
+missing `--features` flag. The library API lives in `kg_extract::community`
 (`to_community_graph`, `detect_communities`, `detect_communities_label_propagation`,
-`communities_json`).
+`communities_json`, `hierarchy_json`).
+
+### Community summaries (GraphRAG-style reports)
+
+`--community-summaries` closes the GraphRAG loop: with `-o communities` or
+`-o communities-hierarchy`, the configured backend is called **once per
+community** (once per community *per level* in hierarchy mode, coarse →
+fine) to generate a `name` + `summary` report, merged into the community
+JSON — each community becomes an object instead of a bare id array:
+
+```bash
+kg-extract -e schema-json -b agent --agent minimaxcc -f doc.md -o communities-hierarchy --community-summaries
+```
+
+```json
+{
+  "num_communities": 2,
+  "quality": null,
+  "communities": {
+    "0": { "members": ["entity_1a2b3c4d", "entity_5e6f7a8b"],
+           "name": "Acme Cluster", "summary": "Acme Corp and the people around it." },
+    "1": { "members": ["entity_9c8d7e6f"],
+           "name": null, "summary": null }
+  }
+}
+```
+
+The prompt for a community lists its member entities (`label (type):
+description`) and its intra-community triples, asking for a bare
+`{"name", "summary"}` JSON object. Prompt size is bounded —
+`SUMMARY_MAX_MEMBERS` (32 entities), `SUMMARY_MAX_TRIPLES` (24
+relationships), `SUMMARY_MAX_DESC_CHARS` (120 chars per description),
+`SUMMARY_MAX_TOKENS` (1024 reply tokens) — with overflows noted as
+`(+N more …)`. Communities are processed in ascending-label order, so the
+call sequence is deterministic. If a call fails or returns something
+unparseable, **that community alone** degrades to `null` name/summary with a
+stderr warning (community `"1"` above) — the run never fails. Without the
+flag the output shape is unchanged (backward compatible). The flag only
+applies to the two community formats; anywhere else it is ignored with a
+note. The extraction backend is reused for summarization (for `-e agentic`,
+which bypasses `--backend`, one is built from `--backend`/`--agent`).
+Library: `communities_json_with_summaries`, `hierarchy_json_with_summaries`,
+`summarize_partition`, `CommunitySummary`.
 
 For a deterministic local smoke test that avoids live LLM calls:
 

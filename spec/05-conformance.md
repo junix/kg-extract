@@ -152,9 +152,22 @@ Behaviors are grouped into clusters. `[T]` = covered by an existing test
      leak. `[T]`
 - J.2 `kg-protocol` lifts citations into first-class evidence ranges and
      carries `normalized_*_type` properties. `[T]`
-- J.3 `communities` emits `{num_communities, communities: {"0": [ids…]}}`
-     (deterministic); without `--features community` the value parses but the
-     run fails with an actionable error. `[T]`
+- J.3 `communities` emits `{num_communities, quality, communities:
+     {"0": [ids…]}}` (deterministic); without `--features community` the
+     value parses but the run fails with an actionable error. `[T]`
+- J.4 `communities-hierarchy` emits `{detector, num_levels, levels:
+     [{level, quality, num_communities, communities}]}` with levels ordered
+     coarse → fine, per-level modularity, sequential level indices, sorted
+     member ids, and run-to-run determinism (fixed seed); without
+     `--features community-leiden` the value parses but the run fails with
+     an actionable error. `[T]`
+- J.5 `--community-summaries` renders each community (both formats, every
+     hierarchy level) as `{members, name, summary}`; communities are
+     processed in ascending-label order (deterministic call sequence),
+     prompt size is bounded by the `SUMMARY_MAX_*` constants, and a failed
+     or unparseable call degrades that community to null `name`/`summary`
+     with a stderr warning instead of failing the run. Without the flag the
+     community JSON shape is unchanged. `[T]`
 
 ### K. MCP KgStore
 

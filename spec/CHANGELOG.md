@@ -134,3 +134,80 @@ community edges, and a CLI community output.
   bin `print_response_communities_returns_ok_with_feature` /
   `print_response_communities_bails_without_feature` /
   `communities_output_format_parses_from_cli_and_config`.
+
+## 2026-08-08T20:43 — UPDATED
+
+kg-community bumped to 9da8120: engine quality scores and hierarchical
+Leiden surface in the CLI.
+
+- Files: 02, 04, 05, 06, CHANGELOG.
+- Dependency: `kg-community` git pin moved 9f12ba1 → 9da8120 (tracked
+  `Cargo.lock`, exact-rev convention unchanged). New pass-through feature
+  `community-leiden = ["community", "kg-community/leiden"]` pulls in
+  `leiden-rs`; `just build` / `just lint` feature sets now include
+  `community-leiden`.
+- Community mapping (§8.11): `communities_json` now emits a `quality` field
+  sourced from `Partition::quality` (`null` for label propagation, which
+  reports no score). New `hierarchy_json` (feature `community-leiden`)
+  renders hierarchical Leiden as `{detector, num_levels, levels: [{level,
+  quality, num_communities, communities}]}` — levels ordered coarse → fine
+  (`level` 0 matches a flat Leiden run's grouping), per-level modularity,
+  fixed-seed detection plus sorted member ids for run-to-run determinism.
+- CLI (§9.3 grammar, §9.4 table): new output format
+  `-o communities-hierarchy` (alias `hierarchy`). It parses without the
+  feature but the run then fails with an actionable error naming
+  `--features community-leiden`, mirroring the `communities` / `community`
+  pattern.
+- Conformance: J.3 widened with the `quality` field; new J.4
+  (communities-hierarchy contract), all `[T]`.
+- Feature matrix: O-08 row widened; new O-09 (communities-hierarchy output)
+  and D-02 (hierarchy_json) rows; done count 28 → 30.
+- New regression tests:
+  `community::leiden_tests::hierarchy_json_layers_coarse_to_fine_with_quality`,
+  `community::leiden_tests::hierarchy_json_is_deterministic_across_runs`,
+  bin `print_response_communities_hierarchy_returns_ok_with_feature` /
+  `print_response_communities_hierarchy_bails_without_feature` /
+  `communities_hierarchy_output_format_parses_from_cli_and_config`;
+  `community::communities_json_groups_members_by_community` now also pins
+  `quality: null` for label propagation.
+
+## 2026-08-08T21:02 — UPDATED
+
+GraphRAG-style community summaries close the community-detection loop.
+
+- Files: 02, 04, 05, 06, CHANGELOG.
+- Community mapping (new §8.11.1): `CommunitySummary` + `summarize_partition`
+  generate one `{name, summary}` report per community through the configured
+  `LlmBackend`; `communities_json_with_summaries` and
+  `hierarchy_json_with_summaries` (feature `community-leiden`, every level)
+  render each community as `{"members": [ids…], "name": …, "summary": …}`
+  instead of a bare id array. The prompt lists member entities
+  (`label (type): description`) and sorted intra-community triples, and asks
+  for a bare JSON object parsed with the shared JSON extraction. Token bounds
+  are contractual constants: `SUMMARY_MAX_MEMBERS = 32`,
+  `SUMMARY_MAX_TRIPLES = 24`, `SUMMARY_MAX_DESC_CHARS = 120`,
+  `SUMMARY_MAX_TOKENS = 1024`; overflows are noted as `(+N more …)`.
+  Communities are processed in ascending-label order (levels coarse → fine),
+  so the backend-call sequence is deterministic. Failed/unparseable calls
+  degrade that community to null `name`/`summary` with a stderr warning
+  naming the community (§11 silent-degradation model), never a run failure.
+  Without summaries the community JSON shape is unchanged.
+- CLI (§9.3, §9.4): new presence flag `--community-summaries` (config key
+  `community_summaries`), valid with `-o communities` /
+  `-o communities-hierarchy`; other formats emit a note and ignore it. The
+  extraction backend is reused (agentic builds one on demand via
+  `make_backend`). Without `--features community` the print arm bails naming
+  the feature, unchanged.
+- Conformance: new J.5 (community summaries), all `[T]`.
+- Feature matrix: new O-10 (community summaries output) and D-03
+  (summarize_partition) rows; done count 30 → 32.
+- New regression tests:
+  `community::summary_tests::summaries_render_as_objects_with_name_and_summary`,
+  `community::summary_tests::summary_prompts_and_output_are_deterministic`,
+  `community::summary_tests::failing_backend_degrades_to_null_fields`,
+  `community::summary_tests::unparseable_reply_degrades_to_null_fields`,
+  `community::summary_tests::prompt_truncates_members_triples_and_descriptions`,
+  `community::leiden_tests::hierarchy_summaries_cover_every_level_and_stay_deterministic`,
+  bin `community_summaries_flag_parses_from_cli_and_config`,
+  `print_response_communities_accepts_precomputed_summaries`,
+  `print_response_communities_hierarchy_accepts_precomputed_summaries`.

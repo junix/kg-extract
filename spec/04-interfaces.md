@@ -82,7 +82,8 @@ schema-mode = "open" / "fixed" / "evolving"
 merge-strat = "keep-existing" / "keep-incoming" / "field-union" / "llm"
 input-fmt   = "text" / "chunks"
 out-fmt     = "json" / "jsonl" / "kg-protocol" / "node-link"
-            / "ladybug-import" / "communities" / "mermaid" / "stats"
+            / "ladybug-import" / "communities" / "communities-hierarchy"
+            / "mermaid" / "stats"
 ```
 
 Key flag contracts:
@@ -97,6 +98,7 @@ Key flag contracts:
 | `-F/--input-format chunks` | chonkie chunk JSON/JSONL consumed as-is |
 | `--coref` | fuzzy cross-chunk coreference |
 | `--merge-strategy` | how label-duplicates fold |
+| `--community-summaries` | with `-o communities` / `-o communities-hierarchy`: one backend completion per community (per level, in hierarchy mode) generating a `{name, summary}` report merged into the community JSON; a failed/unparseable community degrades to null fields with a stderr warning; other output formats emit a note and ignore the flag |
 
 ## 9.4 Output formats
 
@@ -107,7 +109,8 @@ Key flag contracts:
 | `kg-protocol` | portable `KgDocument` (`schema_version`, `entities`, `relations`, `evidence`); relations reference entity ids; citations → first-class evidence ranges |
 | `node-link` | `{directed:true, nodes:[{id,label,…}], links:[{source,target,type,…}]}` — `source`/`target` reference node `id`s; no RDF `subject`/`object` keys leak |
 | `ladybug-import` | generic `KgEntity` node table + one relationship table per predicate; metadata stored as JSON strings |
-| `communities` | `{num_communities, communities: {"0": [entity_id, …], …}}` — label-propagation community detection over the multiplicity-weighted graph; community keys ascend from `"0"`, member ids sorted. Requires `--features community` (the value parses without it but the run fails with an actionable error, mirroring `--backend llms` without `llms-backend`) |
+| `communities` | `{num_communities, quality, communities: {"0": [entity_id, …], …}}` — label-propagation community detection over the multiplicity-weighted graph; community keys ascend from `"0"`, member ids sorted. `quality` is the detector-reported score (`null` — label propagation reports none). With `--community-summaries`, each community renders as `{"members": [entity_id, …], "name": …, "summary": …}` (`null` name/summary for degraded communities). Requires `--features community` (the value parses without it but the run fails with an actionable error, mirroring `--backend llms` without `llms-backend`) |
+| `communities-hierarchy` | `{detector: "hierarchical-leiden", num_levels, levels: [{level, quality, num_communities, communities}]}` — hierarchical Leiden levels ordered coarse → fine (`level` 0 matches a flat Leiden run's grouping), each level carrying its modularity; fixed-seed detection + sorted member ids make the output deterministic. With `--community-summaries`, **every level's** communities render as `{members, name, summary}` objects (`null` fields for degraded communities). Requires `--features community-leiden` (the value parses without it but the run fails with an actionable error naming the feature) |
 | `mermaid` | `graph LR`; entity ids/labels cleaned of `[`/`]`; one `-->| label |` line per triple; fixed styling trailer |
 | `stats` | `{num_entities, num_triples, entity_types:{}, predicate_types:{}, num_segments_processed}` |
 

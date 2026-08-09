@@ -12,9 +12,9 @@ MCP server (`kg-extract-mcp`).
 The repo uses a `justfile`; feature flags gate the heavy backends:
 
 ```bash
-just build          # cargo build --release --features "llms-backend mcp community"
+just build          # cargo build --release --features "llms-backend mcp community community-leiden"
 just test           # cargo test --features mcp
-just lint           # cargo clippy --all-targets --features "llms-backend mcp community"
+just lint           # cargo clippy --all-targets --features "llms-backend mcp community community-leiden"
 just install        # copies kg-extract + kg-extract-mcp to ~/sync/<os>-<arch>-bin/ (override with SYNC_BIN_DIR)
 ```
 
@@ -102,7 +102,16 @@ Key modules under `src/`:
   adapter + `detect_communities*`. Every triple becomes one weight-1.0 edge and
   parallel edges are summed by the detectors, so triple multiplicity acts as
   edge weight (do NOT reintroduce `Graph::from_edges` dedup here). CLI surface:
-  `-o communities` (label propagation → `community id → member ids` JSON).
+  `-o communities` (label propagation → `community id → member ids` JSON with a
+  `quality` field, `null` for label propagation) and `-o communities-hierarchy`
+  (hierarchical Leiden, coarse→fine levels with per-level modularity; feature
+  `community-leiden` forwards to `kg-community/leiden`).
+  `--community-summaries` adds GraphRAG-style reports: `summarize_partition`
+  calls the backend once per community (per level in hierarchy mode) for a
+  `{name, summary}` JSON reply, merged into the community object as
+  `{members, name, summary}`; prompt bounded by `SUMMARY_MAX_*` constants,
+  ascending-label processing order (deterministic), failed/unparseable calls
+  degrade to null fields + stderr warning instead of failing the run.
   Wires the extraction output into the (previously orphan) `kg-community`
   detectors (ADR-987 §D#2).
 - `ladybug_export.rs` — export to the `graphdb-ladybug` graph store (e2e flows).
@@ -119,8 +128,10 @@ page/bbox emits the complete rich range, line-only stays legacy, and the
 chunk's `title`/`metadata` payload is stamped as `chunk_title`/`chunk_metadata`;
 SchemaJson/ToolCall join texts and retain only document-level provenance),
 `-o/--output`
-(`json`|`jsonl`|`kg-protocol`|`node-link`|`ladybug-import`|`communities`|`mermaid`|`stats`;
-`communities` requires `--features community`).
+(`json`|`jsonl`|`kg-protocol`|`node-link`|`ladybug-import`|`communities`|`communities-hierarchy`|`mermaid`|`stats`;
+`communities` requires `--features community`, `communities-hierarchy` requires
+`--features community-leiden`), `--community-summaries` (per-community LLM
+`name`/`summary` merged into the two community output formats).
 
 ## Conventions & gotchas
 

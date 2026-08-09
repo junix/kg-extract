@@ -78,13 +78,17 @@ contract. Rows MUST NOT be read as RFC 2119 promises.
 | O-05 | LadybugDB import | cli | stable | `-o ladybug-import` | ladybug e2e scripts | partial → 04 |
 | O-06 | Mermaid | cli | stable | `-o mermaid` | (via mermaid emit) | done → 04 |
 | O-07 | stats | cli | stable | `-o stats` | (get_stats) | done → 04 |
-| O-08 | communities (label propagation, multiplicity-weighted) | cli | stable | `-o communities`, `--features community` | communities_json_*, print_response_communities_* | done → 02,04 |
+| O-08 | communities (label propagation, multiplicity-weighted, quality field) | cli | stable | `-o communities`, `--features community` | communities_json_*, print_response_communities_* | done → 02,04 |
+| O-09 | communities-hierarchy (hierarchical Leiden, coarse→fine levels, per-level quality) | cli | stable | `-o communities-hierarchy`, `--features community-leiden` | hierarchy_json_*, print_response_communities_hierarchy_* | done → 02,04 |
+| O-10 | community summaries (per-community LLM name+summary, degradation to null) | cli | stable | `--community-summaries` | community_summaries_flag_*, print_response_*_accepts_precomputed_summaries | done → 02,04 |
 
 ### Community detection
 
 | ID | Feature | Surfaces | Maturity | Flag | Tests | Spec |
 |----|---------|----------|----------|------|-------|------|
 | D-01 | KnowledgeGraph → kg-community adapter (multiplicity-weighted edges) | lib | stable | `--features community` | multiplicity_* | done → 02 |
+| D-02 | Hierarchical Leiden levels (hierarchy_json, quality scores) | lib | stable | `--features community-leiden` | hierarchy_json_* | done → 02 |
+| D-03 | summarize_partition (deterministic order, SUMMARY_MAX_* token bounds, degradation) | lib | stable | `--features community` | summary_tests::*, hierarchy_summaries_* | done → 02 |
 
 ### MCP server
 
@@ -116,7 +120,7 @@ contract. Rows MUST NOT be read as RFC 2119 promises.
 
 | Spec status | Count |
 |-------------|-------|
-| done | 28 |
+| done | 32 |
 | partial | 11 |
 | missing | 0 |
 | n/a | 0 |

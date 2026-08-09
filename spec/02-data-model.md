@@ -309,8 +309,47 @@ parallel edges, so N triples between the same pair act as an edge of weight N
 (KG edge multiplicity is a community-strength signal and must survive the
 adapter). Self-loops and triples with unregistered endpoints are skipped.
 `detect_communities*` returns a stable `entity_id → community` map;
-`communities_json` renders `{num_communities, communities: {"0": [ids…]}}`
-with ascending community keys and sorted member ids (deterministic).
+`communities_json` renders `{num_communities, quality, communities:
+{"0": [ids…]}}` with ascending community keys and sorted member ids
+(deterministic). `quality` is the producing engine's score (`Partition::
+quality`) — `null` for label propagation, which reports none.
+`hierarchy_json` (feature `community-leiden`) renders hierarchical Leiden as
+`{detector: "hierarchical-leiden", num_levels, levels: [{level, quality,
+num_communities, communities}]}`: levels are ordered coarse → fine (`level` 0
+is the root aggregation round and matches a flat Leiden run's grouping), each
+level carries that level's modularity, and detection runs with a fixed seed
+so the output is deterministic.
 [T] (`community::multiplicity_produces_parallel_weighted_edges`,
 `community::multiplicity_weights_change_the_partition`,
-`community::communities_json_groups_members_by_community`)
+`community::communities_json_groups_members_by_community`,
+`community::leiden_tests::hierarchy_json_layers_coarse_to_fine_with_quality`,
+`community::leiden_tests::hierarchy_json_is_deterministic_across_runs`)
+
+### 8.11.1 Community summaries (GraphRAG-style reports)
+
+`summarize_partition` generates one `CommunitySummary {name, summary}` per
+community through the configured `LlmBackend`;
+`communities_json_with_summaries` and `hierarchy_json_with_summaries`
+(feature `community-leiden`, summarizing **every** level) then render each
+community as `{"members": [ids…], "name": …, "summary": …}` instead of a bare
+id array. The prompt for a community lists its member entities
+(`label (type): description`) and its intra-community triples (sorted), and
+asks for a bare JSON object `{"name", "summary"}` parsed with the shared JSON
+extraction (`parser::extract_json_from_response`). Prompt size is bounded by
+contractual constants: `SUMMARY_MAX_MEMBERS = 32` entities,
+`SUMMARY_MAX_TRIPLES = 24` relationships, `SUMMARY_MAX_DESC_CHARS = 120`
+chars per entity description, `SUMMARY_MAX_TOKENS = 1024` reply-token cap;
+overflows are noted in the prompt as `(+N more entities)` /
+`(+N more relationships)`. Communities are processed in **ascending
+community-label order** (hierarchy levels in coarse→fine order) with sorted
+members, so the backend-call sequence and prompts are deterministic across
+runs. A failed or unparseable call degrades that community to null
+`name`/`summary` with a stderr warning naming the community — the §11
+silent-degradation model — never a run failure. When summaries are not
+requested, the community JSON shape is unchanged (backward compatible).
+[T] (`community::summary_tests::summaries_render_as_objects_with_name_and_summary`,
+`community::summary_tests::summary_prompts_and_output_are_deterministic`,
+`community::summary_tests::failing_backend_degrades_to_null_fields`,
+`community::summary_tests::unparseable_reply_degrades_to_null_fields`,
+`community::summary_tests::prompt_truncates_members_triples_and_descriptions`,
+`community::leiden_tests::hierarchy_summaries_cover_every_level_and_stay_deterministic`)
