@@ -136,10 +136,12 @@ Key modules under `src/`:
 ## CLI essentials
 
 `kg-extract` settings precedence: CLI flag > `--config` (or `~/.kg-extract/config.json`)
-> built-in default. See `config.example.json`. Key flags: `-e/--engine`
+> built-in default. `-c/--config` takes a file path (`~/` expanded) or an inline
+JSON object; unknown config keys are rejected. See `config.example.json` and the
+README *Configuration* section. Key flags: `-e/--engine`
 (`simple`|`schema-json`|`toolcall`|`agentic`), `-b/--backend`
 (`llms`|`agent`|`mock`), `--agent` (`minimaxcc`|`glmcc`|`mimocc`), `--chunker`
-(`recursive`|`char`|`token`), `--schema-mode`, `--schema`, `-f/--input-format`
+(`recursive`|`char`|`token`), `--schema-mode`, `--schema`, `-F/--input-format`
 (`text`|`chunks` — chunk-aware Simple/Agentic consume supplied ranges as-is:
 page/bbox emits the complete rich range, line-only stays legacy, and the
 chunk's `title`/`metadata` payload is stamped as `chunk_title`/`chunk_metadata`;

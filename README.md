@@ -303,7 +303,8 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 | `-e, --engine` | `simple` \| `schema-json` \| `toolcall` \| `agentic` |
 | `-b, --backend` | `llms` \| `agent` \| `mock` (ignored by `-e agentic`, which always drives the SDK) |
 | `--agent` | agent CLI for `-b agent` / `-e agentic`: `minimaxcc` (default) \| `glmcc` \| `mimocc` |
-| `-c, --chunker` | `recursive` (default) \| `char` \| `token` |
+| `-c, --config` | config file path (supports `~/`), or an inline JSON object (a value starting with `{`); defaults to `~/.kg-extract/config.json` when present — see *Configuration* below |
+| `-k, --chunker` | `recursive` (default) \| `char` \| `token` |
 | `-m, --model` | override the engine's default model |
 | `--schema-mode` | schema-json/toolcall/agentic: `open` (default) \| `fixed` \| `evolving` (agentic enforces only `fixed`) |
 | `--schema` | schema JSON file (required for `fixed`/`evolving`; agentic validates each slice against it under `fixed`) |
@@ -320,6 +321,55 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 | `--max-concurrency` | bound on concurrent backend calls: simple per-chunk extraction **and** `--community-summaries` calls (default 8; 1 = sequential) |
 | `--community-summaries` | with `-o communities` / `-o communities-hierarchy`: one backend call per community (per level) generates a GraphRAG-style `{name, summary}` report merged into the community JSON; calls run with bounded concurrency (`--max-concurrency`), output stays deterministic; a failed community degrades to null fields with a stderr warning |
 | `-o, --output` | `json` (default) \| `jsonl` \| `kg-protocol` \| `node-link` \| `ladybug-import` \| `communities` \| `communities-hierarchy` \| `mermaid` \| `stats` |
+
+### Configuration
+
+Every setting can come from three places, highest precedence first:
+
+1. an explicit command-line flag,
+2. a config file — `--config <path>` (`~/` is expanded), `--config '<inline JSON>'`
+   (a value starting with `{`), or `~/.kg-extract/config.json` when that file
+   exists,
+3. the built-in default.
+
+A missing *default* file is fine (empty config); a missing *explicit* `--config`
+path or malformed JSON is an error. Unknown keys are rejected — the accepted
+key set is exactly the table below (see `config.example.json` for a fuller
+starting point: `cp config.example.json ~/.kg-extract/config.json`). The
+boolean keys are presence flags on the CLI side: `--coref` (etc.) always turns
+the feature on, `true` in the config turns it on, and there is no CLI way to
+turn off a config-enabled boolean.
+
+| Key | Type | Default | CLI flag | Meaning |
+|-----|------|---------|----------|---------|
+| `engine` | string | `"simple"` | `-e, --engine` | `simple` \| `schema-json` \| `toolcall` \| `agentic` |
+| `model` | string | none (engine default) | `-m, --model` | model name override |
+| `backend` | string | `"llms"` | `-b, --backend` | `llms` \| `agent` \| `mock` |
+| `agent` | string | `"minimaxcc"` | `--agent` | agent CLI for `-b agent` / `-e agentic` |
+| `chunker` | string | `"recursive"` | `-k, --chunker` | `recursive` \| `char` \| `token` |
+| `schema_mode` | string | `"open"` | `--schema-mode` | `open` \| `fixed` \| `evolving` (`fixed`/`evolving` require `schema`) |
+| `schema` | string (path) | none | `--schema` | schema JSON file for schema-json / toolcall |
+| `preset` | string | none | `--preset` | bundled preset key (`general/concept_graph`, …) |
+| `preset_file` | string (path) | none | `--preset-file` | your own template YAML (takes precedence over `preset`) |
+| `lang` | string | none (template's first) | `--lang` | preset/template render language |
+| `max_rounds` | integer | `1` | `--max-rounds` | tool-call rounds (1 = single-round) |
+| `merge_strategy` | string | `"keep-existing"` | `--merge-strategy` | `keep-existing` \| `keep-incoming` \| `field-union` \| `llm` |
+| `coref` | boolean | `false` | `--coref` | fuzzy cross-chunk entity coreference |
+| `canonical_direction` | boolean | `false` | `--canonical-direction` | inverse-pair direction normalisation at the merge stage |
+| `max_concurrency` | integer | `8` | `--max-concurrency` | bound on concurrent backend calls (1 = sequential) |
+| `relation_gleaning` | integer | `0` | `--relation-gleaning` | simple/agentic: rounds re-questioning orphan entities (0 = off) |
+| `community_summaries` | boolean | `false` | `--community-summaries` | GraphRAG-style per-community `{name, summary}` reports |
+| `output` | string | `"json"` | `-o, --output` | any `-o` format value |
+
+Minimal `~/.kg-extract/config.json`:
+
+```json
+{
+  "engine": "schema-json",
+  "backend": "agent",
+  "agent": "minimaxcc"
+}
+```
 
 `-o kg-protocol` emits the portable `core-types-rs` `kg.protocol.v1` shape:
 entities and relations use open string vocabularies, relations reference entity
