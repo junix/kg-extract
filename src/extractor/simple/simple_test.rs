@@ -132,6 +132,45 @@ fn attributes_unmatched_bracket_does_not_drop_all() {
 }
 
 #[test]
+fn parse_attributes_string_coerces_value_types_and_handles_every_shape() {
+    // The existing unmatched-bracket test only checks keys survive; this pins
+    // the value-coercion branches and the three input shapes so a regression
+    // that silently stringifies every value (or mis-parses a shape) is caught.
+
+    // Empty input -> empty map (no panic, no spurious key).
+    assert!(parse::parse_attributes_string("   ").is_empty());
+
+    // JSON-object form is parsed as JSON, preserving native value types.
+    let json = parse::parse_attributes_string(r#"{"active": true, "count": 3, "ratio": 0.5}"#);
+    assert_eq!(json["active"], serde_json::json!(true));
+    assert_eq!(json["count"], serde_json::json!(3));
+    assert_eq!(json["ratio"], serde_json::json!(0.5));
+
+    // Comma-separated key:value form: each value-coercion branch, exactly.
+    let kv = parse::parse_attributes_string(
+        "on: true, off: FALSE, n: 42, f: 1.5, name: GPT-4, quoted: \"hi\"",
+    );
+    assert_eq!(kv["on"], serde_json::json!(true), "true -> bool");
+    assert_eq!(kv["off"], serde_json::json!(false), "FALSE -> bool (case-insensitive)");
+    assert_eq!(kv["n"], serde_json::json!(42), "integer -> i64 (before f64)");
+    assert_eq!(kv["f"], serde_json::json!(1.5), "float -> f64");
+    assert_eq!(kv["name"], serde_json::json!("GPT-4"), "bare word -> string");
+    assert_eq!(kv["quoted"], serde_json::json!("hi"), "surrounding quotes are stripped");
+
+    // A pair without a colon separator is dropped, not stored as null/empty.
+    let dropped = parse::parse_attributes_string("lonely, kept: yes");
+    assert_eq!(dropped.len(), 1, "colon-less pair is skipped");
+    assert_eq!(dropped["kept"], serde_json::json!("yes"));
+
+    // Top-level commas inside a balanced bracket group are NOT split points;
+    // the bracketed value is kept verbatim as a string.
+    let nested = parse::parse_attributes_string("list: [1, 2, 3], after: ok");
+    assert_eq!(nested.len(), 2, "bracketed commas do not split");
+    assert_eq!(nested["list"], serde_json::json!("[1, 2, 3]"));
+    assert_eq!(nested["after"], serde_json::json!("ok"));
+}
+
+#[test]
 fn entity_id_is_deterministic_md5() {
     assert_eq!(entity_id("Openai"), entity_id("Openai"));
     assert!(entity_id("X").starts_with("entity_"));
@@ -549,6 +588,80 @@ fn build_triple_from_rel_swaps_passive_by_and_stamps_shared_metadata() {
     assert!(
         !t.metadata.contains_key("relation_gleaned"),
         "base builder must not stamp relation_gleaned"
+    );
+}
+
+/// Empty-graph guardrail: substantial input whose LLM replies are all empty
+/// (the reasoning-model truncation failure) must surface a metadata diagnostic
+/// instead of silently returning a successful-looking empty graph.
+#[tokio::test]
+async fn empty_graph_on_substantial_input_records_diagnostic() {
+    let backend = Arc::new(MockBackend::new(vec![String::new()]));
+    let ex = SimpleExtractor::new(backend); // default min_segment_size = 100
+    let text = "word ".repeat(40); // 200 chars >= min_segment_size
+    let out = ex.extract(&text).await.unwrap();
+
+    assert_eq!(out.num_entities(), 0);
+    assert_eq!(out.num_triples(), 0);
+    let diag = out
+        .metadata
+        .get("empty_graph")
+        .expect("substantial input with an empty graph must record a diagnostic");
+    assert_eq!(diag["input_chars"], serde_json::json!(200));
+    assert!(
+        diag["warning"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("empty graph"),
+        "diagnostic must carry the human-readable warning: {diag}"
+    );
+}
+
+/// A legitimately empty result on small input stays silent: validation already
+/// warns about the size, and the absence of entities may be genuine.
+#[tokio::test]
+async fn empty_graph_on_small_input_stays_silent() {
+    let backend = Arc::new(MockBackend::new(vec![String::new()]));
+    let mut ex = SimpleExtractor::new(backend);
+    ex.quiet = true;
+    let out = ex.extract("Hi.").await.unwrap(); // 3 chars < min_segment_size
+    assert_eq!(out.num_entities(), 0);
+    assert!(
+        !out.metadata.contains_key("empty_graph"),
+        "small inputs must not be flagged as failed extractions"
+    );
+}
+
+/// A non-empty graph never carries the diagnostic.
+#[tokio::test]
+async fn non_empty_graph_records_no_diagnostic() {
+    let resp_text = "(entity<|>OpenAI<|>organization<|>An AI research lab.<|>)##";
+    let backend = Arc::new(MockBackend::new(vec![resp_text.into(), String::new()]));
+    let mut ex = SimpleExtractor::new(backend);
+    ex.quiet = true;
+    let out = ex.extract("OpenAI developed GPT-4.").await.unwrap();
+    assert_eq!(out.num_entities(), 1);
+    assert!(!out.metadata.contains_key("empty_graph"));
+}
+
+#[test]
+fn empty_first_reply_warning_gates_on_chunk_size() {
+    assert!(empty_first_reply_warning(100, 100).is_some());
+    assert!(empty_first_reply_warning(5000, 100).is_some());
+    assert!(
+        empty_first_reply_warning(99, 100).is_none(),
+        "chunks too small to expect entities must not warn"
+    );
+}
+
+#[test]
+fn empty_graph_warning_gates_on_input_size() {
+    let warning = empty_graph_warning(100, 100).expect("substantial input warns");
+    assert!(warning.contains("empty graph"));
+    assert!(warning.contains("100 chars"));
+    assert!(
+        empty_graph_warning(50, 100).is_none(),
+        "small inputs are covered by the validation warning instead"
     );
 }
 

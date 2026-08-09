@@ -31,6 +31,42 @@ const RECORD_DELIMITER: &str = "##";
 
 use prompts::{CONTINUE_PROMPT, EXTRACTION_PROMPT, RELATION_GLEANING_PROMPT, SYSTEM_PROMPT};
 
+/// Guardrail for the reasoning-model failure seen in the wild: the whole
+/// max_tokens budget is burned on hidden reasoning and the visible reply comes
+/// back empty, which used to fold into a silently empty graph. An empty FIRST
+/// turn on a substantial chunk is never legitimate — later gleaning rounds
+/// answering with nothing is normal, so only the extraction turn warns.
+/// Returns `None` for chunks too small to expect entities (the caller's
+/// threshold gate), otherwise the ready-to-`eprintln!` string. Pure so the
+/// threshold logic is unit-testable.
+fn empty_first_reply_warning(chunk_chars: usize, min_segment_size: usize) -> Option<String> {
+    if chunk_chars < min_segment_size {
+        return None;
+    }
+    Some(format!(
+        "LLM returned an empty reply for a {chunk_chars}-char chunk; the response was \
+         likely truncated (e.g. a reasoning model burning the whole max_tokens budget on \
+         hidden reasoning) — this chunk contributes nothing to the graph"
+    ))
+}
+
+/// Empty-graph guardrail: substantial input yielding zero entities AND zero
+/// triples is almost always a failure (truncated/empty/unparseable LLM
+/// replies), not a legitimate result — genuinely tiny inputs already drew the
+/// "input too small" warning at validation. Returns `None` for small inputs,
+/// otherwise the ready-to-`eprintln!` warning string, which the caller also
+/// records in the response metadata. Pure so the threshold is unit-testable.
+fn empty_graph_warning(input_chars: usize, min_segment_size: usize) -> Option<String> {
+    if input_chars < min_segment_size {
+        return None;
+    }
+    Some(format!(
+        "substantial input ({input_chars} chars) produced an empty graph (0 entities, \
+         0 relations); the LLM replies were likely truncated, empty, or unparseable — \
+         check the backend/model and max_tokens budget"
+    ))
+}
+
 /// Knowledge graph extractor using a general LLM chat interface.
 pub struct SimpleExtractor {
     backend: Arc<dyn LlmBackend>,
@@ -164,6 +200,14 @@ impl SimpleExtractor {
                 }
             };
             if output.is_empty() {
+                if i == 0 && !self.quiet {
+                    if let Some(warning) = empty_first_reply_warning(
+                        chunk.chars().count(),
+                        self.config.min_segment_size,
+                    ) {
+                        eprintln!("Warning: {warning}");
+                    }
+                }
                 continue;
             }
 
@@ -321,6 +365,9 @@ impl SimpleExtractor {
     /// prompt + gleaning pipeline concurrently, stamp provenance, and fold the
     /// per-chunk graphs per the configured dedup strategy.
     async fn extract_segments(&self, chunks: Vec<Segment>) -> anyhow::Result<ExtractionResponse> {
+        // Total input size, for the empty-graph guardrail below.
+        let input_chars: usize = chunks.iter().map(|s| s.content.chars().count()).sum();
+
         // Extract chunks concurrently. LLM calls are I/O-bound, so `buffered`
         // runs up to `max_concurrency` in flight while preserving chunk order.
         let max_conc = self.config.max_concurrency.max(1);
@@ -378,6 +425,25 @@ impl SimpleExtractor {
         let mut resp = ExtractionResponse::new(kg);
         resp.parsed_results = parsed_results;
         resp.config = Some(self.config.clone());
+
+        // Empty-graph guardrail: warn and record a machine-readable diagnostic
+        // so a failed extraction (truncated/empty replies) cannot masquerade as
+        // a legitimately empty result. Small inputs stay silent — validation
+        // already warned about those.
+        if resp.num_entities() == 0 && resp.num_triples() == 0 {
+            if let Some(warning) = empty_graph_warning(input_chars, self.config.min_segment_size) {
+                if !self.quiet {
+                    eprintln!("Warning: {warning}");
+                }
+                resp.metadata.insert(
+                    "empty_graph".into(),
+                    serde_json::json!({
+                        "warning": warning,
+                        "input_chars": input_chars,
+                    }),
+                );
+            }
+        }
         Ok(resp)
     }
 }
