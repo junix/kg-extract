@@ -101,13 +101,18 @@ Predicate {
 `output_type = raw_type` if non-empty else `label` if non-empty else
 `predicate_type.value()`. Resolution `PredicateType::resolve` follows the same
 `upper / '-'→'_' / exact / alias / fallback (RELATED_TO)` precedence as
-`EntityType`; the alias step is a longest-match-first substring match (either
-direction, requiring a `_` word boundary, declaration order breaks ties), and
-inputs normalising to fewer than 3 characters fall back without fuzzy
-matching. The vocabulary and these semantics are owned by **kg-vocab**
-(`kg.vocab.v2`, crate 0.2.0); `PredicateType::inverse()` (converse predicate,
-unpaired variants invert to themselves) and the `ENTITY_GROUPS` /
-`PREDICATE_GROUPS` tables are re-exported alongside the enum.
+`EntityType`; the alias step first consults a curated **disambiguation table**
+(`TESTED`→TESTED_ON, `VALIDATED`→VALIDATED_ON, `INVENTED`→INVENTED_BY,
+`PUBLISHED`→PUBLISHED_IN — the first two intentionally overturn the v2
+declaration-order results TESTED_BY/VALIDATED_BY), then runs a
+longest-match-first substring match (either direction, requiring a `_` word
+boundary) where an equal-length tie among the longest matches falls back to
+RELATED_TO rather than guessing by declaration order, and inputs normalising
+to fewer than 3 characters fall back without fuzzy matching. The vocabulary
+and these semantics are owned by **kg-vocab** (`kg.vocab.v3`, crate 0.3.0);
+`PredicateType::inverse()` (converse predicate, unpaired variants invert to
+themselves) and the `ENTITY_GROUPS` / `PREDICATE_GROUPS` tables are
+re-exported alongside the enum.
 
 ## 8.4 Schema
 

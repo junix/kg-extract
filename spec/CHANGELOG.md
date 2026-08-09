@@ -267,3 +267,27 @@ kg-vocab bumped to v2 (crate 0.2.0, vocabulary version `kg.vocab.v2`).
   precedence plus the Exact/Aliased/Fallback audit, both unchanged.
 - New regression tests: `types::predicate::tests::kg_vocab_v2_parse_semantics`,
   `types::predicate::tests::kg_vocab_v2_inverse_and_groups`.
+
+## 2026-08-08T20:59 — UPDATED
+
+kg-vocab bumped to v3 (crate 0.3.0, vocabulary version `kg.vocab.v3`).
+
+- Files: 02, CHANGELOG.
+- Data model (§8.3 Predicate): the resolution paragraph now states the v3
+  semantics — a curated **disambiguation table** is consulted between exact
+  match and the fuzzy substring scan, and an equal-length tie among the
+  longest substring matches falls back to RELATED_TO instead of breaking by
+  declaration order. Upstream intentional changes relative to v2: `"tested"`
+  now resolves to TESTED_ON and `"validated"` to VALIDATED_ON (v2 returned
+  TESTED_BY/VALIDATED_BY by declaration order); `"invented"`→INVENTED_BY and
+  `"published"`→PUBLISHED_IN are pinned to their v2 results. Unchanged from
+  v2: the <3-char no-fuzzy-match fallback, longest-match-first ordering, and
+  the `_` word-boundary requirement.
+- No conformance rows changed: the contract remains the resolution
+  precedence plus the Exact/Aliased/Fallback audit.
+- Guard tests renamed and extended:
+  `types::predicate::tests::kg_vocab_v3_parse_semantics` (was
+  `kg_vocab_v2_parse_semantics`; version assertion updated, disambiguation
+  and tie-fallback assertions added),
+  `types::predicate::tests::kg_vocab_v3_inverse_and_groups` (was
+  `kg_vocab_v2_inverse_and_groups`).

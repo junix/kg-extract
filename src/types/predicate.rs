@@ -5,7 +5,8 @@
 //! and are re-exported here so callers keep using `crate::types::PredicateType`.
 //! See ADR-987 §D#5.
 //!
-//! kg-vocab v2 (`kg.vocab.v2`) additionally exposes `PredicateType::inverse()`
+//! kg-vocab v2+ (`kg.vocab.v3` pinned) additionally exposes
+//! `PredicateType::inverse()`
 //! (converse predicate for an edge flip; unpaired predicates invert to
 //! themselves) and the `ENTITY_GROUPS` / `PREDICATE_GROUPS` tables through the
 //! same re-export — no extra wiring needed.
@@ -166,10 +167,11 @@ mod tests {
     }
 
     #[test]
-    fn kg_vocab_v2_parse_semantics() {
+    fn kg_vocab_v3_parse_semantics() {
         // kg-vocab v2 (`kg.vocab.v2`) intentionally changed loose predicate
-        // parsing — these assertions pin the *new* upstream behaviour:
-        assert_eq!(kg_vocab::VOCAB_VERSION, "kg.vocab.v2");
+        // parsing, and v3 (`kg.vocab.v3`) refined it again — these assertions
+        // pin the current upstream behaviour:
+        assert_eq!(kg_vocab::VOCAB_VERSION, "kg.vocab.v3");
         // Inputs normalising to <3 chars fall back without fuzzy matching
         // (v1 aliased "in" to LOCATED_IN).
         assert_eq!(
@@ -186,10 +188,34 @@ mod tests {
             PredicateType::resolve("overfit"),
             (PredicateType::RelatedTo, TypeMatch::Fallback)
         );
+        // v3: the curated disambiguation table wins before the fuzzy scan.
+        // "tested"/"validated" intentionally CHANGE v2's declaration-order
+        // results (TESTED_BY/VALIDATED_BY) to the _ON variants (ML corpus:
+        // "tested/validated on <benchmark>" dominates); "invented"/
+        // "published" pin v2's results (INVENTED_BY/PUBLISHED_IN).
+        assert_eq!(
+            PredicateType::resolve("tested"),
+            (PredicateType::TestedOn, TypeMatch::Aliased)
+        );
+        assert_eq!(
+            PredicateType::resolve("validated"),
+            (PredicateType::ValidatedOn, TypeMatch::Aliased)
+        );
+        assert_eq!(PredicateType::from_loose("invented"), PredicateType::InventedBy);
+        assert_eq!(PredicateType::from_loose("published"), PredicateType::PublishedIn);
+        // v3: an equal-length tie among the longest substring matches is NOT
+        // broken by declaration order — it falls back to RELATED_TO unless
+        // the disambiguation table pins it ("tested by tested on" matches
+        // TESTED_BY and TESTED_ON at equal length, and "TESTED BY TESTED ON"
+        // itself is not a curated key).
+        assert_eq!(
+            PredicateType::resolve("tested by tested on"),
+            (PredicateType::RelatedTo, TypeMatch::Fallback)
+        );
     }
 
     #[test]
-    fn kg_vocab_v2_inverse_and_groups() {
+    fn kg_vocab_v3_inverse_and_groups() {
         // Curated inverse pairs from vocab.json; unpaired predicates invert
         // to themselves (total-function semantics).
         assert_eq!(PredicateType::Uses.inverse(), PredicateType::IsUsedBy);

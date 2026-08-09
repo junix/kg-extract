@@ -1310,8 +1310,8 @@ dependencies = [
 
 [[package]]
 name = "kg-vocab"
-version = "0.2.0"
-source = "git+https://github.com/junix/kg-vocab.git#6cb93b85ad730c6a20561cb5399ed07a5f2bd249"
+version = "0.3.0"
+source = "git+https://github.com/junix/kg-vocab.git#887fc496c1ded6e6ae30e7a060b8d3b5c3fda943"
 dependencies = [
  "serde",
  "serde_json",
