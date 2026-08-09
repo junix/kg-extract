@@ -246,3 +246,24 @@ re-aligned with the real FileConfig surface.
   `community::summary_tests::concurrency_cap_bounds_in_flight_calls`,
   `community::summary_tests::concurrent_partial_failure_degrades_only_that_community`,
   bin `file_config_parses_config_example_json`.
+
+## 2026-08-09T01:44 — UPDATED
+
+kg-vocab bumped to v2 (crate 0.2.0, vocabulary version `kg.vocab.v2`).
+
+- Files: 02, CHANGELOG.
+- Data model (§8.3 Predicate): the resolution paragraph now states the v2
+  predicate parsing semantics owned by kg-vocab — longest-match-first
+  substring matching (either direction, `_` word boundary required,
+  declaration order breaks ties) and the <3-char no-fuzzy-match fallback —
+  replacing the previous one-line "same precedence as EntityType" pointer.
+  Upstream intentional changes relative to v1: `"in"` no longer aliases to
+  LOCATED_IN (falls back to RELATED_TO), and `"used"` resolves to IS_USED_BY
+  (longest match) instead of USED_IN. `PredicateType::inverse()` and the
+  `ENTITY_GROUPS` / `PREDICATE_GROUPS` tables are noted as available through
+  the existing re-export; no consumer in this crate yet (direction
+  normalisation at merge time is a candidate, pending a spec decision).
+- No conformance rows changed: the contract remains the resolution
+  precedence plus the Exact/Aliased/Fallback audit, both unchanged.
+- New regression tests: `types::predicate::tests::kg_vocab_v2_parse_semantics`,
+  `types::predicate::tests::kg_vocab_v2_inverse_and_groups`.

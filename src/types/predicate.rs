@@ -4,6 +4,15 @@
 //! crate (the single source of truth for the 108-variant predicate vocabulary)
 //! and are re-exported here so callers keep using `crate::types::PredicateType`.
 //! See ADR-987 §D#5.
+//!
+//! kg-vocab v2 (`kg.vocab.v2`) additionally exposes `PredicateType::inverse()`
+//! (converse predicate for an edge flip; unpaired predicates invert to
+//! themselves) and the `ENTITY_GROUPS` / `PREDICATE_GROUPS` tables through the
+//! same re-export — no extra wiring needed.
+//! TODO(kg-vocab v2): `inverse()` could normalise relationship direction at
+//! merge time (`merger.rs` dedups triples by `(subj, predicate, obj)`), e.g.
+//! folding `A -IS_USED_BY-> B` into `B -USES-> A`; left undone because it
+//! changes dedup semantics and needs a spec decision first.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -154,5 +163,41 @@ mod tests {
     fn variant_count() {
         assert_eq!(PredicateType::all().len(), 108);
         assert_eq!(default_predicates().len(), 108);
+    }
+
+    #[test]
+    fn kg_vocab_v2_parse_semantics() {
+        // kg-vocab v2 (`kg.vocab.v2`) intentionally changed loose predicate
+        // parsing — these assertions pin the *new* upstream behaviour:
+        assert_eq!(kg_vocab::VOCAB_VERSION, "kg.vocab.v2");
+        // Inputs normalising to <3 chars fall back without fuzzy matching
+        // (v1 aliased "in" to LOCATED_IN).
+        assert_eq!(
+            PredicateType::resolve("in"),
+            (PredicateType::RelatedTo, TypeMatch::Fallback)
+        );
+        // Longest variant wins on substring matches (v1 resolved "used" to
+        // USED_IN; both USED_IN and IS_USED_BY contain it at a `_` boundary).
+        assert_eq!(PredicateType::from_loose("used"), PredicateType::IsUsedBy);
+        // Substring matching requires a `_` word boundary: "overfit" is a
+        // bare stem of OVERFITS (no boundary after "OVERFIT"), so it falls
+        // back instead of aliasing.
+        assert_eq!(
+            PredicateType::resolve("overfit"),
+            (PredicateType::RelatedTo, TypeMatch::Fallback)
+        );
+    }
+
+    #[test]
+    fn kg_vocab_v2_inverse_and_groups() {
+        // Curated inverse pairs from vocab.json; unpaired predicates invert
+        // to themselves (total-function semantics).
+        assert_eq!(PredicateType::Uses.inverse(), PredicateType::IsUsedBy);
+        assert_eq!(PredicateType::IsUsedBy.inverse(), PredicateType::Uses);
+        assert_eq!(PredicateType::RelatedTo.inverse(), PredicateType::RelatedTo);
+        // Group tables ship for domain-scoped schema trimming; not yet
+        // consumed here (see module-level TODO).
+        assert!(!kg_vocab::PREDICATE_GROUPS.is_empty());
+        assert!(!kg_vocab::ENTITY_GROUPS.is_empty());
     }
 }

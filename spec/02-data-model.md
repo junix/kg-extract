@@ -101,7 +101,13 @@ Predicate {
 `output_type = raw_type` if non-empty else `label` if non-empty else
 `predicate_type.value()`. Resolution `PredicateType::resolve` follows the same
 `upper / '-'→'_' / exact / alias / fallback (RELATED_TO)` precedence as
-`EntityType`.
+`EntityType`; the alias step is a longest-match-first substring match (either
+direction, requiring a `_` word boundary, declaration order breaks ties), and
+inputs normalising to fewer than 3 characters fall back without fuzzy
+matching. The vocabulary and these semantics are owned by **kg-vocab**
+(`kg.vocab.v2`, crate 0.2.0); `PredicateType::inverse()` (converse predicate,
+unpaired variants invert to themselves) and the `ENTITY_GROUPS` /
+`PREDICATE_GROUPS` tables are re-exported alongside the enum.
 
 ## 8.4 Schema
 
