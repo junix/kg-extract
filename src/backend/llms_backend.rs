@@ -52,7 +52,22 @@ impl LlmBackend for LlmsBackend {
         };
         let llm = from_resolved_with_options(resolved, Some(chat_opts))?;
         let chat_messages: Vec<ChatMessage> = messages.iter().map(to_chat_message).collect();
-        llm.chat(&chat_messages, None).await
+        let (text, _prompt_tokens, completion_tokens) =
+            llm.chat_with_usage(&chat_messages, None).await?;
+        // Truncation guardrail: the non-stream `llms` API does not expose the
+        // provider's finish_reason (only the streaming TerminalMetadata event
+        // does), so the observable proxy for a truncated reply is the reported
+        // completion-token count hitting the requested cap — exactly the
+        // reasoning-model failure where hidden reasoning burns the whole budget
+        // and the visible reply is cut short.
+        if completion_tokens > 0 && completion_tokens >= options.max_tokens as u64 {
+            eprintln!(
+                "Warning: model '{}' hit the max_tokens cap ({} completion tokens >= cap {}); \
+                 the reply was likely truncated",
+                options.model, completion_tokens, options.max_tokens
+            );
+        }
+        Ok(text)
     }
 
     fn supports_tools(&self) -> bool {
