@@ -98,7 +98,8 @@ Key flag contracts:
 | `-F/--input-format chunks` | chonkie chunk JSON/JSONL consumed as-is |
 | `--coref` | fuzzy cross-chunk coreference |
 | `--merge-strategy` | how label-duplicates fold |
-| `--community-summaries` | with `-o communities` / `-o communities-hierarchy`: one backend completion per community (per level, in hierarchy mode) generating a `{name, summary}` report merged into the community JSON; a failed/unparseable community degrades to null fields with a stderr warning; other output formats emit a note and ignore the flag |
+| `--max-concurrency N` | bound on concurrent backend calls: Simple per-chunk extraction **and** `--community-summaries` per-community calls (default 8; 1 = sequential) |
+| `--community-summaries` | with `-o communities` / `-o communities-hierarchy`: one backend completion per community (per level, in hierarchy mode) generating a `{name, summary}` report merged into the community JSON; calls run with bounded concurrency (`--max-concurrency`) and the output is deterministic regardless of completion order; a failed/unparseable community degrades to null fields with a stderr warning; other output formats emit a note and ignore the flag |
 
 ## 9.4 Output formats
 

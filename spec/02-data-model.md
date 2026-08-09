@@ -340,15 +340,25 @@ contractual constants: `SUMMARY_MAX_MEMBERS = 32` entities,
 `SUMMARY_MAX_TRIPLES = 24` relationships, `SUMMARY_MAX_DESC_CHARS = 120`
 chars per entity description, `SUMMARY_MAX_TOKENS = 1024` reply-token cap;
 overflows are noted in the prompt as `(+N more entities)` /
-`(+N more relationships)`. Communities are processed in **ascending
-community-label order** (hierarchy levels in coarse→fine order) with sorted
-members, so the backend-call sequence and prompts are deterministic across
-runs. A failed or unparseable call degrades that community to null
-`name`/`summary` with a stderr warning naming the community — the §11
-silent-degradation model — never a run failure. When summaries are not
-requested, the community JSON shape is unchanged (backward compatible).
+`(+N more relationships)`. Backend calls run with **bounded concurrency**:
+up to `max_concurrency` (clamped to ≥ 1) completions are in flight at once,
+issued in ascending community-label order (hierarchy levels processed
+sequentially, coarse → fine) with sorted members, so every prompt is
+deterministic. The determinism contract is on the **output**, not the call
+sequence: each result is keyed by its own community label and collected in
+issue order (`buffered`), so completion order never leaks into the rendered
+JSON — given the same backend replies, a concurrent run is byte-identical to
+a sequential one. A failed or unparseable call degrades that community to
+null `name`/`summary` with a stderr warning naming the community — the §11
+silent-degradation model — never a run failure; warning lines may interleave
+in completion order (stderr is not part of the output contract). When
+summaries are not requested, the community JSON shape is unchanged (backward
+compatible).
 [T] (`community::summary_tests::summaries_render_as_objects_with_name_and_summary`,
 `community::summary_tests::summary_prompts_and_output_are_deterministic`,
+`community::summary_tests::concurrent_output_is_byte_identical_to_sequential`,
+`community::summary_tests::concurrency_cap_bounds_in_flight_calls`,
+`community::summary_tests::concurrent_partial_failure_degrades_only_that_community`,
 `community::summary_tests::failing_backend_degrades_to_null_fields`,
 `community::summary_tests::unparseable_reply_degrades_to_null_fields`,
 `community::summary_tests::prompt_truncates_members_triples_and_descriptions`,

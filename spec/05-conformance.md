@@ -162,12 +162,14 @@ Behaviors are grouped into clusters. `[T]` = covered by an existing test
      `--features community-leiden` the value parses but the run fails with
      an actionable error. `[T]`
 - J.5 `--community-summaries` renders each community (both formats, every
-     hierarchy level) as `{members, name, summary}`; communities are
-     processed in ascending-label order (deterministic call sequence),
-     prompt size is bounded by the `SUMMARY_MAX_*` constants, and a failed
-     or unparseable call degrades that community to null `name`/`summary`
-     with a stderr warning instead of failing the run. Without the flag the
-     community JSON shape is unchanged. `[T]`
+     hierarchy level) as `{members, name, summary}`; summary calls run with
+     bounded concurrency (`--max-concurrency`), prompts are issued in
+     ascending-label order, and the output is deterministic regardless of
+     completion order (byte-identical to a sequential run given the same
+     replies); prompt size is bounded by the `SUMMARY_MAX_*` constants, and a
+     failed or unparseable call degrades that community to null
+     `name`/`summary` with a stderr warning instead of failing the run.
+     Without the flag the community JSON shape is unchanged. `[T]`
 
 ### K. MCP KgStore
 

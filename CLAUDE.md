@@ -110,8 +110,10 @@ Key modules under `src/`:
   calls the backend once per community (per level in hierarchy mode) for a
   `{name, summary}` JSON reply, merged into the community object as
   `{members, name, summary}`; prompt bounded by `SUMMARY_MAX_*` constants,
-  ascending-label processing order (deterministic), failed/unparseable calls
-  degrade to null fields + stderr warning instead of failing the run.
+  calls run with bounded concurrency (`--max-concurrency`) and results are
+  keyed by community label so the output is deterministic regardless of
+  completion order (byte-identical to a sequential run), failed/unparseable
+  calls degrade to null fields + stderr warning instead of failing the run.
   Wires the extraction output into the (previously orphan) `kg-community`
   detectors (ADR-987 §D#2).
 - `ladybug_export.rs` — export to the `graphdb-ladybug` graph store (e2e flows).

@@ -88,7 +88,7 @@ contract. Rows MUST NOT be read as RFC 2119 promises.
 |----|---------|----------|----------|------|-------|------|
 | D-01 | KnowledgeGraph → kg-community adapter (multiplicity-weighted edges) | lib | stable | `--features community` | multiplicity_* | done → 02 |
 | D-02 | Hierarchical Leiden levels (hierarchy_json, quality scores) | lib | stable | `--features community-leiden` | hierarchy_json_* | done → 02 |
-| D-03 | summarize_partition (deterministic order, SUMMARY_MAX_* token bounds, degradation) | lib | stable | `--features community` | summary_tests::*, hierarchy_summaries_* | done → 02 |
+| D-03 | summarize_partition (bounded concurrency, deterministic output, SUMMARY_MAX_* token bounds, degradation) | lib | stable | `--features community` | summary_tests::* (incl. concurrent_*, concurrency_cap_*), hierarchy_summaries_* | done → 02 |
 
 ### MCP server
 

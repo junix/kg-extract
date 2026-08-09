@@ -316,7 +316,8 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 | `--mock-tool-calls` | mock backend only: scripted tool calls for `-e toolcall` offline/e2e tests |
 | `-F, --input-format` | `text` (default) \| `chunks` — input is chonkie chunk JSON/JSONL, consumed without re-chunking |
 | `--coref` | fuzzy cross-chunk coreference: normalized-label, edit-distance (≥6 chars, similarity ≥ 0.85), and token-set (multi-token subset / Jaccard ≥ 0.6) channels, all type-gated |
-| `--community-summaries` | with `-o communities` / `-o communities-hierarchy`: one backend call per community (per level) generates a GraphRAG-style `{name, summary}` report merged into the community JSON; a failed community degrades to null fields with a stderr warning |
+| `--max-concurrency` | bound on concurrent backend calls: simple per-chunk extraction **and** `--community-summaries` calls (default 8; 1 = sequential) |
+| `--community-summaries` | with `-o communities` / `-o communities-hierarchy`: one backend call per community (per level) generates a GraphRAG-style `{name, summary}` report merged into the community JSON; calls run with bounded concurrency (`--max-concurrency`), output stays deterministic; a failed community degrades to null fields with a stderr warning |
 | `-o, --output` | `json` (default) \| `jsonl` \| `kg-protocol` \| `node-link` \| `ladybug-import` \| `communities` \| `communities-hierarchy` \| `mermaid` \| `stats` |
 
 `-o kg-protocol` emits the portable `core-types-rs` `kg.protocol.v1` shape:
@@ -426,8 +427,11 @@ description`) and its intra-community triples, asking for a bare
 `SUMMARY_MAX_MEMBERS` (32 entities), `SUMMARY_MAX_TRIPLES` (24
 relationships), `SUMMARY_MAX_DESC_CHARS` (120 chars per description),
 `SUMMARY_MAX_TOKENS` (1024 reply tokens) — with overflows noted as
-`(+N more …)`. Communities are processed in ascending-label order, so the
-call sequence is deterministic. If a call fails or returns something
+`(+N more …)`. Summary calls run with **bounded concurrency**
+(`--max-concurrency`, default 8): prompts are issued in ascending-label
+order and each result is keyed by its community, so completion order never
+leaks into the output — a concurrent run is byte-identical to a sequential
+one. If a call fails or returns something
 unparseable, **that community alone** degrades to `null` name/summary with a
 stderr warning (community `"1"` above) — the run never fails. Without the
 flag the output shape is unchanged (backward compatible). The flag only

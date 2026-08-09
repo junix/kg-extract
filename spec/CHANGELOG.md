@@ -211,3 +211,38 @@ GraphRAG-style community summaries close the community-detection loop.
   bin `community_summaries_flag_parses_from_cli_and_config`,
   `print_response_communities_accepts_precomputed_summaries`,
   `print_response_communities_hierarchy_accepts_precomputed_summaries`.
+
+## 2026-08-09T01:24 — UPDATED
+
+Community summaries run with bounded concurrency; config.example.json
+re-aligned with the real FileConfig surface.
+
+- Files: 02, 04, 05, 06, CHANGELOG.
+- Community summaries (§8.11.1): `summarize_partition`,
+  `communities_json_with_summaries`, and `hierarchy_json_with_summaries` take
+  a new `max_concurrency` parameter (Rust API source-breaking for direct
+  callers). Per-community backend calls now run through `buffered` with up to
+  `max_concurrency` in flight (clamped to ≥ 1) instead of strictly
+  sequentially; hierarchy levels are still processed sequentially, coarse →
+  fine. The determinism contract shifts from "deterministic call sequence" to
+  **deterministic output**: results are keyed by community label and collected
+  in issue (ascending-label) order, so completion order never leaks into the
+  rendered JSON — a concurrent run is byte-identical to a sequential one given
+  the same backend replies. Per-community degradation to null
+  `name`/`summary` is unchanged; stderr warning order is now
+  completion-ordered and not contractual.
+- CLI (§9.3): `--max-concurrency` (config key `max_concurrency`, default 8)
+  now bounds **both** Simple per-chunk extraction and
+  `--community-summaries` calls; flag help and the flag table updated
+  accordingly. No new flag or config key.
+- Conformance: J.5 widened to the bounded-concurrency /
+  deterministic-output contract; D-03 row widened, all `[T]`.
+- config.example.json: dropped the historical `youtu_agent` / `community` /
+  `toolcall_agent` keys (rejected by `FileConfig`'s `deny_unknown_fields`)
+  and added the real `max_concurrency` key; the file now parses as
+  `FileConfig`, pinned by a regression test.
+- New regression tests:
+  `community::summary_tests::concurrent_output_is_byte_identical_to_sequential`,
+  `community::summary_tests::concurrency_cap_bounds_in_flight_calls`,
+  `community::summary_tests::concurrent_partial_failure_degrades_only_that_community`,
+  bin `file_config_parses_config_example_json`.
