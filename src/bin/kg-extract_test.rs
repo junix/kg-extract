@@ -301,7 +301,7 @@ fn print_response_json_round_trips_ok() {
     // stdout goes to the test capture; we only assert the arm returns Ok
     // (i.e. serialization of every format succeeds and dispatch doesn't panic).
     let r = populated_response();
-    assert!(print_response(OutFmt::Json, &r).is_ok());
+    assert!(print_response(OutFmt::Json, &r, None).is_ok());
 }
 
 #[test]
@@ -317,7 +317,7 @@ fn print_response_all_formats_return_ok() {
         OutFmt::Stats,
     ] {
         assert!(
-            print_response(fmt, &r).is_ok(),
+            print_response(fmt, &r, None).is_ok(),
             "print_response must succeed for every output format"
         );
     }
@@ -327,7 +327,7 @@ fn print_response_all_formats_return_ok() {
 #[test]
 fn print_response_communities_returns_ok_with_feature() {
     let r = populated_response();
-    assert!(print_response(OutFmt::Communities, &r).is_ok());
+    assert!(print_response(OutFmt::Communities, &r, None).is_ok());
 }
 
 #[cfg(not(feature = "community"))]
@@ -336,7 +336,7 @@ fn print_response_communities_bails_without_feature() {
     // The `communities` format parses without the feature (so configs stay
     // portable) but must refuse to run with an actionable error.
     let r = populated_response();
-    let err = print_response(OutFmt::Communities, &r).unwrap_err();
+    let err = print_response(OutFmt::Communities, &r, None).unwrap_err();
     assert!(
         err.to_string().contains("--features community"),
         "error must name the missing feature, got: {err}"
@@ -351,4 +351,91 @@ fn communities_output_format_parses_from_cli_and_config() {
 
     let cfg: FileConfig = serde_json::from_str(r#"{"output": "communities"}"#).unwrap();
     assert!(matches!(cfg.output, Some(OutFmt::Communities)));
+}
+
+#[cfg(feature = "community-leiden")]
+#[test]
+fn print_response_communities_hierarchy_returns_ok_with_feature() {
+    let r = populated_response();
+    assert!(print_response(OutFmt::CommunitiesHierarchy, &r, None).is_ok());
+}
+
+#[cfg(not(feature = "community-leiden"))]
+#[test]
+fn print_response_communities_hierarchy_bails_without_feature() {
+    // The `communities-hierarchy` format parses without the feature (so
+    // configs stay portable) but must refuse to run with an actionable error.
+    let r = populated_response();
+    let err = print_response(OutFmt::CommunitiesHierarchy, &r, None).unwrap_err();
+    assert!(
+        err.to_string().contains("--features community-leiden"),
+        "error must name the missing feature, got: {err}"
+    );
+}
+
+#[test]
+fn communities_hierarchy_output_format_parses_from_cli_and_config() {
+    let m = Args::command().get_matches_from(["kg-extract", "-o", "communities-hierarchy"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(matches!(args.output, OutFmt::CommunitiesHierarchy));
+
+    let cfg: FileConfig = serde_json::from_str(r#"{"output": "communities-hierarchy"}"#).unwrap();
+    assert!(matches!(cfg.output, Some(OutFmt::CommunitiesHierarchy)));
+}
+
+#[test]
+fn community_summaries_flag_parses_from_cli_and_config() {
+    // Off by default.
+    let m = Args::command().get_matches_from(["kg-extract"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(!args.community_summaries);
+
+    let m = Args::command().get_matches_from(["kg-extract", "--community-summaries"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(args.community_summaries);
+
+    // Presence-flag resolution: explicit CLI wins; otherwise the config value.
+    let m = Args::command().get_matches_from(["kg-extract"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    let cfg: FileConfig = serde_json::from_str(r#"{"community_summaries": true}"#).unwrap();
+    let resolved = resolve(&m, &args, cfg);
+    assert!(resolved.community_summaries, "config file enables the flag");
+
+    let m = Args::command().get_matches_from(["kg-extract", "--community-summaries"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    let resolved = resolve(&m, &args, FileConfig::default());
+    assert!(resolved.community_summaries);
+}
+
+#[cfg(feature = "community")]
+#[test]
+fn print_response_communities_accepts_precomputed_summaries() {
+    // `--community-summaries` computes the document in main (async) and hands
+    // it over; the print arm must accept it without recomputing detection.
+    let r = populated_response();
+    let precomputed = serde_json::json!({
+        "num_communities": 1,
+        "quality": null,
+        "communities": {
+            "0": {"members": ["p"], "name": "Widget Cluster", "summary": "All about widgets."}
+        }
+    });
+    assert!(print_response(OutFmt::Communities, &r, Some(&precomputed)).is_ok());
+}
+
+#[cfg(feature = "community-leiden")]
+#[test]
+fn print_response_communities_hierarchy_accepts_precomputed_summaries() {
+    let r = populated_response();
+    let precomputed = serde_json::json!({
+        "detector": "hierarchical-leiden",
+        "num_levels": 1,
+        "levels": [{
+            "level": 0, "quality": 0.5, "num_communities": 1,
+            "communities": {
+                "0": {"members": ["p"], "name": "Widget Cluster", "summary": "All about widgets."}
+            }
+        }]
+    });
+    assert!(print_response(OutFmt::CommunitiesHierarchy, &r, Some(&precomputed)).is_ok());
 }

@@ -136,6 +136,11 @@ enum OutFmt {
     /// Community detection over the extracted graph (label propagation,
     /// multiplicity-weighted). Requires building with `--features community`.
     Communities,
+    /// Hierarchical Leiden community levels (coarse → fine, per-level quality
+    /// score). Requires building with `--features community-leiden`.
+    #[serde(rename = "communities-hierarchy")]
+    #[value(name = "communities-hierarchy", alias = "hierarchy")]
+    CommunitiesHierarchy,
     Mermaid,
     Stats,
 }
@@ -162,6 +167,7 @@ struct FileConfig {
     coref: Option<bool>,
     max_concurrency: Option<usize>,
     relation_gleaning: Option<usize>,
+    community_summaries: Option<bool>,
     output: Option<OutFmt>,
 }
 
@@ -280,6 +286,14 @@ struct Args {
     #[arg(long)]
     mock_tool_calls: Option<String>,
 
+    /// GraphRAG-style community summaries: with `-o communities` /
+    /// `-o communities-hierarchy`, call the backend once per community (per
+    /// level, in hierarchy mode) to generate a `{name, summary}` report merged
+    /// into the community JSON. A failed community degrades to null
+    /// name/summary with a stderr warning; the run does not fail.
+    #[arg(long)]
+    community_summaries: bool,
+
     /// Output format.
     #[arg(short, long, value_enum, default_value_t = OutFmt::Json)]
     output: OutFmt,
@@ -306,6 +320,7 @@ struct Resolved {
     coref: bool,
     max_concurrency: usize,
     relation_gleaning: usize,
+    community_summaries: bool,
     output: OutFmt,
 }
 
@@ -413,6 +428,8 @@ fn resolve(m: &ArgMatches, args: &Args, cfg: FileConfig) -> Resolved {
             args.relation_gleaning,
             cfg.relation_gleaning,
         ),
+        // A presence flag: explicit `--community-summaries` wins, else the config value.
+        community_summaries: args.community_summaries || cfg.community_summaries.unwrap_or(false),
         output: pick(m, "output", args.output, cfg.output),
     }
 }
@@ -616,6 +633,7 @@ fn output_name(v: OutFmt) -> &'static str {
         OutFmt::NodeLink => "node-link",
         OutFmt::LadybugImport => "ladybug-import",
         OutFmt::Communities => "communities",
+        OutFmt::CommunitiesHierarchy => "communities-hierarchy",
         OutFmt::Mermaid => "mermaid",
         OutFmt::Stats => "stats",
     }
@@ -642,6 +660,7 @@ fn describe_value() -> serde_json::Value {
             "node-link",
             "ladybug-import",
             "communities",
+            "communities-hierarchy",
             "mermaid",
             "stats"
         ],
@@ -693,6 +712,7 @@ fn dry_run_value(args: &Args, cfg: &Resolved, template_loaded: bool) -> serde_js
             "coref": cfg.coref,
             "max_concurrency": cfg.max_concurrency,
             "relation_gleaning": cfg.relation_gleaning,
+            "community_summaries": cfg.community_summaries,
             "output": output_name(cfg.output)
         }
     })
@@ -722,7 +742,16 @@ fn print_dry_run(args: &Args, cfg: &Resolved, template_loaded: bool) -> anyhow::
 /// eight formats are mutually-exclusive terminal printing, split out of `main`
 /// so the dispatch arm-per-format complexity lives in one tested-by-wiring
 /// place rather than inflating main's cyclomatic complexity.
-fn print_response(fmt: OutFmt, response: &ExtractionResponse) -> anyhow::Result<()> {
+///
+/// `precomputed_communities` carries the already-summarized communities JSON
+/// when `--community-summaries` ran (summarization is async, so it happens in
+/// `main` before this sync renderer); the community arms then print it as-is
+/// instead of recomputing detection.
+fn print_response(
+    fmt: OutFmt,
+    response: &ExtractionResponse,
+    precomputed_communities: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
     match fmt {
         OutFmt::Json => {
             println!(
@@ -772,30 +801,128 @@ fn print_response(fmt: OutFmt, response: &ExtractionResponse) -> anyhow::Result<
         }
         OutFmt::Mermaid => println!("{}", response.get_mermaid_code()),
         OutFmt::Stats => println!("{}", serde_json::to_string_pretty(&response.get_stats())?),
-        OutFmt::Communities => print_communities(response)?,
+        OutFmt::Communities => print_communities(response, precomputed_communities)?,
+        OutFmt::CommunitiesHierarchy => {
+            print_communities_hierarchy(response, precomputed_communities)?
+        }
     }
     Ok(())
 }
 
 /// `-o communities`: label-propagation community detection over the extracted
-/// graph (multiplicity-weighted edges). Without the `community` feature the
+/// graph (multiplicity-weighted edges). The emitted JSON carries a `quality`
+/// field (`null` — label propagation reports no score). A precomputed
+/// (summarized) document is printed as-is. Without the `community` feature the
 /// format exists but bails — mirroring how `--backend llms` behaves without
 /// `llms-backend`.
 #[cfg(feature = "community")]
-fn print_communities(response: &ExtractionResponse) -> anyhow::Result<()> {
-    println!(
-        "{}",
-        serde_json::to_string_pretty(&kg_extract::community::communities_json(
-            &response.knowledge_graph
-        ))?
-    );
+fn print_communities(
+    response: &ExtractionResponse,
+    precomputed: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
+    let value = match precomputed {
+        Some(v) => v.clone(),
+        None => kg_extract::community::communities_json(&response.knowledge_graph),
+    };
+    println!("{}", serde_json::to_string_pretty(&value)?);
     Ok(())
 }
 
 /// Without the `community` feature there is no detector to run.
 #[cfg(not(feature = "community"))]
-fn print_communities(_response: &ExtractionResponse) -> anyhow::Result<()> {
+fn print_communities(
+    _response: &ExtractionResponse,
+    _precomputed: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
     anyhow::bail!("the `communities` output format requires building with --features community")
+}
+
+/// `-o communities-hierarchy`: hierarchical Leiden levels (coarse → fine) over
+/// the extracted graph, each level carrying its modularity quality score. A
+/// precomputed (summarized) document is printed as-is. Without the
+/// `community-leiden` feature the format exists but bails — mirroring how
+/// `communities` behaves without `community`.
+#[cfg(feature = "community-leiden")]
+fn print_communities_hierarchy(
+    response: &ExtractionResponse,
+    precomputed: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
+    let value = match precomputed {
+        Some(v) => v.clone(),
+        None => kg_extract::community::hierarchy_json(&response.knowledge_graph),
+    };
+    println!("{}", serde_json::to_string_pretty(&value)?);
+    Ok(())
+}
+
+/// Without the `community-leiden` feature there is no hierarchical detector.
+#[cfg(not(feature = "community-leiden"))]
+fn print_communities_hierarchy(
+    _response: &ExtractionResponse,
+    _precomputed: Option<&serde_json::Value>,
+) -> anyhow::Result<()> {
+    anyhow::bail!(
+        "the `communities-hierarchy` output format requires building with --features community-leiden"
+    )
+}
+
+/// `--community-summaries`: run one backend completion per community (per
+/// level in hierarchy mode) and return the communities JSON with `{members,
+/// name, summary}` objects. The backend from extraction is reused; for the
+/// agentic engine (which bypasses `make_backend`) one is built on demand.
+/// Without the `community` feature this returns `None` and the print arm
+/// bails naming the feature — same contract as the plain formats.
+#[cfg(feature = "community")]
+async fn summarize_for_output(
+    cfg: &Resolved,
+    args: &Args,
+    extraction_backend: Option<&Arc<dyn LlmBackend>>,
+    response: &ExtractionResponse,
+) -> anyhow::Result<Option<serde_json::Value>> {
+    let backend = match extraction_backend {
+        Some(b) => b.clone(),
+        None => make_backend(
+            cfg.backend,
+            &cfg.agent,
+            args.mock_response.as_deref(),
+            args.mock_tool_calls.as_deref(),
+        )?,
+    };
+    use kg_extract::backend::CompletionOptions;
+    let options = CompletionOptions {
+        model: cfg
+            .model
+            .clone()
+            .unwrap_or_else(|| CompletionOptions::default().model),
+        max_tokens: kg_extract::community::SUMMARY_MAX_TOKENS,
+        ..CompletionOptions::default()
+    };
+    let kg = &response.knowledge_graph;
+    Ok(Some(match cfg.output {
+        OutFmt::Communities => {
+            kg_extract::community::communities_json_with_summaries(kg, &backend, &options).await
+        }
+        #[cfg(feature = "community-leiden")]
+        OutFmt::CommunitiesHierarchy => {
+            kg_extract::community::hierarchy_json_with_summaries(kg, &backend, &options).await
+        }
+        // The hierarchy print arm bails naming the feature; emit a placeholder.
+        #[cfg(not(feature = "community-leiden"))]
+        OutFmt::CommunitiesHierarchy => serde_json::Value::Null,
+        _ => unreachable!("caller gates on the community output formats"),
+    }))
+}
+
+/// Without the `community` feature there is nothing to summarize; the print
+/// arm bails with an actionable error naming the feature.
+#[cfg(not(feature = "community"))]
+async fn summarize_for_output(
+    _cfg: &Resolved,
+    _args: &Args,
+    _extraction_backend: Option<&Arc<dyn LlmBackend>>,
+    _response: &ExtractionResponse,
+) -> anyhow::Result<Option<serde_json::Value>> {
+    Ok(None)
 }
 
 #[tokio::main]
@@ -856,6 +983,7 @@ async fn main() -> anyhow::Result<()> {
     // The agentic engine drives the SDK client itself (cwd sandbox + one
     // long-lived session), so it bypasses `make_backend` and its `--backend`
     // value — the provider is chosen by `--agent`.
+    let mut extraction_backend: Option<Arc<dyn LlmBackend>> = None;
     let extractor: Box<dyn Extractor + Send + Sync> = if matches!(cfg.engine, Engine::Agentic) {
         let mut c = AgenticExtractor::default_config();
         c.chunker = cfg.chunker.into();
@@ -881,6 +1009,7 @@ async fn main() -> anyhow::Result<()> {
             args.mock_response.as_deref(),
             args.mock_tool_calls.as_deref(),
         )?;
+        extraction_backend = Some(backend.clone());
         let coref_mode = if cfg.coref {
             CorefMode::Fuzzy
         } else {
@@ -963,7 +1092,23 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    print_response(cfg.output, &response)?;
+    // GraphRAG-style community summaries (--community-summaries): one backend
+    // completion per community (per level in hierarchy mode), merged into the
+    // communities JSON. Only meaningful for the two community output formats.
+    let mut precomputed_communities: Option<serde_json::Value> = None;
+    if cfg.community_summaries {
+        if matches!(cfg.output, OutFmt::Communities | OutFmt::CommunitiesHierarchy) {
+            precomputed_communities =
+                summarize_for_output(&cfg, &args, extraction_backend.as_ref(), &response).await?;
+        } else {
+            eprintln!(
+                "note: --community-summaries only applies to -o communities / \
+                 -o communities-hierarchy; ignoring"
+            );
+        }
+    }
+
+    print_response(cfg.output, &response, precomputed_communities.as_ref())?;
     Ok(())
 }
 

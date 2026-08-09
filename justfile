@@ -9,7 +9,7 @@ target_dir := `cargo metadata --format-version 1 --no-deps | python3 -c 'import 
 
 # 构建（含 llms 后端 + mcp server + 社区检测）
 build:
-    cargo build --release --features "llms-backend mcp community"
+    cargo build --release --features "llms-backend mcp community community-leiden"
 
 # 运行测试（含 mcp 工具与并发测试）
 test:
@@ -45,7 +45,7 @@ ladybug-eval-full-verify agent="minimaxcc" fixture="ladybug_eval":
 
 # Lint
 lint:
-    cargo clippy --all-targets --features "llms-backend mcp community"
+    cargo clippy --all-targets --features "llms-backend mcp community community-leiden"
 
 # 安装到 ~/sync/<os>-<arch>-bin/（含 kg-extract 与 kg-extract-mcp）
 install: build
