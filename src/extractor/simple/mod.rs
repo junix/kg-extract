@@ -343,6 +343,15 @@ impl SimpleExtractor {
             graphs.push(kg);
         }
 
+        // Canonical direction normalisation (opt-in) must happen per chunk,
+        // *before* the fold, so cross-chunk direction variants share one dedup
+        // key (e.g. chunk 1's `(A, USES, B)` and chunk 2's `(B, IS_USED_BY, A)`).
+        if self.config.spec.canonical_direction {
+            for kg in &mut graphs {
+                crate::merger::normalize_direction(kg);
+            }
+        }
+
         // Fold the per-chunk graphs, deduplicating per the configured strategy.
         let kg = if self.config.spec.merge_duplicates {
             let strategy = self.config.spec.merge_strategy;

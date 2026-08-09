@@ -486,6 +486,47 @@ mod tests {
     }
 
     #[test]
+    fn canonical_direction_merges_direction_variant_multiplicity() {
+        // (a, USES, b) and (b, IS_USED_BY, a) are the same semantic edge in two
+        // directions. After canonical-direction normalisation + merge dedup
+        // they are ONE triple, so the community graph sees one edge of weight
+        // 1.0 — while a genuinely distinct edge (a, PART_OF, b) keeps its own
+        // weight, so the pair's summed multiplicity lands at 2.0 (not 3.0).
+        use crate::merger::{merge_with_deduplication, normalize_direction};
+
+        let ent = |id: &str| Entity::new(id, id, EntityType::Other);
+        let directed = |s: &str, p: PredicateType, o: &str| {
+            Triple::new(ent(s), Predicate::new(p), ent(o))
+        };
+
+        let mut g1 = KnowledgeGraph::new();
+        g1.add_triple(directed("a", PredicateType::Uses, "b"));
+        let mut g2 = KnowledgeGraph::new();
+        g2.add_triple(directed("b", PredicateType::IsUsedBy, "a"));
+        g2.add_triple(directed("a", PredicateType::PartOf, "b"));
+        normalize_direction(&mut g1);
+        normalize_direction(&mut g2);
+
+        let kg = merge_with_deduplication(g1, g2);
+        assert_eq!(kg.triples.len(), 2, "direction variants collapse to one edge");
+
+        let (ids, graph) = to_community_graph(&kg);
+        let pos = |id: &str| ids.iter().position(|i| i == id).unwrap();
+        let (a, b) = (pos("a"), pos("b"));
+        assert_eq!(graph.edges().len(), 2);
+        let weight_ab: f64 = graph
+            .edges()
+            .iter()
+            .filter(|&&(s, o, _)| (s == a && o == b) || (s == b && o == a))
+            .map(|&(_, _, w)| w)
+            .sum();
+        assert_eq!(
+            weight_ab, 2.0,
+            "merged variant (1.0) + distinct PART_OF edge (1.0), not 3.0"
+        );
+    }
+
+    #[test]
     fn multiplicity_weights_change_the_partition() {
         // n1–n2 is a heavy pair (5 triples); n0–n1, n2–n3, n0–n3 are single
         // triples. Summed multiplicity must bind n1 to n2 (and n0 to n3),

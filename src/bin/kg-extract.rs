@@ -165,6 +165,7 @@ struct FileConfig {
     max_rounds: Option<usize>,
     merge_strategy: Option<MergeStrategyArg>,
     coref: Option<bool>,
+    canonical_direction: Option<bool>,
     max_concurrency: Option<usize>,
     relation_gleaning: Option<usize>,
     community_summaries: Option<bool>,
@@ -266,6 +267,13 @@ struct Args {
     #[arg(long)]
     coref: bool,
 
+    /// Canonical predicate direction: flip triples on the non-canonical member
+    /// of an inverse pair (endpoints swapped, predicate → inverse) at the merge
+    /// stage, so direction variants like (A, USES, B) vs (B, IS_USED_BY, A)
+    /// dedup to one edge. Off by default.
+    #[arg(long)]
+    canonical_direction: bool,
+
     /// Max concurrent backend calls: per-chunk extraction (Simple engine) and
     /// per-community summary calls (--community-summaries). 1 = sequential.
     #[arg(long, default_value_t = 8)]
@@ -321,6 +329,7 @@ struct Resolved {
     max_rounds: usize,
     merge_strategy: MergeStrategyArg,
     coref: bool,
+    canonical_direction: bool,
     max_concurrency: usize,
     relation_gleaning: usize,
     community_summaries: bool,
@@ -419,6 +428,8 @@ fn resolve(m: &ArgMatches, args: &Args, cfg: FileConfig) -> Resolved {
         merge_strategy: pick(m, "merge_strategy", args.merge_strategy, cfg.merge_strategy),
         // A presence flag: explicit `--coref` wins, else the config file value.
         coref: args.coref || cfg.coref.unwrap_or(false),
+        // A presence flag: explicit `--canonical-direction` wins, else the config value.
+        canonical_direction: args.canonical_direction || cfg.canonical_direction.unwrap_or(false),
         max_concurrency: pick(
             m,
             "max_concurrency",
@@ -713,6 +724,7 @@ fn dry_run_value(args: &Args, cfg: &Resolved, template_loaded: bool) -> serde_js
             "max_rounds": cfg.max_rounds,
             "merge_strategy": merge_strategy_name(cfg.merge_strategy),
             "coref": cfg.coref,
+            "canonical_direction": cfg.canonical_direction,
             "max_concurrency": cfg.max_concurrency,
             "relation_gleaning": cfg.relation_gleaning,
             "community_summaries": cfg.community_summaries,
@@ -1004,6 +1016,7 @@ async fn main() -> anyhow::Result<()> {
         let mut c = AgenticExtractor::default_config();
         c.chunker = cfg.chunker.into();
         c.source_doc = source_doc.clone();
+        c.spec.canonical_direction = cfg.canonical_direction;
         if let Some(m) = &cfg.model {
             c.model_name = m.clone();
         }
@@ -1039,6 +1052,7 @@ async fn main() -> anyhow::Result<()> {
                 c.max_concurrency = cfg.max_concurrency;
                 c.spec.merge_strategy = cfg.merge_strategy.into();
                 c.spec.coref = coref_mode;
+                c.spec.canonical_direction = cfg.canonical_direction;
                 if let Some(m) = &cfg.model {
                     c.model_name = m.clone();
                 }
@@ -1052,6 +1066,7 @@ async fn main() -> anyhow::Result<()> {
                 c.chunker = cfg.chunker.into();
                 c.source_doc = source_doc.clone();
                 c.spec.merge_strategy = cfg.merge_strategy.into();
+                c.spec.canonical_direction = cfg.canonical_direction;
                 if let Some(m) = &cfg.model {
                     c.model_name = m.clone();
                 }
@@ -1074,6 +1089,7 @@ async fn main() -> anyhow::Result<()> {
                 c.source_doc = source_doc.clone();
                 c.spec.merge_strategy = cfg.merge_strategy.into();
                 c.spec.coref = coref_mode;
+                c.spec.canonical_direction = cfg.canonical_direction;
                 if let Some(m) = &cfg.model {
                     c.model_name = m.clone();
                 }

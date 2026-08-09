@@ -437,6 +437,11 @@ impl Extractor for ToolCallExtractor {
         }
 
         let mut kg = self.build_graph(&acc);
+        // Canonical direction normalisation (opt-in) runs before dedup so
+        // direction variants (`USES` / `IS_USED_BY`) share one dedup key.
+        if self.config.spec.canonical_direction {
+            crate::merger::normalize_direction(&mut kg);
+        }
         if self.config.spec.merge_duplicates {
             kg = dedup_graph_coref(
                 kg,
@@ -528,6 +533,77 @@ mod tests {
             .find(|e| e.label == "GPT-4")
             .unwrap();
         assert_eq!(gpt.metadata["params"], serde_json::json!("1.8T"));
+    }
+
+    #[tokio::test]
+    async fn canonical_direction_flips_and_dedups_direction_variants() {
+        // spec.canonical_direction = true: (A, USES, B) and (B, IS_USED_BY, A)
+        // converge on the canonical IS_USED_BY edge before dedup, so the output
+        // holds ONE triple.
+        let rounds = vec![vec![
+            call(
+                "add_entity",
+                serde_json::json!({"name": "A", "type": "OTHER"}),
+            ),
+            call(
+                "add_entity",
+                serde_json::json!({"name": "B", "type": "OTHER"}),
+            ),
+            call(
+                "add_relation",
+                serde_json::json!({"source": "A", "predicate": "USES", "target": "B"}),
+            ),
+            call(
+                "add_relation",
+                serde_json::json!({"source": "B", "predicate": "IS_USED_BY", "target": "A"}),
+            ),
+        ]];
+        let backend = Arc::new(MockBackend::new(vec![]).with_tool_rounds(rounds));
+        let mut c = ToolCallExtractor::default_config();
+        c.spec.canonical_direction = true;
+        let out = ToolCallExtractor::with_config(backend, c)
+            .extract("text")
+            .await
+            .unwrap();
+        assert_eq!(
+            out.num_triples(),
+            1,
+            "direction variants collapse to one canonical edge"
+        );
+        let t = &out.knowledge_graph.triples[0];
+        assert_eq!(t.predicate.predicate_type, PredicateType::IsUsedBy);
+        assert_eq!(t.subject.label, "B");
+        assert_eq!(t.object.label, "A");
+    }
+
+    #[tokio::test]
+    async fn direction_variants_stay_separate_by_default() {
+        // Default (canonical_direction off): the two direction variants remain
+        // two edges — the opt-in must not change default behaviour.
+        let rounds = vec![vec![
+            call(
+                "add_entity",
+                serde_json::json!({"name": "A", "type": "OTHER"}),
+            ),
+            call(
+                "add_entity",
+                serde_json::json!({"name": "B", "type": "OTHER"}),
+            ),
+            call(
+                "add_relation",
+                serde_json::json!({"source": "A", "predicate": "USES", "target": "B"}),
+            ),
+            call(
+                "add_relation",
+                serde_json::json!({"source": "B", "predicate": "IS_USED_BY", "target": "A"}),
+            ),
+        ]];
+        let backend = Arc::new(MockBackend::new(vec![]).with_tool_rounds(rounds));
+        let out = ToolCallExtractor::new(backend)
+            .extract("text")
+            .await
+            .unwrap();
+        assert_eq!(out.num_triples(), 2);
     }
 
     #[tokio::test]

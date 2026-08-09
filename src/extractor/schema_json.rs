@@ -451,6 +451,11 @@ impl Extractor for SchemaJsonExtractor {
         };
 
         let mut kg = self.build_graph(data);
+        // Canonical direction normalisation (opt-in): direction variants
+        // (`USES` / `IS_USED_BY`) converge on one canonical edge.
+        if self.config.spec.canonical_direction {
+            crate::merger::normalize_direction(&mut kg);
+        }
         // Single-shot over the whole text, so provenance is whole-document.
         crate::citation::stamp_whole_document(&mut kg, &self.config.source_doc, text);
 

@@ -7,7 +7,9 @@
 //! [`merge_knowledge_graphs_llm`]).
 
 use crate::backend::{CompletionOptions, LlmBackend};
-use crate::types::{CorefMode, Entity, EntityType, KnowledgeGraph, MergeStrategy, Triple};
+use crate::types::{
+    CorefMode, Entity, EntityType, KnowledgeGraph, MergeStrategy, PredicateType, Triple,
+};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -385,6 +387,74 @@ pub async fn dedup_graph_coref(
     } else {
         merge_with_deduplication_strategy_coref(KnowledgeGraph::new(), kg, strategy, coref)
     }
+}
+
+/// The canonical member of a predicate's inverse pair: the variant declared
+/// **first** in `PredicateType` (vocab.json declaration order, exposed via
+/// [`PredicateType::all`]). Unpaired predicates are their own canonical form.
+///
+/// Rule choice (spec/02 §Canonical direction): declaration order is stable and
+/// versioned upstream, so the rule needs no hand-maintained table and cannot
+/// drift from kg-vocab. (kg-vocab v3 removed declaration-order tie-breaking
+/// from *parse-time* substring resolution; that does not affect this
+/// direction convention.) With the current vocabulary this yields
+/// `IS_USED_BY`, `DERIVES_FROM`, `PART_OF`, `CONTRIBUTES_TO`, `SUCCEEDS`,
+/// `MEASURED_BY` as the six canonical members.
+pub fn canonical_predicate(p: PredicateType) -> PredicateType {
+    let inv = p.inverse();
+    if inv == p {
+        return p;
+    }
+    let pos = |q: PredicateType| {
+        PredicateType::all()
+            .iter()
+            .position(|&x| x == q)
+            .expect("all() covers every variant")
+    };
+    if pos(p) <= pos(inv) {
+        p
+    } else {
+        inv
+    }
+}
+
+/// Rewrite `triples` to canonical predicate direction in place: a triple whose
+/// predicate is the *non*-canonical member of an inverse pair is flipped —
+/// subject and object swap and the predicate becomes its inverse — so
+/// semantically equivalent direction variants (`(A, USES, B)` vs
+/// `(B, IS_USED_BY, A)`) converge on one `(subj, predicate, obj)` dedup key.
+///
+/// On a flip the predicate's `raw_type` / `label` are **cleared** (keeping the
+/// old surface token next to swapped endpoints would display the semantically
+/// inverted edge, e.g. `Beta "USES" Alpha`); the original token is preserved
+/// in predicate metadata under `direction_normalized_from`, and
+/// `output_type` / `display_label` fall back to the canonical enum value.
+/// `confidence` / `metadata` otherwise move with the triple. Unpaired
+/// predicates and already-canonical ones are untouched. The transform is a
+/// pure function of each triple, so output order is the input order.
+pub fn normalize_triple_directions(triples: &mut [Triple]) {
+    for t in triples {
+        let canonical = canonical_predicate(t.predicate.predicate_type);
+        if canonical == t.predicate.predicate_type {
+            continue;
+        }
+        std::mem::swap(&mut t.subject, &mut t.object);
+        t.predicate.predicate_type = canonical;
+        let surface = t.predicate.raw_type.take().or_else(|| t.predicate.label.take());
+        t.predicate.label = None;
+        if let Some(token) = surface {
+            t.predicate
+                .metadata
+                .entry("direction_normalized_from".to_string())
+                .or_insert(serde_json::Value::String(token));
+        }
+    }
+}
+
+/// [`normalize_triple_directions`] over every triple of a graph. Apply at the
+/// merge stage, *before* dedup, so direction variants collapse to one edge.
+pub fn normalize_direction(kg: &mut KnowledgeGraph) {
+    normalize_triple_directions(&mut kg.triples);
 }
 
 /// Combine two entities judged identical (same lowercased label). `llm_desc`
@@ -961,6 +1031,192 @@ mod tests {
         );
         assert_eq!(merged.entities.len(), 1);
         assert!(merged.entities.contains_key("e1"));
+    }
+
+    #[test]
+    fn canonical_predicate_picks_first_declared_member_of_pair() {
+        // Declaration-order rule: the variant declared first in vocab.json is
+        // canonical. IS_USED_BY precedes USES, so that pair canonicalises to
+        // IS_USED_BY; PART_OF precedes COMPOSED_OF. Unpaired predicates map to
+        // themselves.
+        assert_eq!(
+            canonical_predicate(PredicateType::Uses),
+            PredicateType::IsUsedBy
+        );
+        assert_eq!(
+            canonical_predicate(PredicateType::IsUsedBy),
+            PredicateType::IsUsedBy
+        );
+        assert_eq!(
+            canonical_predicate(PredicateType::ComposedOf),
+            PredicateType::PartOf
+        );
+        assert_eq!(
+            canonical_predicate(PredicateType::PartOf),
+            PredicateType::PartOf
+        );
+        assert_eq!(
+            canonical_predicate(PredicateType::Precedes),
+            PredicateType::Succeeds
+        );
+        assert_eq!(
+            canonical_predicate(PredicateType::Measures),
+            PredicateType::MeasuredBy
+        );
+        assert_eq!(
+            canonical_predicate(PredicateType::RelatedTo),
+            PredicateType::RelatedTo
+        );
+    }
+
+    #[test]
+    fn normalize_direction_flips_noncanonical_member_only() {
+        let a = Entity::new("e1", "Alpha", EntityType::Organization);
+        let b = Entity::new("e2", "Beta", EntityType::Technology);
+        let mut kg = KnowledgeGraph::new();
+        kg.add_triple(Triple::new(
+            a.clone(),
+            Predicate::with_label(PredicateType::Uses, "uses"),
+            b.clone(),
+        ));
+        kg.add_triple(Triple::new(
+            b.clone(),
+            Predicate::new(PredicateType::IsUsedBy),
+            a.clone(),
+        ));
+        kg.add_triple(Triple::new(a, Predicate::new(PredicateType::RelatedTo), b));
+
+        normalize_direction(&mut kg);
+
+        let keys: Vec<_> = kg.triples.iter().map(|t| t.to_tuple()).collect();
+        assert_eq!(
+            keys,
+            vec![
+                ("e2".to_string(), "IS_USED_BY".to_string(), "e1".to_string()),
+                ("e2".to_string(), "IS_USED_BY".to_string(), "e1".to_string()),
+                ("e1".to_string(), "RELATED_TO".to_string(), "e2".to_string()),
+            ],
+            "USES flips to canonical IS_USED_BY with swapped endpoints; \
+             the unpaired RELATED_TO is untouched"
+        );
+        let flipped = &kg.triples[0];
+        assert_eq!(flipped.subject.label, "Beta");
+        assert_eq!(flipped.object.label, "Alpha");
+        // The stale surface token is cleared (display falls back to the
+        // canonical enum value); the original token survives in metadata.
+        assert_eq!(flipped.predicate.raw_type, None);
+        assert_eq!(flipped.predicate.label, None);
+        assert_eq!(flipped.predicate.output_type(), "IS_USED_BY");
+        assert_eq!(
+            flipped.predicate.metadata["direction_normalized_from"],
+            serde_json::json!("uses")
+        );
+        // An untouched triple keeps its fields.
+        assert_eq!(kg.triples[2].predicate.predicate_type, PredicateType::RelatedTo);
+    }
+
+    #[test]
+    fn direction_variants_dedup_to_one_edge_after_normalization() {
+        // g1: (Alpha, USES, Beta); g2: (Beta, IS_USED_BY, Alpha) — the same
+        // semantic edge in two directions. With canonical direction applied
+        // before the merge, they collapse to ONE triple and union citations.
+        let alpha = Entity::new("e1", "Alpha", EntityType::Organization);
+        let beta = Entity::new("e2", "Beta", EntityType::Technology);
+        let mut g1 = KnowledgeGraph::new();
+        g1.add_entity(alpha.clone());
+        g1.add_entity(beta.clone());
+        let mut t1 = Triple::new(
+            alpha.clone(),
+            Predicate::new(PredicateType::Uses),
+            beta.clone(),
+        );
+        crate::citation::attach_citation(
+            &mut t1.metadata,
+            &crate::citation::Citation::new(None, 1, 2),
+        );
+        g1.add_triple(t1);
+
+        let mut g2 = KnowledgeGraph::new();
+        g2.add_entity(alpha.clone());
+        g2.add_entity(beta.clone());
+        let mut t2 = Triple::new(beta, Predicate::new(PredicateType::IsUsedBy), alpha);
+        crate::citation::attach_citation(
+            &mut t2.metadata,
+            &crate::citation::Citation::new(None, 5, 6),
+        );
+        g2.add_triple(t2);
+
+        normalize_direction(&mut g1);
+        normalize_direction(&mut g2);
+        let merged = merge_with_deduplication(g1, g2);
+
+        assert_eq!(
+            merged.triples.len(),
+            1,
+            "direction variants share one dedup key after normalisation"
+        );
+        let t = &merged.triples[0];
+        assert_eq!(t.predicate.predicate_type, PredicateType::IsUsedBy);
+        // Provenance from BOTH direction variants survives on the kept edge.
+        let citations = t.metadata["citations"].as_array().unwrap();
+        assert_eq!(citations.len(), 2, "citations union across the variants");
+    }
+
+    #[test]
+    fn direction_variants_survive_dedup_when_normalization_off() {
+        // Default behaviour (normalisation off): the two direction variants
+        // remain distinct edges — pinned so the opt-in cannot silently become
+        // the default.
+        let alpha = Entity::new("e1", "Alpha", EntityType::Organization);
+        let beta = Entity::new("e2", "Beta", EntityType::Technology);
+        let mut g1 = KnowledgeGraph::new();
+        g1.add_entity(alpha.clone());
+        g1.add_entity(beta.clone());
+        g1.add_triple(Triple::new(
+            alpha.clone(),
+            Predicate::new(PredicateType::Uses),
+            beta.clone(),
+        ));
+        let mut g2 = KnowledgeGraph::new();
+        g2.add_entity(alpha.clone());
+        g2.add_entity(beta.clone());
+        g2.add_triple(Triple::new(
+            beta,
+            Predicate::new(PredicateType::IsUsedBy),
+            alpha,
+        ));
+
+        let merged = merge_with_deduplication(g1, g2);
+        assert_eq!(
+            merged.triples.len(),
+            2,
+            "without normalisation, USES and IS_USED_BY stay separate edges"
+        );
+    }
+
+    #[test]
+    fn normalize_direction_is_deterministic() {
+        let build = || {
+            let a = Entity::new("e1", "Alpha", EntityType::Organization);
+            let b = Entity::new("e2", "Beta", EntityType::Technology);
+            let c = Entity::new("e3", "Gamma", EntityType::Technology);
+            let mut kg = KnowledgeGraph::new();
+            kg.add_triple(Triple::new(a.clone(), Predicate::new(PredicateType::Uses), b.clone()));
+            kg.add_triple(Triple::new(b.clone(), Predicate::new(PredicateType::IsUsedBy), a.clone()));
+            kg.add_triple(Triple::new(b, Predicate::new(PredicateType::ComposedOf), c.clone()));
+            kg.add_triple(Triple::new(c, Predicate::new(PredicateType::DerivesFrom), a));
+            normalize_direction(&mut kg);
+            kg
+        };
+        let first = build();
+        for _ in 0..8 {
+            let again = build();
+            assert_eq!(
+                again.triples.iter().map(|t| t.to_tuple()).collect::<Vec<_>>(),
+                first.triples.iter().map(|t| t.to_tuple()).collect::<Vec<_>>(),
+                "normalisation is a pure per-triple transform — same input, same output"
+            );
+        }
     }
 
     #[tokio::test]

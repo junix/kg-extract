@@ -420,6 +420,30 @@ fn community_summaries_flag_parses_from_cli_and_config() {
     assert!(resolved.community_summaries);
 }
 
+#[test]
+fn canonical_direction_flag_parses_from_cli_and_config() {
+    // Off by default.
+    let m = Args::command().get_matches_from(["kg-extract"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(!args.canonical_direction);
+
+    let m = Args::command().get_matches_from(["kg-extract", "--canonical-direction"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    assert!(args.canonical_direction);
+
+    // Presence-flag resolution: explicit CLI wins; otherwise the config value.
+    let m = Args::command().get_matches_from(["kg-extract"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    let cfg: FileConfig = serde_json::from_str(r#"{"canonical_direction": true}"#).unwrap();
+    let resolved = resolve(&m, &args, cfg);
+    assert!(resolved.canonical_direction, "config file enables the flag");
+
+    let m = Args::command().get_matches_from(["kg-extract", "--canonical-direction"]);
+    let args = Args::from_arg_matches(&m).unwrap();
+    let resolved = resolve(&m, &args, FileConfig::default());
+    assert!(resolved.canonical_direction);
+}
+
 #[cfg(feature = "community")]
 #[test]
 fn print_response_communities_accepts_precomputed_summaries() {

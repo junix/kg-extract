@@ -10,10 +10,11 @@
 //! (converse predicate for an edge flip; unpaired predicates invert to
 //! themselves) and the `ENTITY_GROUPS` / `PREDICATE_GROUPS` tables through the
 //! same re-export — no extra wiring needed.
-//! TODO(kg-vocab v2): `inverse()` could normalise relationship direction at
-//! merge time (`merger.rs` dedups triples by `(subj, predicate, obj)`), e.g.
-//! folding `A -IS_USED_BY-> B` into `B -USES-> A`; left undone because it
-//! changes dedup semantics and needs a spec decision first.
+//! `inverse()` backs the optional **canonical direction normalisation** at the
+//! merge stage (`merger::normalize_direction`, off by default): a triple whose
+//! predicate is the non-canonical member of an inverse pair is flipped
+//! (endpoints swapped, predicate → inverse) so direction variants share one
+//! dedup key. See spec/02 §Canonical direction.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

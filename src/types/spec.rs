@@ -128,6 +128,14 @@ pub struct ExtractionSpec {
     /// surface variants of the same name for cross-chunk coreference.
     #[serde(default)]
     pub coref: CorefMode,
+    /// Rewrite triples to canonical predicate direction at the merge stage
+    /// (`merger::normalize_direction`): a triple on the non-canonical member of
+    /// an inverse pair (e.g. `USES`, whose canonical inverse is `IS_USED_BY`)
+    /// is flipped — endpoints swapped, predicate → inverse — so direction
+    /// variants share one dedup key. Off by default (spec/02 §Canonical
+    /// direction).
+    #[serde(default)]
+    pub canonical_direction: bool,
     /// An optional rich extraction *template* (preset). When set, schema-driven
     /// extractors render their prompt from the template's guideline and output
     /// fields (see [`crate::template`]) instead of the bare type-vocabulary,
@@ -152,6 +160,7 @@ impl Default for ExtractionSpec {
             merge_duplicates: true,
             merge_strategy: MergeStrategy::default(),
             coref: CorefMode::default(),
+            canonical_direction: false,
             template: None,
             language: None,
         }

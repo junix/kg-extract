@@ -810,6 +810,14 @@ impl AgenticExtractor {
 
         let _ = client.disconnect().await;
 
+        // Canonical direction normalisation (opt-in) at the assembly stage:
+        // the model's own slice-time consolidation is untouched, but direction
+        // variants across slices (`USES` / `IS_USED_BY`) converge on one
+        // canonical edge in the output graph.
+        if self.config.spec.canonical_direction {
+            crate::merger::normalize_triple_directions(&mut all_triples);
+        }
+
         let resp = Self::assemble_response(
             SessionOutcome {
                 slices_count: n,
