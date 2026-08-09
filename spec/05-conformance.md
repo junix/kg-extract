@@ -104,6 +104,19 @@ Behaviors are grouped into clusters. `[T]` = covered by an existing test
      incompatible types and single-token containment (`"Apple"` ⊂
      `"Apple Store"`) apart, and resolves ties deterministically to the
      earliest-inserted entity. `[T]`
+- E.7 `canonical_direction=true` flips triples on the non-canonical member of
+     an inverse pair (endpoints swapped, predicate → inverse; canonical =
+     first-declared variant) before dedup, so `(A, USES, B)` and
+     `(B, IS_USED_BY, A)` collapse to one edge with unioned citations;
+     unpaired predicates are untouched; `false` (default) keeps the variants
+     as distinct edges. `[T]` (`merger::canonical_predicate_picks_first_declared_member_of_pair`,
+     `merger::normalize_direction_flips_noncanonical_member_only`,
+     `merger::direction_variants_dedup_to_one_edge_after_normalization`,
+     `merger::direction_variants_survive_dedup_when_normalization_off`,
+     `merger::normalize_direction_is_deterministic`,
+     `toolcall::canonical_direction_flips_and_dedups_direction_variants`,
+     `toolcall::direction_variants_stay_separate_by_default`,
+     `community::canonical_direction_merges_direction_variant_multiplicity`)
 
 ### F. Simple engine specifics
 

@@ -208,8 +208,9 @@ Ensure:  graph from accumulated tool calls; Fixed = enum-constrained;
  4: kg ← BuildGraph(accumulator): entities by lowercased name; relations
       resolved by name (dangling dropped); strength clamped [0,1] (default 0.8);
       attributes applied last (survive triple re-inserts)
- 5: if merge_duplicates: kg ← dedup per merge_strategy/coref
- 6: stamp legacy line-only whole-document citation; record
+ 5: if canonical_direction: rewrite triples to canonical direction (8.3.1)
+ 6: if merge_duplicates: kg ← dedup per merge_strategy/coref
+ 7: stamp legacy line-only whole-document citation; record
       mode/schema_mode/new_schema_types
 ```
 
@@ -255,9 +256,11 @@ per-slice attribution.
 
 ```
 Algorithm 4  Fold
-Require: list of chunk graphs, dedup flag, strategy, coref
+Require: list of chunk graphs, dedup flag, strategy, coref, canonical_direction
 Ensure:  one graph; label-duplicates combined; triples deduped by to_tuple;
          citations unioned
+ 0: if canonical_direction: rewrite every chunk graph's triples to canonical
+      direction first (8.3.1), so direction variants share one dedup key
  1: if ¬dedup: left-to-right KnowledgeGraph.merge
  2: else if strategy=llm: left-to-right merge_with_llm (backend synthesises
       differing descriptions; falls back to field-union)

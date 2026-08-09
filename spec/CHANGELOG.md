@@ -268,6 +268,47 @@ kg-vocab bumped to v2 (crate 0.2.0, vocabulary version `kg.vocab.v2`).
 - New regression tests: `types::predicate::tests::kg_vocab_v2_parse_semantics`,
   `types::predicate::tests::kg_vocab_v2_inverse_and_groups`.
 
+## 2026-08-09T01:57 — UPDATED
+
+Spec decision landed: opt-in **canonical direction** normalisation consumes
+`PredicateType::inverse()` (kg-vocab v2) at the merge stage.
+
+- Files: 00, 02, 03, 04, 05, 06, CHANGELOG.
+- Data model (new §8.3.1): the triple dedup key cannot collapse direction
+  variants (`(A, USES, B)` vs `(B, IS_USED_BY, A)`). The new
+  `ExtractionSpec.canonical_direction` (default `false`) rewrites every
+  triple to a canonical direction before dedup
+  (`merger::normalize_direction`): a triple on the non-canonical member of an
+  inverse pair is flipped — endpoints swapped, `predicate_type` →
+  `inverse()` — so variants share one key. **Canonical-member rule: the
+  variant declared first in `PredicateType` (vocab.json declaration order)**,
+  chosen because declaration order is already the vocabulary's tie-breaker
+  and needs no hand-maintained table; current canonical members:
+  `IS_USED_BY`, `DERIVES_FROM`, `PART_OF`, `CONTRIBUTES_TO`, `SUCCEEDS`,
+  `MEASURED_BY`. On a flip the stale `raw_type`/`label` surface token is
+  cleared (it would otherwise display the inverted edge) and preserved in
+  predicate metadata under `direction_normalized_from`; unpaired predicates
+  untouched; pure per-triple deterministic transform. All four engines apply it at their merge/assembly stage (Simple:
+  per chunk graph before the fold; ToolCall/SchemaJson: post-build,
+  pre-dedup; Agentic: assembled triples). Community mapping (§8.11)
+  consequently counts a merged direction-variant pair once.
+- Interfaces (§9.3): new presence flag `--canonical-direction` + config key
+  `canonical_direction` (CLI wins, else config; off by default).
+- Runtime model (§10.3 ToolCall step, §10.5 Algorithm 4): normalisation step
+  recorded before dedup.
+- Conformance: new E.7, all `[T]`.
+- Feature matrix: new M-05 row; done count 28 → 29.
+- New regression tests:
+  `merger::canonical_predicate_picks_first_declared_member_of_pair`,
+  `merger::normalize_direction_flips_noncanonical_member_only`,
+  `merger::direction_variants_dedup_to_one_edge_after_normalization`,
+  `merger::direction_variants_survive_dedup_when_normalization_off`,
+  `merger::normalize_direction_is_deterministic`,
+  `toolcall::canonical_direction_flips_and_dedups_direction_variants`,
+  `toolcall::direction_variants_stay_separate_by_default`,
+  `community::canonical_direction_merges_direction_variant_multiplicity`,
+  bin `canonical_direction_flag_parses_from_cli_and_config`.
+
 ## 2026-08-08T20:59 — UPDATED
 
 kg-vocab bumped to v3 (crate 0.3.0, vocabulary version `kg.vocab.v3`).
@@ -283,6 +324,10 @@ kg-vocab bumped to v3 (crate 0.3.0, vocabulary version `kg.vocab.v3`).
   `"published"`→PUBLISHED_IN are pinned to their v2 results. Unchanged from
   v2: the <3-char no-fuzzy-match fallback, longest-match-first ordering, and
   the `_` word-boundary requirement.
+- §8.3.1 rationale reworded: the canonical-member rule still pins the
+  first-declared variant of each inverse pair, but no longer leans on
+  declaration order being the vocabulary's parse tie-breaker (v3 removed
+  that); the direction convention is unaffected.
 - No conformance rows changed: the contract remains the resolution
   precedence plus the Exact/Aliased/Fallback audit.
 - Guard tests renamed and extended:

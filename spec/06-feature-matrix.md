@@ -51,6 +51,7 @@ contract. Rows MUST NOT be read as RFC 2119 promises.
 | M-02 | Fuzzy cross-chunk coreference (edit-distance + token-set channels) | lib, cli | stable | `--coref` | coref_fuzzy_*, token_set_* | done → 02,03 |
 | M-03 | LLM-synthesised description merge | lib, cli | stable | `--merge-strategy llm` | llm_strategy_synthesizes_* | done → 02,03 |
 | M-04 | Citation union on merge | lib | stable | — | citations_stamp_*_union_on_merge | done → 02,03 |
+| M-05 | Canonical direction (inverse-pair normalisation before dedup) | lib, cli | stable | `--canonical-direction` | canonical_predicate_*, normalize_direction_*, direction_variants_* | done → 02,03 |
 
 ### Provenance
 

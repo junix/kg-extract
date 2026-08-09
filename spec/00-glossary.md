@@ -15,6 +15,7 @@ quoted.
 | Schema | schema | test:schema_json::fixed_mode_drops_out_of_schema_records, code:types/schema.rs | 02, 03 |
 | MergeStrategy | merge strategy | test:merger::field_union_combines_description_confidence_metadata_and_type | 02, 03 |
 | CorefMode | coreference mode | test:merger::coref_fuzzy_merges_normalized_variant_and_remaps_triples | 02, 03 |
+| Canonical direction | canonical direction | test:merger::canonical_predicate_picks_first_declared_member_of_pair, code:merger.rs `normalize_direction` | 02, 04 |
 | ExtractionSpec | extraction spec | test:schema_json::one_spec_runs_through_both_engines, README §Spec vs execution | 02, 04 |
 | ExtractionConfig | extraction config | code:types/config.rs `ExtractionConfig`, README §Spec vs execution | 02, 04 |
 | Citation | citation | test:simple::prechunked_citations_use_chunk_metadata_lines, code:citation.rs `Citation` | 02, 03 |

@@ -316,6 +316,7 @@ kg-extract -e schema-json --schema-mode evolving --schema schema.json -b agent -
 | `--mock-tool-calls` | mock backend only: scripted tool calls for `-e toolcall` offline/e2e tests |
 | `-F, --input-format` | `text` (default) \| `chunks` — input is chonkie chunk JSON/JSONL, consumed without re-chunking |
 | `--coref` | fuzzy cross-chunk coreference: normalized-label, edit-distance (≥6 chars, similarity ≥ 0.85), and token-set (multi-token subset / Jaccard ≥ 0.6) channels, all type-gated |
+| `--canonical-direction` | flip triples on the non-canonical member of a kg-vocab inverse pair (endpoints swapped, predicate → inverse) at the merge stage, so direction variants like `(A, USES, B)` vs `(B, IS_USED_BY, A)` dedup to one edge; canonical = first-declared variant of the pair; off by default |
 | `--max-concurrency` | bound on concurrent backend calls: simple per-chunk extraction **and** `--community-summaries` calls (default 8; 1 = sequential) |
 | `--community-summaries` | with `-o communities` / `-o communities-hierarchy`: one backend call per community (per level) generates a GraphRAG-style `{name, summary}` report merged into the community JSON; calls run with bounded concurrency (`--max-concurrency`), output stays deterministic; a failed community degrades to null fields with a stderr warning |
 | `-o, --output` | `json` (default) \| `jsonl` \| `kg-protocol` \| `node-link` \| `ladybug-import` \| `communities` \| `communities-hierarchy` \| `mermaid` \| `stats` |

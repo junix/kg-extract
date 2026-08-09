@@ -71,7 +71,8 @@ deterministic `MockBackend` for tests.
 
 Settings precedence (highest first): (1) explicit flag, (2) config file
 (`--config` or `~/.kg-extract/config.json`), (3) built-in default. A presence
-flag (`--coref`) wins over the config. `--list-presets` prints the gallery and
+flag (`--coref`, `--canonical-direction`) wins over the config.
+`--list-presets` prints the gallery and
 exits.
 
 ```abnf
@@ -97,6 +98,7 @@ Key flag contracts:
 | `--relation-gleaning N` | simple/agentic rescue rounds (0 = off) |
 | `-F/--input-format chunks` | chonkie chunk JSON/JSONL consumed as-is |
 | `--coref` | fuzzy cross-chunk coreference |
+| `--canonical-direction` | flip triples on the non-canonical member of an inverse pair (endpoints swapped, predicate → inverse) at the merge stage, so direction variants like `(A, USES, B)` vs `(B, IS_USED_BY, A)` dedup to one edge; off by default (spec 8.3.1); a presence flag like `--coref` — CLI wins, else the `canonical_direction` config key |
 | `--merge-strategy` | how label-duplicates fold |
 | `--max-concurrency N` | bound on concurrent backend calls: Simple per-chunk extraction **and** `--community-summaries` per-community calls (default 8; 1 = sequential) |
 | `--community-summaries` | with `-o communities` / `-o communities-hierarchy`: one backend completion per community (per level, in hierarchy mode) generating a `{name, summary}` report merged into the community JSON; calls run with bounded concurrency (`--max-concurrency`) and the output is deterministic regardless of completion order; a failed/unparseable community degrades to null fields with a stderr warning; other output formats emit a note and ignore the flag |

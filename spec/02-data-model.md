@@ -86,6 +86,60 @@ Two triples with the same tuple are considered identical for deduplication.
 [T] (`graph::merge_dedups_identical_triples_within_other`,
 `graph::merge_dedups_surface_variant_predicates_across_chunks`)
 
+### 8.3.1 Canonical direction (opt-in inverse normalisation)
+
+The dedup key alone cannot collapse **direction variants** of one semantic
+edge: `(A, USES, B)` and `(B, IS_USED_BY, A)` have different keys and would
+survive as two edges. The opt-in `canonical_direction` normalisation rewrites
+every triple to a canonical direction **at the merge stage, before dedup**
+(`merger::normalize_direction`): a triple whose predicate is the
+non-canonical member of an inverse pair is flipped — subject and object swap,
+`predicate_type` becomes its `inverse()` — so both variants converge on one
+key, e.g. `(A, USES, B)` → `(B, IS_USED_BY, A)`.
+
+**Canonical-member rule:** the canonical member of each inverse pair is the
+variant declared **first** in `PredicateType` (vocab.json declaration order,
+i.e. `PredicateType::all()` order). Rationale: declaration order is stable and
+versioned upstream, so the rule needs no hand-maintained table and cannot
+drift from kg-vocab. (Note: since kg-vocab v3, *parse-time* substring ties no
+longer break by declaration order — they fall back; that change does not
+affect this rule, which pins a direction convention, not a parse result.)
+With the current vocabulary:
+
+| Pair (inverse of each other) | Canonical member |
+|------------------------------|------------------|
+| `IS_USED_BY` ↔ `USES` | `IS_USED_BY` |
+| `DERIVES_FROM` ↔ `DERIVED_FROM` | `DERIVES_FROM` |
+| `PART_OF` ↔ `COMPOSED_OF` | `PART_OF` |
+| `CONTRIBUTES_TO` ↔ `SUPPORTED_BY` | `CONTRIBUTES_TO` |
+| `SUCCEEDS` ↔ `PRECEDES` | `SUCCEEDS` |
+| `MEASURES` ↔ `MEASURED_BY` | `MEASURED_BY` |
+
+Contract:
+
+- **Default off.** With the flag unset, direction variants remain distinct
+  edges (the historical behaviour). [T]
+  (`merger::direction_variants_survive_dedup_when_normalization_off`,
+  `toolcall::direction_variants_stay_separate_by_default`)
+- Only `predicate_type` and the endpoint order change; on a flip the stale
+  `raw_type`/`label` surface token is **cleared** (keeping it next to swapped
+  endpoints would display the semantically inverted edge) and preserved in
+  predicate metadata under `direction_normalized_from`, so
+  `output_type`/`display_label` fall back to the canonical enum value.
+  `confidence`/`metadata` otherwise move with the triple. Unpaired predicates
+  and already-canonical ones are untouched. [T]
+  (`merger::normalize_direction_flips_noncanonical_member_only`)
+- The transform is a pure per-triple function — output order is input order,
+  deterministic across runs. [T] (`merger::normalize_direction_is_deterministic`)
+- Applied by all four engines at their merge/assembly stage (Simple: per
+  chunk graph before the fold; ToolCall/SchemaJson: after graph build, before
+  dedup; Agentic: on the assembled triples). Direction variants then dedup to
+  one edge and union their citations; the community mapping
+  (§8.11) consequently counts the merged edge once. [T]
+  (`merger::direction_variants_dedup_to_one_edge_after_normalization`,
+  `toolcall::canonical_direction_flips_and_dedups_direction_variants`,
+  `community::canonical_direction_merges_direction_variant_multiplicity`)
+
 ### Predicate
 
 ```
@@ -154,6 +208,7 @@ ExtractionSpec {                       // the declarative "what"
   merge_duplicates:bool = true
   merge_strategy:  MergeStrategy = keep-existing
   coref:           CorefMode = off
+  canonical_direction: bool = false    // inverse-pair direction normalisation (8.3.1)
   template:        TemplateCfg?        // rich preset (schema-json prompt source)
   language:        string?             // render language for a template
 }

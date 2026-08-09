@@ -73,7 +73,12 @@ Key modules under `src/`:
   gated on type compatibility: edit distance (`FUZZY_MIN_LEN=6` / threshold
   `0.85`) and token-set (multi-token subset, or Jaccard ≥ 0.6; no length
   gate). `MergeStrategy`: `KeepExisting` (default) / `KeepIncoming` /
-  `FieldUnion` / `Llm`.
+  `FieldUnion` / `Llm`. Optional **canonical direction** normalisation
+  (`normalize_direction`, off by default): a triple on the non-canonical
+  member of a kg-vocab inverse pair is flipped (endpoints swapped, predicate
+  → `inverse()`; canonical = first-declared variant) before dedup, so
+  direction variants like `(A, USES, B)` / `(B, IS_USED_BY, A)` share one
+  dedup key (spec/02 §8.3.1).
 - `chunking.rs` — thin layer over the sibling `chonkie` crate. Public `Segment`
   carries `range: Option<core_types_rs::SourceRange>` so pre-chunked char, line,
   page, and bbox coordinates survive the extraction boundary, plus the optional
@@ -133,7 +138,9 @@ SchemaJson/ToolCall join texts and retain only document-level provenance),
 (`json`|`jsonl`|`kg-protocol`|`node-link`|`ladybug-import`|`communities`|`communities-hierarchy`|`mermaid`|`stats`;
 `communities` requires `--features community`, `communities-hierarchy` requires
 `--features community-leiden`), `--community-summaries` (per-community LLM
-`name`/`summary` merged into the two community output formats).
+`name`/`summary` merged into the two community output formats),
+`--canonical-direction` (opt-in inverse-pair direction normalisation at the
+merge stage; also the `canonical_direction` config key).
 
 ## Conventions & gotchas
 
