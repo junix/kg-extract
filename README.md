@@ -656,6 +656,42 @@ kg-extract -e toolcall -b llms --schema-mode fixed --schema schema.json -f doc.t
 kg-extract -e toolcall -b llms --schema-mode evolving --schema schema.json --max-rounds 4 -f doc.txt
 ```
 
+## Provider protocol (`kg.provider/v1`)
+
+For capability hubs (kg-acme), `kg-extract` doubles as a self-describing
+provider. Three subcommands form the machine-facing contract (spec §9.7):
+
+```bash
+kg-extract describe --json     # one manifest: capabilities + input_schema + cli_spec
+kg-extract available --json    # read-only probe; exit code always 0
+echo '{"text": "OpenAI developed GPT-4.", "backend": "mock",
+       "mock_response": "(entity<|>OpenAI<|>organization<|>A lab.<|>)##"}' \
+  | kg-extract invoke extract.entities_relations --request -
+```
+
+`describe` lists six capabilities with stable ids:
+
+| capability_id | in → out | side effects |
+|---|---|---|
+| `extract.entities_relations` | text/file → `kg.protocol.v1` artifact | network, data_egress |
+| `detect.communities` | kg-document → communities JSON (label propagation, `quality: null`) | — |
+| `detect.communities_hierarchy` | kg-document → hierarchical Leiden levels | — |
+| `summarize.communities` | kg-document → communities with LLM `name`/`summary` | network, data_egress |
+| `resolve.coref` | kg-document → coref-merged kg-document | — |
+| `resolve.canonical_direction` | kg-document → direction-normalized kg-document | — |
+
+The graph-in capabilities take `{"document": <kg.protocol.v1>}` (or
+`document_file`), so a hub can chain `extract → resolve.coref →
+detect.communities → summarize.communities` over one artifact. `invoke`
+prints exactly one `kg.execution/v1` envelope on stdout (`status`,
+`result`, `artifacts` with `sha256:` checksums, `diagnostics`, and
+`error.code` on failure: `invalid_request` / `unknown_capability` /
+`backend_unavailable` / `extraction_failed`); failures exit non-zero while
+`available` always exits 0. Each capability's `cli_spec` describes the argv
+that reproduces it directly — for `extract.entities_relations` the flat-flag
+form (`kg-extract -o kg-protocol …`), for the graph-in ones the `invoke`
+form itself — so a hub can render command lines data-driven.
+
 ## Parity notes
 
 This is a behavioural port of the Python original, including a couple of its

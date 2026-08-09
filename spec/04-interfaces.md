@@ -203,6 +203,86 @@ explicitly proposed via `propose_schema_type` for that graph path (persisted
 under `new_schema_types`, then allowed by later mutations). `propose_schema_type`
 is rejected unless the policy mode is `Evolving`.
 
+## 9.7 Provider protocol (`kg.provider/v1`)
+
+Three subcommands expose kg-extract to an external **capability hub**
+(kg-acme). They are the machine-facing contract; the human `--describe` flag
+stays as-is and points at them.
+
+```abnf
+describe  = "describe" "--json"          ; exactly one manifest JSON on stdout
+available = "available" "--json"         ; exit code ALWAYS 0; misses in JSON
+invoke    = "invoke" capability-id "--request" ("-" / file) ["--artifacts-dir" dir]
+```
+
+- **`describe --json`** — one `kg.provider/v1` document:
+  `{protocol, protocol_versions: [1], provider: {id: "kg-extract", version:
+  CARGO_PKG_VERSION, description}, capabilities: [...]}`. Each capability
+  carries `capability_id` (stable, hub match key), `title`, `description`,
+  `side_effects`, `input_schema` (every property has a self-explanatory
+  `description`; enums are `oneOf` `const`s with per-value descriptions),
+  `output: {mode: "artifact"|"result-json", kind}`, and `cli_spec`.
+- **`cli_spec`** — argv template following the hub's provider-v1 schema
+  (`subcommand`/`always`/`positionals`/`flags[]` with
+  `name/flag/kind/optional/default/repeatable/join/stdout/order/negated`;
+  flag `kind` ∈ `string|number|boolean|array`; emission order
+  `always ++ subcommand ++ positionals ++ flags(by order, tiebreak flag)`).
+  For `extract.entities_relations` it renders the flat-flag
+  argv (`kg-extract -o kg-protocol …`; the `text` field rides stdin, no flag).
+  The graph-in capabilities have no flat-flag equivalent (extraction flags
+  would imply an LLM call), so their cli_spec renders the `invoke` form
+  itself. [T] (`tests::extract_cli_spec_renders_argv_equivalent_to_direct_cli`,
+  `tests::graph_in_cli_specs_render_invoke_argv_that_parses`)
+- **`available --json`** — `{available, ready: [{name, kind}], missing:
+  [{name, kind}]}` (`cache_dir` omitted: there is no local weight cache, and
+  the hub schema types it as a string); `available` is true only when nothing
+  is missing. Probes are read-only (env vars via the backend's own provider-env
+  resolution, PATH, compiled features); no network calls.
+- **`invoke <capability_id> --request (-|file)`** — stdin/file JSON request →
+  exactly one `kg.execution/v1` envelope on stdout (logs/human output go to
+  stderr). The request is accepted in both the hub's wrapped form
+  `{"capability_id", "input"}` (kg-acme spec 01 §3; a mismatched
+  `capability_id` is `invalid_request`) and the bare input-object form for
+  direct CLI use. Envelope: `{protocol, capability_id, provider, status: "ok"|"error", result,
+  artifacts: [{path, kind, checksum: "sha256:<hex>"}], diagnostics:
+  [{severity, message}], error: {code, message}?}`. Artifacts are written to
+  `--artifacts-dir` (default: a fresh temp dir). `status: "error"` ⇒ exit
+  code non-zero.
+
+Capabilities (ids frozen; graph-in capabilities import `kg.protocol.v1` via
+`KnowledgeGraph::from_kg_document`):
+
+| capability_id | in → out | side_effects | feature |
+|---|---|---|---|
+| `extract.entities_relations` | text/file → `kg-document` artifact | `network`, `data_egress` | — |
+| `detect.communities` | kg-document → `communities` result | — | `community` |
+| `detect.communities_hierarchy` | kg-document → `communities` (hierarchy) result | — | `community-leiden` |
+| `summarize.communities` | kg-document → summarized communities result | `network`, `data_egress` | `community` (`community-leiden` when `hierarchy`) |
+| `resolve.coref` | kg-document → `kg-document` artifact | — | — |
+| `resolve.canonical_direction` | kg-document → `kg-document` artifact | — | — |
+
+`resolve.coref` / `resolve.canonical_direction` run the same passes as the
+extraction-time `coref` / `canonical_direction` options, exposed
+graph-in/graph-out so a hub can chain them after any graph producer. A
+capability whose feature is not compiled in still appears in `describe`
+(stable surface) but its invoke fails with `backend_unavailable`, mirroring
+the `-o communities` / `--backend llms` convention.
+
+**Error model** (`error.code`): `invalid_request` (malformed JSON, contract
+violations — unknown/conflicting/missing fields, bad enums, unreadable
+files), `unknown_capability`, `backend_unavailable` (missing compiled feature
+or unconstructable backend), `extraction_failed` (engine/summary run
+failure).
+
+**Import rule** (`from_kg_document`, protocol.rs): type tokens re-resolve
+through the kg-vocab `resolve` (exact → alias → OTHER fallback, original
+token kept as `raw_type`); `normalized_*`/`predicate_metadata` properties are
+re-derived, not round-tripped; ranged evidence becomes internal citations
+(re-promoted on export); relations with dangling endpoints are dropped and
+counted; range-less evidence is dropped and counted. Drops are never silent —
+they surface as invoke diagnostics. [T]
+(`protocol::tests::from_kg_document_*`)
+
 ## 12. Extension points
 
 - **Backend** — implement `LlmBackend` (+ optionally `complete_with_tools`,

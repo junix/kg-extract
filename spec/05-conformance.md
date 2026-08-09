@@ -205,3 +205,54 @@ Behaviors are grouped into clusters. `[T]` = covered by an existing test
      kept and summed by detectors, so triple multiplicity acts as edge weight. `[T]`
 - L.2 Multiplicity weights change the partition where a flat (deduped) graph
      would not. `[T]`
+
+### M. Provider protocol (`kg.provider/v1`)
+
+- M.1 `describe --json` emits exactly one manifest with `protocol`/
+     `protocol_versions`/`provider` and the six frozen capability ids; every
+     input_schema property and enum variant carries a self-explanatory
+     description. `[T]` (`provider::tests::describe_manifest_is_self_consistent`)
+- M.2 `extract.entities_relations`'s cli_spec renders the flat-flag argv
+     (`always` = `-o kg-protocol`, flags cover every schema field except
+     stdin-fed `text`, orders unique); rendered argv parses to the same clap
+     values as direct CLI use. `[T]`
+     (`provider::tests::extract_cli_spec_flags_align_with_input_schema`,
+     `tests::extract_cli_spec_renders_argv_equivalent_to_direct_cli`,
+     `tests::extract_cli_spec_renders_full_surface_without_clap_errors`)
+- M.3 The graph-in capabilities' cli_spec renders the `invoke` form
+     (`subcommand: ["invoke", <id>]`, `--request` default `-`). `[T]`
+     (`provider::tests::graph_in_cli_specs_render_the_invoke_form`,
+     `tests::graph_in_cli_specs_render_invoke_argv_that_parses`)
+- M.4 `available --json` is read-only, exits 0, and reports
+     `{available, ready, missing, cache_dir: null}` with `available ⇔ missing
+     empty`; the mock backend is always ready; feature probes reflect the
+     compiled features. `[T]` (`provider::tests::available_report_shape_and_semantics`)
+- M.5 `invoke` emits exactly one `kg.execution/v1` envelope on stdout;
+     success carries `result` + `artifacts` (`path`/`kind`/`checksum:
+     sha256:<hex>`, verified against the file), errors carry
+     `error.code`/`error.message` and a non-zero process exit.
+     `[T]` (`provider::tests::invoke_extract_mock_end_to_end`,
+     `invoke_rejects_non_json_request`)
+- M.6 Error codes are stable: `invalid_request` (contract violations:
+     unknown/conflicting/missing fields, bad enums, unreadable files, empty
+     input), `unknown_capability`, `backend_unavailable` (missing compiled
+     feature / unconstructable backend), `extraction_failed`.
+     `[T]` (`provider::tests::invoke_extract_validates_input_contract`,
+     `invoke_unknown_capability_is_machine_readable`,
+     `invoke_extract_reports_backend_unavailable`,
+     `invoke_detect_without_feature_reports_backend_unavailable`)
+- M.7 Graph-in capabilities accept inline `document` or `document_file`
+     (exactly one), import via `from_kg_document`, and surface import drops
+     (dangling relations, range-less evidence) as diagnostics — never silent.
+     `[T]` (`provider::tests::invoke_detect_communities_warns_on_dangling_relation`,
+     `invoke_resolve_rejects_missing_document`,
+     `protocol::tests::from_kg_document_*`)
+- M.8 `resolve.coref` collapses surface variants graph-in/graph-out;
+     `resolve.canonical_direction` collapses direction-variant edges to one;
+     `detect.*` / `summarize.communities` return the same JSON shapes as the
+     `-o communities*` CLI formats (summaries via the mock backend included).
+     `[T]` (`provider::tests::invoke_resolve_coref_merges_surface_variants`,
+     `invoke_resolve_canonical_direction_collapses_variants`,
+     `invoke_detect_communities_from_document`,
+     `invoke_detect_hierarchy_from_document`,
+     `invoke_summarize_communities_with_mock_backend`)

@@ -122,6 +122,16 @@ Key modules under `src/`:
   Wires the extraction output into the (previously orphan) `kg-community`
   detectors (ADR-987 §D#2).
 - `ladybug_export.rs` — export to the `graphdb-ladybug` graph store (e2e flows).
+- `provider.rs` — the **kg.provider/v1 surface** for capability hubs (kg-acme):
+  `describe_document` (six stable capability ids + input_schemas + hub
+  provider-v1-schema cli_spec), `available_report` (read-only env/PATH/feature probe, exit 0),
+  and `invoke` (kg.execution/v1 envelope, artifacts with `sha256:` checksums,
+  error codes `invalid_request`/`unknown_capability`/`backend_unavailable`/
+  `extraction_failed`). Graph-in capabilities import via
+  `KnowledgeGraph::from_kg_document` (protocol.rs); backend construction
+  (`make_backend`/`parse_mock_tool_rounds`) lives here and the CLI delegates
+  to it. CLI subcommands: `describe --json` / `available --json` /
+  `invoke <capability_id> --request -` (spec §9.7).
 
 ## CLI essentials
 

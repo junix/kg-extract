@@ -117,11 +117,22 @@ contract. Rows MUST NOT be read as RFC 2119 promises.
 | B-03 | PiAgentBackend | lib, cli | stable | `--agent pi-agent` | (integration) | partial → 04 |
 | B-04 | MockBackend (deterministic) | lib, cli | internal | `-b mock` | (used pervasively) | done → 04 |
 
+### Provider protocol (kg.provider/v1)
+
+| ID | Feature | Surfaces | Maturity | Flag | Tests | Spec |
+|----|---------|----------|----------|------|-------|------|
+| V-01 | `describe --json` manifest (capabilities, input_schema, cli_spec) | cli | stable | `describe --json` | provider::tests::describe_* | done → 04 |
+| V-02 | `available --json` read-only probe (env/PATH/features, exit 0) | cli | stable | `available --json` | provider::tests::available_report_* | done → 04 |
+| V-03 | `invoke` envelope + error model + artifact checksums | cli | stable | `invoke <cap> --request -` | provider::tests::invoke_* | done → 04 |
+| V-04 | `extract.entities_relations` capability (text/file → kg-document artifact) | cli | stable | — | provider::tests::invoke_extract_* | done → 04 |
+| V-05 | Graph-in capabilities (detect.communities*, summarize.communities, resolve.*) | cli | stable | — | provider::tests::invoke_detect_*/invoke_summarize_*/invoke_resolve_* | done → 04 |
+| V-06 | `KnowledgeGraph::from_kg_document` import (drop-counted) | lib | stable | — | protocol::tests::from_kg_document_* | done → 02,04 |
+
 ## Summary statistics
 
 | Spec status | Count |
 |-------------|-------|
-| done | 32 |
+| done | 43 |
 | partial | 11 |
 | missing | 0 |
 | n/a | 0 |

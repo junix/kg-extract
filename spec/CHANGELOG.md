@@ -336,3 +336,48 @@ kg-vocab bumped to v3 (crate 0.3.0, vocabulary version `kg.vocab.v3`).
   and tie-fallback assertions added),
   `types::predicate::tests::kg_vocab_v3_inverse_and_groups` (was
   `kg_vocab_v2_inverse_and_groups`).
+
+## 2026-08-08T23:20 — UPDATED
+
+Added the kg.provider/v1 provider-protocol surface for capability hubs.
+
+- Files: 04, 05, 06, CHANGELOG.
+- CLI (new §9.7): three subcommands — `describe --json` (one kg.provider/v1
+  manifest: provider identity + six capabilities with `input_schema`,
+  `side_effects`, `output`, and a `cli_spec` argv template following the acme
+  CLIFlag convention), `available --json` (read-only env/PATH/feature probe,
+  exit code always 0, `available ⇔ missing empty`), and `invoke
+  <capability_id> --request (-|file)` (stdin/file JSON request → exactly one
+  kg.execution/v1 envelope on stdout; artifacts carry `path`/`kind`/
+  `checksum: sha256:<hex>`; `status: "error"` exits non-zero). The human
+  `--describe` flag is unchanged and now points at the subcommands.
+- Capabilities (ids frozen): `extract.entities_relations` (text/file →
+  kg-document artifact; side effects network/data_egress),
+  `detect.communities` / `detect.communities_hierarchy` (kg-document →
+  communities JSON; local; features `community` / `community-leiden`),
+  `summarize.communities` (kg-document → summarized communities;
+  network/data_egress), `resolve.coref` / `resolve.canonical_direction`
+  (kg-document → kg-document; local). The resolve pair runs the same passes
+  as the extraction-time `coref` / `canonical_direction` options, exposed
+  graph-in/graph-out so a hub can chain them after any graph producer.
+  Uncompiled features keep the capability in `describe` but fail invoke with
+  `backend_unavailable` (mirrors `-o communities` without the feature).
+- Error model (`error.code`): `invalid_request`, `unknown_capability`,
+  `backend_unavailable`, `extraction_failed`.
+- New lib surface: `KnowledgeGraph::from_kg_document` (protocol.rs) imports a
+  kg.protocol.v1 document back into the extractor-domain graph — tokens
+  re-resolve through kg-vocab `resolve` with the original kept as `raw_type`,
+  `normalized_*` properties are re-derived, ranged evidence becomes internal
+  citations, dangling relations and range-less evidence are dropped and
+  counted (`ImportReport`), and the counts surface as invoke diagnostics.
+- Backend construction (`make_backend`, `parse_mock_tool_rounds`) moved from
+  the CLI into `src/provider.rs` so invoke resolves backends identically to
+  the CLI; the bin delegates. Behaviour unchanged.
+- New dependency: `sha2` (artifact checksums).
+- Conformance: new cluster M (M.1–M.8), all `[T]`.
+- Feature matrix: new rows V-01..V-06 (all done); the done count is corrected
+  to the true row arithmetic (37 pre-existing done, not 32) plus the six new
+  rows → 43 done / 11 partial.
+- New tests: 20 lib (`provider::tests::*`, `protocol::tests::from_kg_document_*`)
+  + 5 bin (`provider_subcommands_parse`, cli_spec render-equivalence,
+  `legacy_describe_points_at_provider_protocol`).
