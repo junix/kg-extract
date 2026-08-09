@@ -112,7 +112,13 @@ impl SimpleExtractor {
         let opts = CompletionOptions {
             model: self.config.model_name.clone(),
             temperature: 0.3,
-            max_tokens: 6500,
+            // Reasoning models (e.g. deepseek-v4-flash via the Responses API) burn
+            // output tokens on hidden reasoning before any visible text: a 6500
+            // budget was fully consumed by reasoning on a single ~1.2KB chunk,
+            // yielding a truncated empty reply and a silently empty graph.
+            // 32000 leaves headroom for reasoning plus the extraction payload;
+            // non-reasoning models simply stop early, so the cap costs nothing.
+            max_tokens: 32000,
         };
 
         // Drive the whole chunk through ONE multi-turn session: native for
