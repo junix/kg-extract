@@ -266,7 +266,8 @@ struct Args {
     #[arg(long)]
     coref: bool,
 
-    /// Max segments extracted concurrently (Simple engine). 1 = sequential.
+    /// Max concurrent backend calls: per-chunk extraction (Simple engine) and
+    /// per-community summary calls (--community-summaries). 1 = sequential.
     #[arg(long, default_value_t = 8)]
     max_concurrency: usize,
 
@@ -289,8 +290,10 @@ struct Args {
     /// GraphRAG-style community summaries: with `-o communities` /
     /// `-o communities-hierarchy`, call the backend once per community (per
     /// level, in hierarchy mode) to generate a `{name, summary}` report merged
-    /// into the community JSON. A failed community degrades to null
-    /// name/summary with a stderr warning; the run does not fail.
+    /// into the community JSON. Calls run with bounded concurrency
+    /// (--max-concurrency); the output is deterministic regardless of
+    /// completion order. A failed community degrades to null name/summary
+    /// with a stderr warning; the run does not fail.
     #[arg(long)]
     community_summaries: bool,
 
@@ -867,11 +870,12 @@ fn print_communities_hierarchy(
 }
 
 /// `--community-summaries`: run one backend completion per community (per
-/// level in hierarchy mode) and return the communities JSON with `{members,
-/// name, summary}` objects. The backend from extraction is reused; for the
-/// agentic engine (which bypasses `make_backend`) one is built on demand.
-/// Without the `community` feature this returns `None` and the print arm
-/// bails naming the feature — same contract as the plain formats.
+/// level in hierarchy mode) with bounded concurrency (`--max-concurrency`)
+/// and return the communities JSON with `{members, name, summary}` objects.
+/// The backend from extraction is reused; for the agentic engine (which
+/// bypasses `make_backend`) one is built on demand. Without the `community`
+/// feature this returns `None` and the print arm bails naming the feature —
+/// same contract as the plain formats.
 #[cfg(feature = "community")]
 async fn summarize_for_output(
     cfg: &Resolved,
@@ -900,11 +904,23 @@ async fn summarize_for_output(
     let kg = &response.knowledge_graph;
     Ok(Some(match cfg.output {
         OutFmt::Communities => {
-            kg_extract::community::communities_json_with_summaries(kg, &backend, &options).await
+            kg_extract::community::communities_json_with_summaries(
+                kg,
+                &backend,
+                &options,
+                cfg.max_concurrency,
+            )
+            .await
         }
         #[cfg(feature = "community-leiden")]
         OutFmt::CommunitiesHierarchy => {
-            kg_extract::community::hierarchy_json_with_summaries(kg, &backend, &options).await
+            kg_extract::community::hierarchy_json_with_summaries(
+                kg,
+                &backend,
+                &options,
+                cfg.max_concurrency,
+            )
+            .await
         }
         // The hierarchy print arm bails naming the feature; emit a placeholder.
         #[cfg(not(feature = "community-leiden"))]

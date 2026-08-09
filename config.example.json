@@ -4,10 +4,8 @@
   "backend": "agent",
   "agent": "minimaxcc",
   "chunker": "recursive",
-  "youtu_agent": false,
-  "community": false,
-  "toolcall_agent": false,
   "max_rounds": 1,
+  "max_concurrency": 8,
   "community_summaries": false,
   "output": "json"
 }

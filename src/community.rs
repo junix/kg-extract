@@ -11,6 +11,7 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use futures::stream::{self, StreamExt};
 use kg_community::{CommunityDetector, Graph, LabelPropagation, Partition};
 
 #[cfg(feature = "community-leiden")]
@@ -309,18 +310,25 @@ fn parse_summary_response(text: &str) -> CommunitySummary {
 
 /// Generate a [`CommunitySummary`] for every community of one partition.
 ///
-/// Communities are processed in **ascending community-label order**
-/// (`BTreeMap` iteration) with members sorted, so the backend-call sequence
-/// and the prompts are deterministic across runs. A failed or unparseable
-/// call degrades that community to `CommunitySummary::default()` (null
-/// `name`/`summary` in the JSON) with a stderr warning naming the community —
-/// the spec's silent-degradation error model — instead of failing the run.
+/// Backend calls run with **bounded concurrency**: up to `max_concurrency`
+/// (clamped to ≥ 1) completions are in flight at once, issued in ascending
+/// community-label order with sorted members so every prompt is deterministic.
+/// The determinism contract is on the **output**, not the call sequence: each
+/// result is keyed by its own community label and `buffered` yields in issue
+/// order, so completion order never leaks into the returned map — given the
+/// same backend replies, the map (and the rendered JSON) is byte-identical to
+/// a sequential run. A failed or unparseable call degrades that community to
+/// `CommunitySummary::default()` (null `name`/`summary` in the JSON) with a
+/// stderr warning naming the community — the spec's silent-degradation error
+/// model — instead of failing the run. (Warning lines may interleave in
+/// completion order; stderr is not part of the output contract.)
 pub async fn summarize_partition(
     kg: &KnowledgeGraph,
     ids: &[String],
     partition: &Partition,
     backend: &Arc<dyn LlmBackend>,
     options: &CompletionOptions,
+    max_concurrency: usize,
 ) -> BTreeMap<usize, CommunitySummary> {
     let mut members: BTreeMap<usize, Vec<String>> = BTreeMap::new();
     for (i, id) in ids.iter().enumerate() {
@@ -329,54 +337,63 @@ pub async fn summarize_partition(
             .or_default()
             .push(id.clone());
     }
-    let mut out = BTreeMap::new();
-    for (c, mut ids) in members {
-        ids.sort();
-        let prompt = community_prompt(kg, &ids);
-        let summary = match backend.complete(&[Message::user(prompt)], options).await {
-            Ok(text) => {
-                let parsed = parse_summary_response(&text);
-                if parsed.name.is_none() && parsed.summary.is_none() {
+    // LLM calls are I/O-bound, so `buffered` runs up to `max_conc` in flight
+    // while preserving issue (ascending-label) order — same pattern as the
+    // Simple engine's per-chunk concurrency.
+    let max_conc = max_concurrency.max(1);
+    stream::iter(members)
+        .map(|(c, mut ids)| async move {
+            ids.sort();
+            let prompt = community_prompt(kg, &ids);
+            let summary = match backend.complete(&[Message::user(prompt)], options).await {
+                Ok(text) => {
+                    let parsed = parse_summary_response(&text);
+                    if parsed.name.is_none() && parsed.summary.is_none() {
+                        eprintln!(
+                            "warning: community summary for community {c} was unparseable; \
+                             emitting null name/summary"
+                        );
+                    }
+                    parsed
+                }
+                Err(e) => {
                     eprintln!(
-                        "warning: community summary for community {c} was unparseable; \
+                        "warning: community summary for community {c} failed: {e}; \
                          emitting null name/summary"
                     );
+                    CommunitySummary::default()
                 }
-                parsed
-            }
-            Err(e) => {
-                eprintln!(
-                    "warning: community summary for community {c} failed: {e}; \
-                     emitting null name/summary"
-                );
-                CommunitySummary::default()
-            }
-        };
-        out.insert(c, summary);
-    }
-    out
+            };
+            (c, summary)
+        })
+        .buffered(max_conc)
+        .collect()
+        .await
 }
 
 /// [`communities_json`] plus per-community LLM reports: each community
 /// renders as `{"members": [entity_id, …], "name": …, "summary": …}` with
-/// `null` fields for degraded communities. Communities are processed in
-/// ascending-label order, so the backend-call sequence is deterministic.
+/// `null` fields for degraded communities. Summary calls run with bounded
+/// concurrency ([`summarize_partition`]); the output is deterministic.
 pub async fn communities_json_with_summaries(
     kg: &KnowledgeGraph,
     backend: &Arc<dyn LlmBackend>,
     options: &CompletionOptions,
+    max_concurrency: usize,
 ) -> serde_json::Value {
     let (ids, graph) = to_community_graph(kg);
     let partition = LabelPropagation::default().detect(&graph);
-    let summaries = summarize_partition(kg, &ids, &partition, backend, options).await;
+    let summaries =
+        summarize_partition(kg, &ids, &partition, backend, options, max_concurrency).await;
     partition_json(&ids, &partition, Some(&summaries))
 }
 
 /// [`hierarchy_json`] plus per-community LLM reports at **every level**
 /// (coarse → fine): each level's communities render as `{members, name,
 /// summary}` objects, with `null` fields for degraded communities. Levels are
-/// processed in order and communities in ascending-label order, so the
-/// backend-call sequence is deterministic.
+/// processed sequentially in coarse→fine order; within one level the summary
+/// calls run with bounded concurrency ([`summarize_partition`]). The output
+/// is deterministic.
 ///
 /// Enabled by the `community-leiden` feature.
 #[cfg(feature = "community-leiden")]
@@ -384,6 +401,7 @@ pub async fn hierarchy_json_with_summaries(
     kg: &KnowledgeGraph,
     backend: &Arc<dyn LlmBackend>,
     options: &CompletionOptions,
+    max_concurrency: usize,
 ) -> serde_json::Value {
     let (ids, graph) = to_community_graph(kg);
     let levels = HierarchicalLeiden::new()
@@ -391,7 +409,8 @@ pub async fn hierarchy_json_with_summaries(
         .detect_hierarchy(&graph);
     let mut levels_json: Vec<serde_json::Value> = Vec::with_capacity(levels.len());
     for (level, partition) in levels.iter().enumerate() {
-        let summaries = summarize_partition(kg, &ids, partition, backend, options).await;
+        let summaries =
+            summarize_partition(kg, &ids, partition, backend, options, max_concurrency).await;
         let mut value = partition_json(&ids, partition, Some(&summaries));
         value["level"] = serde_json::Value::from(level);
         levels_json.push(value);
@@ -613,13 +632,86 @@ mod summary_tests {
         }
     }
 
+    /// Fails only the prompt that lists member "a" — partial degradation
+    /// under concurrency: the other community must still be summarized.
+    struct PartialFailBackend;
+
+    #[async_trait::async_trait]
+    impl LlmBackend for PartialFailBackend {
+        async fn complete(
+            &self,
+            messages: &[Message],
+            _options: &CompletionOptions,
+        ) -> anyhow::Result<String> {
+            let prompt = messages.last().map(|m| m.content.as_str()).unwrap_or("");
+            if prompt.contains("- a (") {
+                anyhow::bail!("backend down for community a");
+            }
+            Ok(r#"{"name": "ok", "summary": "fine."}"#.to_string())
+        }
+    }
+
+    /// Concurrency probe: replies are tied to the prompt (echoing the first
+    /// listed member id, so result attribution is observable in the output),
+    /// calls yield a per-prompt number of times so concurrent calls complete
+    /// **out of order** (the "a" community is issued first but finishes
+    /// last), and the max simultaneous in-flight count is recorded to prove
+    /// the concurrency cap.
+    struct OverlapBackend {
+        in_flight: std::sync::atomic::AtomicUsize,
+        max_seen: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl OverlapBackend {
+        fn new() -> (Arc<Self>, Arc<std::sync::atomic::AtomicUsize>) {
+            let max_seen = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            (
+                Arc::new(Self {
+                    in_flight: std::sync::atomic::AtomicUsize::new(0),
+                    max_seen: max_seen.clone(),
+                }),
+                max_seen,
+            )
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl LlmBackend for OverlapBackend {
+        async fn complete(
+            &self,
+            messages: &[Message],
+            _options: &CompletionOptions,
+        ) -> anyhow::Result<String> {
+            use std::sync::atomic::Ordering;
+            let n = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
+            self.max_seen.fetch_max(n, Ordering::SeqCst);
+            let prompt = messages.last().map(|m| m.content.clone()).unwrap_or_default();
+            // Out-of-order completion: the first-issued community ("a")
+            // yields more, so it finishes after the later-issued one.
+            let yields = if prompt.contains("- a (") { 6 } else { 1 };
+            for _ in 0..yields {
+                tokio::task::yield_now().await;
+            }
+            self.in_flight.fetch_sub(1, Ordering::SeqCst);
+            let first_member = prompt
+                .lines()
+                .find_map(|l| l.strip_prefix("- "))
+                .and_then(|l| l.split(" (").next())
+                .unwrap_or("?")
+                .to_string();
+            Ok(format!(
+                r#"{{"name": "group of {first_member}", "summary": "members around {first_member}."}}"#
+            ))
+        }
+    }
+
     #[tokio::test]
     async fn summaries_render_as_objects_with_name_and_summary() {
         let (kg, _) = two_triangles();
         let backend: Arc<dyn LlmBackend> = Arc::new(MockBackend::single(
             r#"{"name": "Triangle Report", "summary": "Three tightly linked nodes."}"#,
         ));
-        let value = communities_json_with_summaries(&kg, &backend, &CompletionOptions::default()).await;
+        let value = communities_json_with_summaries(&kg, &backend, &CompletionOptions::default(), 8).await;
         let communities = value["communities"].as_object().unwrap();
         assert_eq!(communities.len(), 2);
         for c in communities.values() {
@@ -634,17 +726,18 @@ mod summary_tests {
         let (kg, _) = two_triangles();
         let mock = || Arc::new(MockBackend::single(r#"{"name": "N", "summary": "S."}"#));
         let opts = CompletionOptions::default();
-        let first = communities_json_with_summaries(&kg, &(mock() as Arc<dyn LlmBackend>), &opts).await;
-        let second = communities_json_with_summaries(&kg, &(mock() as Arc<dyn LlmBackend>), &opts).await;
+        let first = communities_json_with_summaries(&kg, &(mock() as Arc<dyn LlmBackend>), &opts, 8).await;
+        let second = communities_json_with_summaries(&kg, &(mock() as Arc<dyn LlmBackend>), &opts, 8).await;
         assert_eq!(first, second, "same graph + same replies → identical JSON");
 
-        // One call per community, in ascending community-label order: the
-        // first prompt must list the members of community "0".
+        // One call per community, issued in ascending community-label order:
+        // the first prompt must list the members of community "0".
         let backend = mock();
         let value = communities_json_with_summaries(
             &kg,
             &(backend.clone() as Arc<dyn LlmBackend>),
             &opts,
+            8,
         )
         .await;
         let prompts = backend.seen_prompts.lock().unwrap();
@@ -664,10 +757,73 @@ mod summary_tests {
     }
 
     #[tokio::test]
+    async fn concurrent_output_is_byte_identical_to_sequential() {
+        let (kg, _) = two_triangles();
+        let opts = CompletionOptions::default();
+        let (serial_backend, _) = OverlapBackend::new();
+        let serial =
+            communities_json_with_summaries(&kg, &(serial_backend as Arc<dyn LlmBackend>), &opts, 1)
+                .await;
+        let (conc_backend, _) = OverlapBackend::new();
+        let concurrent =
+            communities_json_with_summaries(&kg, &(conc_backend as Arc<dyn LlmBackend>), &opts, 8)
+                .await;
+        assert_eq!(
+            serde_json::to_string(&serial).unwrap(),
+            serde_json::to_string(&concurrent).unwrap(),
+            "out-of-order completion must not change the output bytes"
+        );
+        // Attribution: each community's reply echoes its own first member even
+        // though the "a" community's call completed after the "x" one.
+        for c in concurrent["communities"].as_object().unwrap().values() {
+            let first_member = c["members"][0].as_str().unwrap();
+            assert_eq!(c["name"], format!("group of {first_member}"));
+        }
+    }
+
+    #[tokio::test]
+    async fn concurrency_cap_bounds_in_flight_calls() {
+        use std::sync::atomic::Ordering;
+        let (kg, _) = two_triangles();
+        let opts = CompletionOptions::default();
+        let (backend, max_seen) = OverlapBackend::new();
+        let _ = communities_json_with_summaries(&kg, &(backend as Arc<dyn LlmBackend>), &opts, 2).await;
+        assert_eq!(
+            max_seen.load(Ordering::SeqCst),
+            2,
+            "cap 2 lets both community calls overlap"
+        );
+        let (backend, max_seen) = OverlapBackend::new();
+        let _ = communities_json_with_summaries(&kg, &(backend as Arc<dyn LlmBackend>), &opts, 1).await;
+        assert_eq!(
+            max_seen.load(Ordering::SeqCst),
+            1,
+            "cap 1 keeps the calls sequential"
+        );
+    }
+
+    #[tokio::test]
+    async fn concurrent_partial_failure_degrades_only_that_community() {
+        let (kg, _) = two_triangles();
+        let backend: Arc<dyn LlmBackend> = Arc::new(PartialFailBackend);
+        let value = communities_json_with_summaries(&kg, &backend, &CompletionOptions::default(), 8).await;
+        for c in value["communities"].as_object().unwrap().values() {
+            let has_a = c["members"].as_array().unwrap().iter().any(|m| m == "a");
+            if has_a {
+                assert!(c["name"].is_null(), "failed community degrades to null");
+                assert!(c["summary"].is_null());
+            } else {
+                assert_eq!(c["name"], "ok", "unaffected community is summarized");
+                assert_eq!(c["summary"], "fine.");
+            }
+        }
+    }
+
+    #[tokio::test]
     async fn failing_backend_degrades_to_null_fields() {
         let (kg, _) = two_triangles();
         let backend: Arc<dyn LlmBackend> = Arc::new(FailingBackend);
-        let value = communities_json_with_summaries(&kg, &backend, &CompletionOptions::default()).await;
+        let value = communities_json_with_summaries(&kg, &backend, &CompletionOptions::default(), 8).await;
         let communities = value["communities"].as_object().unwrap();
         assert_eq!(communities.len(), 2, "degradation keeps every community");
         for c in communities.values() {
@@ -681,7 +837,7 @@ mod summary_tests {
     async fn unparseable_reply_degrades_to_null_fields() {
         let (kg, _) = two_triangles();
         let backend: Arc<dyn LlmBackend> = Arc::new(MockBackend::single("no json here"));
-        let value = communities_json_with_summaries(&kg, &backend, &CompletionOptions::default()).await;
+        let value = communities_json_with_summaries(&kg, &backend, &CompletionOptions::default(), 8).await;
         for c in value["communities"].as_object().unwrap().values() {
             assert!(c["name"].is_null());
             assert!(c["summary"].is_null());
@@ -824,7 +980,7 @@ mod leiden_tests {
             Arc::new(MockBackend::single(r#"{"name": "Faction", "summary": "A karate faction."}"#))
                 as Arc<dyn LlmBackend>
         };
-        let value = hierarchy_json_with_summaries(&kg, &mk(), &opts).await;
+        let value = hierarchy_json_with_summaries(&kg, &mk(), &opts, 8).await;
         let levels = value["levels"].as_array().unwrap();
         assert!(levels.len() > 1);
         let mut total_communities = 0;
@@ -840,10 +996,10 @@ mod leiden_tests {
         // One completion per (level, community), in level order then ascending
         // community-label order; identical across runs.
         let backend = mk();
-        let again = hierarchy_json_with_summaries(&kg, &backend, &opts).await;
+        let again = hierarchy_json_with_summaries(&kg, &backend, &opts, 8).await;
         assert_eq!(value, again);
         let backend = Arc::new(MockBackend::single(r#"{"name": "F", "summary": "S."}"#));
-        let _ = hierarchy_json_with_summaries(&kg, &(backend.clone() as Arc<dyn LlmBackend>), &opts).await;
+        let _ = hierarchy_json_with_summaries(&kg, &(backend.clone() as Arc<dyn LlmBackend>), &opts, 8).await;
         assert_eq!(
             backend.seen_prompts.lock().unwrap().len(),
             total_communities,

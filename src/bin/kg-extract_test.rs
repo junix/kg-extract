@@ -26,6 +26,19 @@ fn file_config_parses_full_object() {
 }
 
 #[test]
+fn file_config_parses_config_example_json() {
+    // The shipped example must stay inside the real config surface:
+    // FileConfig denies unknown fields, so a stale key here breaks every
+    // user who copies the example.
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/config.example.json");
+    let body = std::fs::read_to_string(path).expect("config.example.json must exist");
+    let cfg: FileConfig = serde_json::from_str(&body)
+        .expect("config.example.json must parse as FileConfig (deny_unknown_fields)");
+    assert!(matches!(cfg.engine, Some(Engine::Simple)));
+    assert_eq!(cfg.max_concurrency, Some(8));
+}
+
+#[test]
 fn file_config_partial_leaves_rest_none() {
     let cfg: FileConfig = serde_json::from_str(r#"{"engine": "schema-json"}"#).unwrap();
     assert!(matches!(cfg.engine, Some(Engine::SchemaJson)));
