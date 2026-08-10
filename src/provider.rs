@@ -48,7 +48,9 @@ use crate::extractor::{
     ToolCallExtractor,
 };
 use crate::template::{gallery, TemplateCfg};
-use crate::types::{ChunkStrategy, CorefMode, KnowledgeGraph, MergeStrategy, Schema};
+use crate::types::{
+    ChunkStrategy, CommonEngineSettings, CorefMode, KnowledgeGraph, MergeStrategy, Schema,
+};
 
 /// Provider-protocol identity.
 pub const PROVIDER_PROTOCOL: &str = "kg.provider/v1";
@@ -1081,20 +1083,23 @@ async fn invoke_extract(
             req.mock_tool_calls.as_deref(),
         )
         .map_err(|e| InvokeError::backend(e.to_string()))?;
-        let coref_mode = if coref {
-            CorefMode::Fuzzy
-        } else {
-            CorefMode::Off
+        // Same shared settings value the CLI builds — see CommonEngineSettings.
+        let common = CommonEngineSettings {
+            chunker,
+            source_doc,
+            max_concurrency,
+            merge_strategy,
+            coref: if coref {
+                CorefMode::Fuzzy
+            } else {
+                CorefMode::Off
+            },
+            canonical_direction,
         };
         match engine.as_str() {
             "simple" => {
                 let mut c = SimpleExtractor::default_config();
-                c.chunker = chunker;
-                c.source_doc = source_doc;
-                c.max_concurrency = max_concurrency;
-                c.spec.merge_strategy = merge_strategy;
-                c.spec.coref = coref_mode;
-                c.spec.canonical_direction = canonical_direction;
+                common.apply(&mut c);
                 if let Some(m) = &req.model {
                     c.model_name = m.clone();
                 }
@@ -1104,11 +1109,7 @@ async fn invoke_extract(
             }
             "schema-json" => {
                 let mut c = SchemaJsonExtractor::default_config();
-                c.chunker = chunker;
-                c.source_doc = source_doc;
-                c.spec.merge_strategy = merge_strategy;
-                c.spec.coref = coref_mode;
-                c.spec.canonical_direction = canonical_direction;
+                common.apply(&mut c);
                 if let Some(m) = &req.model {
                     c.model_name = m.clone();
                 }
@@ -1123,11 +1124,7 @@ async fn invoke_extract(
             }
             "toolcall" => {
                 let mut c = ToolCallExtractor::default_config();
-                c.chunker = chunker;
-                c.source_doc = source_doc;
-                c.spec.merge_strategy = merge_strategy;
-                c.spec.coref = coref_mode;
-                c.spec.canonical_direction = canonical_direction;
+                common.apply(&mut c);
                 if let Some(m) = &req.model {
                     c.model_name = m.clone();
                 }

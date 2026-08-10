@@ -22,7 +22,9 @@ use kg_extract::extractor::{
     ToolCallExtractor,
 };
 use kg_extract::template::{gallery, TemplateCfg};
-use kg_extract::types::{ChunkStrategy, CorefMode, ExtractionResponse, MergeStrategy, Schema};
+use kg_extract::types::{
+    ChunkStrategy, CommonEngineSettings, CorefMode, ExtractionResponse, MergeStrategy, Schema,
+};
 
 #[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -1108,20 +1110,24 @@ async fn main() -> anyhow::Result<()> {
             args.mock_tool_calls.as_deref(),
         )?;
         extraction_backend = Some(backend.clone());
-        let coref_mode = if cfg.coref {
-            CorefMode::Fuzzy
-        } else {
-            CorefMode::Off
+        // One shared settings value for every non-agentic engine, so the CLI and
+        // the provider cannot drift apart per-engine (see CommonEngineSettings).
+        let common = CommonEngineSettings {
+            chunker: cfg.chunker.into(),
+            source_doc: source_doc.clone(),
+            max_concurrency: cfg.max_concurrency,
+            merge_strategy: cfg.merge_strategy.into(),
+            coref: if cfg.coref {
+                CorefMode::Fuzzy
+            } else {
+                CorefMode::Off
+            },
+            canonical_direction: cfg.canonical_direction,
         };
         match cfg.engine {
             Engine::Simple => {
                 let mut c = SimpleExtractor::default_config();
-                c.chunker = cfg.chunker.into();
-                c.source_doc = source_doc.clone();
-                c.max_concurrency = cfg.max_concurrency;
-                c.spec.merge_strategy = cfg.merge_strategy.into();
-                c.spec.coref = coref_mode;
-                c.spec.canonical_direction = cfg.canonical_direction;
+                common.apply(&mut c);
                 if let Some(m) = &cfg.model {
                     c.model_name = m.clone();
                 }
@@ -1132,11 +1138,7 @@ async fn main() -> anyhow::Result<()> {
             }
             Engine::SchemaJson => {
                 let mut c = SchemaJsonExtractor::default_config();
-                c.chunker = cfg.chunker.into();
-                c.source_doc = source_doc.clone();
-                c.spec.merge_strategy = cfg.merge_strategy.into();
-                c.spec.coref = coref_mode;
-                c.spec.canonical_direction = cfg.canonical_direction;
+                common.apply(&mut c);
                 if let Some(m) = &cfg.model {
                     c.model_name = m.clone();
                 }
@@ -1155,11 +1157,7 @@ async fn main() -> anyhow::Result<()> {
             }
             Engine::Toolcall => {
                 let mut c = ToolCallExtractor::default_config();
-                c.chunker = cfg.chunker.into();
-                c.source_doc = source_doc.clone();
-                c.spec.merge_strategy = cfg.merge_strategy.into();
-                c.spec.coref = coref_mode;
-                c.spec.canonical_direction = cfg.canonical_direction;
+                common.apply(&mut c);
                 if let Some(m) = &cfg.model {
                     c.model_name = m.clone();
                 }

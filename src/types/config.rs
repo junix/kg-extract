@@ -5,7 +5,7 @@ use super::entity::{default_entity_types, Entity};
 use super::graph::{KnowledgeGraph, Triple};
 use super::predicate::default_predicates;
 use super::schema::Schema;
-use super::spec::ExtractionSpec;
+use super::spec::{CorefMode, ExtractionSpec, MergeStrategy};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -72,6 +72,42 @@ impl Default for ExtractionConfig {
             max_concurrency: default_max_concurrency(),
             source_doc: None,
         }
+    }
+}
+
+/// The execution knobs every non-agentic engine honours identically.
+///
+/// Exists because the CLI (`bin/kg-extract.rs`) and the provider surface
+/// (`provider.rs`) each carried their own copy of this assignment block, per
+/// engine — six copies of the same six lines. `spec.coref` went missing from
+/// the SchemaJson copy in *both*, so `--coref` was a silent no-op on that
+/// engine until it was noticed. A struct literal is the point: adding a knob
+/// here fails to compile at every call site until each one handles it, so the
+/// copies cannot drift apart again.
+///
+/// `AgenticExtractor` deliberately does **not** take this — it consolidates
+/// during extraction and reads neither `merge_strategy` nor `coref`.
+#[derive(Debug, Clone)]
+pub struct CommonEngineSettings {
+    pub chunker: ChunkStrategy,
+    pub source_doc: Option<String>,
+    /// Honoured only by `SimpleExtractor`; inert on the others, and applied
+    /// uniformly so the seam stays one shape.
+    pub max_concurrency: usize,
+    pub merge_strategy: MergeStrategy,
+    pub coref: CorefMode,
+    pub canonical_direction: bool,
+}
+
+impl CommonEngineSettings {
+    /// Apply these knobs onto an engine's base config.
+    pub fn apply(&self, config: &mut ExtractionConfig) {
+        config.chunker = self.chunker;
+        config.source_doc = self.source_doc.clone();
+        config.max_concurrency = self.max_concurrency;
+        config.spec.merge_strategy = self.merge_strategy;
+        config.spec.coref = self.coref;
+        config.spec.canonical_direction = self.canonical_direction;
     }
 }
 
