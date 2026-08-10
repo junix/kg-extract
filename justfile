@@ -11,9 +11,10 @@ target_dir := `cargo metadata --format-version 1 --no-deps | python3 -c 'import 
 build:
     cargo build --release --features "llms-backend mcp community community-leiden"
 
-# 运行测试（含 mcp 工具与并发测试）
+# 运行测试。feature 集必须与 build/lint 一致：否则 community.rs（ADR-987 Step 5
+# 适配器）、provider.rs 与 bin 测试全部不参与编译，静默跳过 25 个测试。
 test:
-    cargo test --features mcp
+    cargo test --features "llms-backend mcp community community-leiden"
 
 # Markdown -> chonkie -> kg-extract -> graphdb-ladybug -> query smoke
 ladybug-smoke:

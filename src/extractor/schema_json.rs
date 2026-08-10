@@ -5,7 +5,7 @@
 use super::{validate_input, Extractor, SchemaMode};
 use crate::backend::{CompletionOptions, LlmBackend, Message};
 use crate::graph_build::GraphBuilder;
-use crate::parser::extract_json_from_response;
+use crate::json::extract_json_from_response;
 use crate::types::{
     EntityType, ExtractionConfig, ExtractionResponse, ExtractionSpec, KnowledgeGraph,
     MergeStrategy, Predicate, PredicateType, Schema,

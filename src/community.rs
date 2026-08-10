@@ -18,7 +18,7 @@ use kg_community::{CommunityDetector, Graph, LabelPropagation, Partition};
 use kg_community::HierarchicalLeiden;
 
 use crate::backend::{CompletionOptions, LlmBackend, Message};
-use crate::parser::extract_json_from_response;
+use crate::json::extract_json_from_response;
 use crate::types::KnowledgeGraph;
 
 /// Build a [`kg_community::Graph`] from a [`KnowledgeGraph`].
