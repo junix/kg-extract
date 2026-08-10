@@ -1,0 +1,152 @@
+[
+  {
+    "subject": "swift/vad-swift",
+    "predicate": "USES",
+    "object": "mlx-audio-swift"
+  },
+  {
+    "subject": "swift/vad-swift",
+    "predicate": "USES",
+    "object": "MLXAudioVAD"
+  },
+  {
+    "subject": "MLXAudioVAD",
+    "predicate": "PART_OF",
+    "object": "mlx-audio-swift"
+  },
+  {
+    "subject": "swift/qwen3-asr",
+    "predicate": "USES",
+    "object": "MLXAudioSTT"
+  },
+  {
+    "subject": "MLXAudioSTT",
+    "predicate": "PART_OF",
+    "object": "mlx-audio-swift"
+  },
+  {
+    "subject": "swift/qwen3-asr",
+    "predicate": "USES",
+    "object": "Qwen3-ASR"
+  },
+  {
+    "subject": "swift/qwen3-asr",
+    "predicate": "USES",
+    "object": "MLXAudioCore"
+  },
+  {
+    "subject": "swift/qwen3-asr",
+    "predicate": "USES",
+    "object": "ArgumentParser"
+  },
+  {
+    "subject": "swift/vadd",
+    "predicate": "INCLUDES",
+    "object": "Silero VAD"
+  },
+  {
+    "subject": "hexgrad/Kokoro-82M",
+    "predicate": "DERIVED_FROM",
+    "object": "StyleTTS2"
+  },
+  {
+    "subject": "coqui/XTTS-v2",
+    "predicate": "USES",
+    "object": "VITS"
+  },
+  {
+    "subject": "ResembleAI/chatterbox",
+    "predicate": "USES",
+    "object": "Llama"
+  },
+  {
+    "subject": "microsoft/VibeVoice-Realtime-0.5B",
+    "predicate": "USES",
+    "object": "Qwen2.5-0.5B"
+  },
+  {
+    "subject": "microsoft/VibeVoice-1.5B",
+    "predicate": "USES",
+    "object": "Qwen2.5-1.5B"
+  },
+  {
+    "subject": "SWivid/F5-TTS",
+    "predicate": "USES",
+    "object": "Flow Matching"
+  },
+  {
+    "subject": "suno/bark",
+    "predicate": "USES",
+    "object": "transformers"
+  },
+  {
+    "subject": "sesame/csm-1b",
+    "predicate": "USES",
+    "object": "transformers"
+  },
+  {
+    "subject": "Steve Yegge",
+    "predicate": "WORKS_FOR",
+    "object": "Sourcegraph"
+  },
+  {
+    "subject": "Garry Tan",
+    "predicate": "WORKS_FOR",
+    "object": "Y Combinator"
+  },
+  {
+    "subject": "Claude Code",
+    "predicate": "PUBLISHED_BY",
+    "object": "Anthropic"
+  },
+  {
+    "subject": "distil-whisper/distil-large-v3",
+    "predicate": "DERIVED_FROM",
+    "object": "Whisper"
+  },
+  {
+    "subject": "Qwen/Qwen3-ASR-1.7B",
+    "predicate": "DERIVED_FROM",
+    "object": "Qwen3-Omni"
+  },
+  {
+    "subject": "nvidia/parakeet-tdt-0.6b-v2",
+    "predicate": "EVALUATED_BY",
+    "object": "HF ASR Leaderboard"
+  },
+  {
+    "subject": "Systran/faster-whisper-large-v3",
+    "predicate": "USES",
+    "object": "CTranslate2"
+  },
+  {
+    "subject": "nvidia/parakeet-tdt-0.6b-v2",
+    "predicate": "USES",
+    "object": "nemo"
+  },
+  {
+    "subject": "nvidia/canary-1b-v2",
+    "predicate": "USES",
+    "object": "FastConformer"
+  },
+  {
+    "subject": "nvidia/canary-qwen-2.5b",
+    "predicate": "INCLUDES",
+    "object": "Qwen"
+  },
+  {
+    "subject": "mlx-community/parakeet-tdt-0.6b-v3",
+    "predicate": "USES",
+    "object": "MLX"
+  },
+  {
+    "subject": "openai/whisper-large-v3",
+    "predicate": "USES",
+    "object": "transformers"
+  },
+  {
+    "subject": "mistralai/Voxtral-Mini-4B-Realtime-2602",
+    "predicate": "USES",
+    "object": "vllm"
+  }
+]

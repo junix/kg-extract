@@ -1,0 +1,450 @@
+{
+  "entities": {
+    "Anthropic": {
+      "type": "COMPANY",
+      "attributes": {
+        "description": "The company that on 31 March 2026 accidentally uploaded 512,000 lines of Claude Code source code to the npm registry."
+      }
+    },
+    "ArgumentParser": {
+      "type": "TECHNOLOGY",
+      "attributes": {
+        "description": "A dependency of swift/qwen3-asr."
+      }
+    },
+    "CTranslate2": {
+      "type": "TECHNOLOGY",
+      "attributes": {
+        "description": "The inference/quantisation runtime behind faster-whisper-large-v3, giving int8 quantisation and 4x speedup."
+      }
+    },
+    "Claude Code": {
+      "type": "PRODUCT",
+      "attributes": {
+        "description": "The product whose 512,000 lines of source code were uploaded to the npm registry on 31 March 2026."
+      }
+    },
+    "FastConformer": {
+      "type": "ALGORITHM",
+      "attributes": {
+        "description": "The speech encoder architecture used by the NVIDIA Canary, Parakeet and Nemotron models."
+      }
+    },
+    "Flow Matching": {
+      "type": "METHOD",
+      "attributes": {
+        "description": "The generative modelling method used as the architecture of F5-TTS."
+      }
+    },
+    "Garry Tan": {
+      "type": "PERSON",
+      "attributes": {
+        "description": "The current president and CEO of Y Combinator, who argues the productivity secret is not the model but the wrapper around it, which he calls the harness."
+      }
+    },
+    "HF ASR Leaderboard": {
+      "type": "METHOD",
+      "attributes": {
+        "description": "The evaluation leaderboard on which parakeet-tdt-0.6b-v2 is reported first for English."
+      }
+    },
+    "Llama": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "The language-model backbone that chatterbox is built on."
+      }
+    },
+    "MLX": {
+      "type": "TECHNOLOGY",
+      "attributes": {
+        "description": "The Apple Silicon framework that the mlx-community Parakeet variant is converted to."
+      }
+    },
+    "MLXAudioCore": {
+      "type": "TECHNOLOGY",
+      "attributes": {
+        "description": "A dependency of swift/qwen3-asr."
+      }
+    },
+    "MLXAudioSTT": {
+      "type": "TECHNOLOGY",
+      "attributes": {
+        "description": "The speech-to-text component of mlx-audio-swift through which swift/qwen3-asr invokes Qwen3-ASR."
+      }
+    },
+    "MLXAudioVAD": {
+      "type": "TECHNOLOGY",
+      "attributes": {
+        "description": "The voice-activity-detection library inside mlx-audio-swift that swift/vad-swift uses."
+      }
+    },
+    "Qwen": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "The LLM used as the language backend inside canary-qwen-2.5b."
+      }
+    },
+    "Qwen/Qwen3-ASR-1.7B": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A 1.7B multimodal ASR model derived from Qwen3-Omni, covering 30 languages plus 22 Chinese dialects."
+      }
+    },
+    "Qwen2.5-0.5B": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "The backbone language model of VibeVoice-Realtime-0.5B."
+      }
+    },
+    "Qwen2.5-1.5B": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "The backbone language model of VibeVoice-1.5B."
+      }
+    },
+    "Qwen3-ASR": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "The speech recognition model that swift/qwen3-asr calls through MLXAudioSTT."
+      }
+    },
+    "Qwen3-Omni": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "The multimodal base model that Qwen3-ASR-1.7B is derived from."
+      }
+    },
+    "ResembleAI/chatterbox": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A 0.5B MIT-licensed TTS model with a Llama backbone plus codec, offering emotion-exaggeration control and watermarking."
+      }
+    },
+    "SWivid/F5-TTS": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A 0.3B Flow Matching zero-shot cloning model for Chinese and English, associated with the Emilia dataset and licensed cc-by-nc-4.0."
+      }
+    },
+    "Silero VAD": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "The Silero VAD v5 voice-activity-detection model embedded as a resource in the swift/vadd package."
+      }
+    },
+    "Sourcegraph": {
+      "type": "COMPANY",
+      "attributes": {
+        "description": "The company where Steve Yegge currently serves as engineering lead."
+      }
+    },
+    "Steve Yegge": {
+      "type": "PERSON",
+      "attributes": {
+        "description": "A programmer well known in US developer circles who currently serves as engineering lead at Sourcegraph and is the origin of the 10x-to-1000x productivity claim."
+      }
+    },
+    "StyleTTS2": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "The TTS architecture that Kokoro-82M is derived from."
+      }
+    },
+    "Systran/faster-whisper-large-v3": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A 1.55B-parameter CTranslate2-quantised Whisper build noted as the most widely deployed variant."
+      }
+    },
+    "VITS": {
+      "type": "ALGORITHM",
+      "attributes": {
+        "description": "A speech synthesis architecture used as the backbone of XTTS-v2."
+      }
+    },
+    "Whisper": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "The ASR model family that distil-large-v3 is distilled from."
+      }
+    },
+    "Y Combinator": {
+      "type": "COMPANY",
+      "attributes": {
+        "description": "The organization whose sitting president and chief executive officer is Garry Tan."
+      }
+    },
+    "coqui/XTTS-v2": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A ~880M-parameter multilingual zero-shot voice cloning model built on a VITS + GPT-style architecture."
+      }
+    },
+    "distil-whisper/distil-large-v3": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A 756M-parameter distillation of Whisper that runs on transformers and stays within 1% WER of large-v3."
+      }
+    },
+    "hexgrad/Kokoro-82M": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "An 82M-parameter English TTS model derived from StyleTTS2, released under apache-2.0 with 13.7M downloads."
+      }
+    },
+    "microsoft/VibeVoice-1.5B": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A 1.5B MIT-licensed TTS model built on Qwen2.5-1.5B with a sigma-VAE, able to generate 90 minutes of audio with 4 speakers."
+      }
+    },
+    "microsoft/VibeVoice-Realtime-0.5B": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A 0.5B streaming TTS model built on Qwen2.5-0.5B with a 7.5Hz tokenizer, achieving ~300ms latency under an MIT license."
+      }
+    },
+    "mistralai/Voxtral-Mini-4B-Realtime-2602": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A 4B autoregressive causal-audio-encoder model served with vllm for sub-500ms streaming on device."
+      }
+    },
+    "mlx-audio-swift": {
+      "type": "TECHNOLOGY",
+      "attributes": {
+        "description": "A Swift audio library that provides the MLXAudioVAD and MLXAudioSTT components."
+      }
+    },
+    "mlx-community/parakeet-tdt-0.6b-v3": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "The MLX-converted 0.6B Parakeet build optimised for Apple Silicon."
+      }
+    },
+    "nemo": {
+      "type": "TECHNOLOGY",
+      "attributes": {
+        "description": "The library used to run the NVIDIA Parakeet, Canary and Nemotron speech models."
+      }
+    },
+    "nvidia/canary-1b-v2": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A 1B FastConformer model on nemo covering 25 EU languages for joint ASR and translation."
+      }
+    },
+    "nvidia/canary-qwen-2.5b": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A 2.5B model combining FastConformer with a Qwen LLM backend supporting hotwords and context."
+      }
+    },
+    "nvidia/parakeet-tdt-0.6b-v2": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A 0.6B FastConformer-TDT model on the nemo library, ranked first in English on the HF ASR Leaderboard."
+      }
+    },
+    "openai/whisper-large-v3": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A 1.55B-parameter Transformer encoder-decoder ASR model run with the transformers library under apache-2.0."
+      }
+    },
+    "sesame/csm-1b": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A 1B decoder-only audio model for conversational English speech, run through the transformers library."
+      }
+    },
+    "suno/bark": {
+      "type": "MODEL",
+      "attributes": {
+        "description": "A ~1B GPT-style multilingual TTS model run through the transformers library that can produce music and laughter."
+      }
+    },
+    "swift/qwen3-asr": {
+      "type": "PRODUCT",
+      "attributes": {
+        "description": "A Swift speech-recognition repository that has no independent Tests directory."
+      }
+    },
+    "swift/vad-swift": {
+      "type": "PRODUCT",
+      "attributes": {
+        "description": "A Swift repository for voice activity detection that has no independent Tests directory."
+      }
+    },
+    "swift/vadd": {
+      "type": "PRODUCT",
+      "attributes": {
+        "description": "A Swift repository whose Tests/VADKitTests directory holds four test suites and which embeds a real Silero VAD model."
+      }
+    },
+    "transformers": {
+      "type": "TECHNOLOGY",
+      "attributes": {
+        "description": "The library used to run bark, csm-1b, and both VibeVoice models."
+      }
+    },
+    "vllm": {
+      "type": "TECHNOLOGY",
+      "attributes": {
+        "description": "The serving library listed for Voxtral-Mini-4B-Realtime-2602."
+      }
+    }
+  },
+  "relationships": [
+    [
+      "swift/vad-swift",
+      "USES",
+      "mlx-audio-swift"
+    ],
+    [
+      "swift/vad-swift",
+      "USES",
+      "MLXAudioVAD"
+    ],
+    [
+      "MLXAudioVAD",
+      "PART_OF",
+      "mlx-audio-swift"
+    ],
+    [
+      "swift/qwen3-asr",
+      "USES",
+      "MLXAudioSTT"
+    ],
+    [
+      "MLXAudioSTT",
+      "PART_OF",
+      "mlx-audio-swift"
+    ],
+    [
+      "swift/qwen3-asr",
+      "USES",
+      "Qwen3-ASR"
+    ],
+    [
+      "swift/qwen3-asr",
+      "USES",
+      "MLXAudioCore"
+    ],
+    [
+      "swift/qwen3-asr",
+      "USES",
+      "ArgumentParser"
+    ],
+    [
+      "swift/vadd",
+      "INCLUDES",
+      "Silero VAD"
+    ],
+    [
+      "hexgrad/Kokoro-82M",
+      "DERIVED_FROM",
+      "StyleTTS2"
+    ],
+    [
+      "coqui/XTTS-v2",
+      "USES",
+      "VITS"
+    ],
+    [
+      "ResembleAI/chatterbox",
+      "USES",
+      "Llama"
+    ],
+    [
+      "microsoft/VibeVoice-Realtime-0.5B",
+      "USES",
+      "Qwen2.5-0.5B"
+    ],
+    [
+      "microsoft/VibeVoice-1.5B",
+      "USES",
+      "Qwen2.5-1.5B"
+    ],
+    [
+      "SWivid/F5-TTS",
+      "USES",
+      "Flow Matching"
+    ],
+    [
+      "suno/bark",
+      "USES",
+      "transformers"
+    ],
+    [
+      "sesame/csm-1b",
+      "USES",
+      "transformers"
+    ],
+    [
+      "Steve Yegge",
+      "WORKS_FOR",
+      "Sourcegraph"
+    ],
+    [
+      "Garry Tan",
+      "WORKS_FOR",
+      "Y Combinator"
+    ],
+    [
+      "Claude Code",
+      "PUBLISHED_BY",
+      "Anthropic"
+    ],
+    [
+      "distil-whisper/distil-large-v3",
+      "DERIVED_FROM",
+      "Whisper"
+    ],
+    [
+      "Qwen/Qwen3-ASR-1.7B",
+      "DERIVED_FROM",
+      "Qwen3-Omni"
+    ],
+    [
+      "nvidia/parakeet-tdt-0.6b-v2",
+      "EVALUATED_BY",
+      "HF ASR Leaderboard"
+    ],
+    [
+      "Systran/faster-whisper-large-v3",
+      "USES",
+      "CTranslate2"
+    ],
+    [
+      "nvidia/parakeet-tdt-0.6b-v2",
+      "USES",
+      "nemo"
+    ],
+    [
+      "nvidia/canary-1b-v2",
+      "USES",
+      "FastConformer"
+    ],
+    [
+      "nvidia/canary-qwen-2.5b",
+      "INCLUDES",
+      "Qwen"
+    ],
+    [
+      "mlx-community/parakeet-tdt-0.6b-v3",
+      "USES",
+      "MLX"
+    ],
+    [
+      "openai/whisper-large-v3",
+      "USES",
+      "transformers"
+    ],
+    [
+      "mistralai/Voxtral-Mini-4B-Realtime-2602",
+      "USES",
+      "vllm"
+    ]
+  ]
+}
