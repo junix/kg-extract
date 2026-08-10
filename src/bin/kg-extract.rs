@@ -1072,6 +1072,16 @@ async fn main() -> anyhow::Result<()> {
     // value — the provider is chosen by `--agent`.
     let mut extraction_backend: Option<Arc<dyn LlmBackend>> = None;
     let extractor: Box<dyn Extractor + Send + Sync> = if matches!(cfg.engine, Engine::Agentic) {
+        // Agentic consolidates *during* extraction (the session reuses entity
+        // names across turns) and never routes through GraphBuilder/merger, so
+        // it reads neither `spec.coref` nor `spec.merge_strategy`. Say so rather
+        // than accepting the flags and silently ignoring them.
+        if cfg.coref {
+            eprintln!(
+                "note: --coref has no effect with -e agentic; the agentic session \
+                 consolidates entities across turns at extraction time instead"
+            );
+        }
         let mut c = AgenticExtractor::default_config();
         c.chunker = cfg.chunker.into();
         c.source_doc = source_doc.clone();
