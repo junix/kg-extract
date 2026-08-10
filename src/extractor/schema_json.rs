@@ -451,10 +451,25 @@ impl Extractor for SchemaJsonExtractor {
         };
 
         let mut kg = self.build_graph(data);
-        // Canonical direction normalisation (opt-in): direction variants
-        // (`USES` / `IS_USED_BY`) converge on one canonical edge.
+        // Canonical direction normalisation (opt-in) runs before dedup so
+        // direction variants (`USES` / `IS_USED_BY`) share one dedup key.
         if self.config.spec.canonical_direction {
             crate::merger::normalize_direction(&mut kg);
+        }
+        // Dedup pass, mirroring ToolCall. `GraphBuilder` dedups *entities* by
+        // lowercased name but `KnowledgeGraph::add_triple` is a bare push, so
+        // without this a model that emits the same relation twice yields two
+        // identical triples — and `spec.coref` had no reader on this engine at
+        // all, making `--coref` a silent no-op here.
+        if self.config.spec.merge_duplicates {
+            kg = crate::merger::dedup_graph_coref(
+                kg,
+                self.config.spec.merge_strategy,
+                self.config.spec.coref,
+                &self.backend,
+                &opts,
+            )
+            .await;
         }
         // Single-shot over the whole text, so provenance is whole-document.
         crate::citation::stamp_whole_document(&mut kg, &self.config.source_doc, text);
@@ -881,5 +896,63 @@ mod tests {
         // but the segment sizes differ: 3000 vs 5000).
         assert_eq!(sj.config().segment_size, 3000);
         assert_eq!(tool.config().segment_size, 5000);
+    }
+
+    // -----------------------------------------------------------------------
+    // Dedup / coref parity with ToolCall.
+    //
+    // SchemaJson used to build its graph and return it without the
+    // `dedup_graph_coref` pass ToolCall runs. `GraphBuilder` dedups entities by
+    // lowercased name, but `KnowledgeGraph::add_triple` is a bare push — so a
+    // model emitting the same relation twice produced two identical triples,
+    // and `spec.coref` had no reader on this engine at all (`--coref` was a
+    // silent no-op).
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn identical_relations_in_one_response_collapse_to_one_triple() {
+        // The same relation twice — a real LLM failure mode, not a synthetic one.
+        let json = r#"{"entities": {"OpenAI": {"type": "ORGANIZATION"},
+                                     "GPT-4": {"type": "TECHNOLOGY"}},
+                       "relationships": [["GPT-4", "DEVELOPED_BY", "OpenAI"],
+                                         ["GPT-4", "DEVELOPED_BY", "OpenAI"]]}"#;
+        let out = SchemaJsonExtractor::new(Arc::new(MockBackend::single(json)))
+            .extract("OpenAI developed GPT-4.")
+            .await
+            .unwrap();
+        assert_eq!(out.num_triples(), 1, "identical triples must collapse");
+        assert_eq!(out.num_entities(), 2);
+    }
+
+    #[tokio::test]
+    async fn coref_fuzzy_merges_surface_variants() {
+        // `Acme Corp.` / `Acme Corp` differ only by punctuation: Off keeps both,
+        // Fuzzy collapses them. Proves spec.coref is actually read.
+        let json = r#"{"entities": {"Acme Corp.": {"type": "ORGANIZATION"},
+                                     "Acme Corp": {"type": "ORGANIZATION"},
+                                     "Widget": {"type": "PRODUCT"}},
+                       "relationships": [["Acme Corp.", "PRODUCES", "Widget"]]}"#;
+
+        let off = SchemaJsonExtractor::new(Arc::new(MockBackend::single(json)))
+            .extract("Acme Corp. produces Widget.")
+            .await
+            .unwrap();
+
+        let spec = ExtractionSpec {
+            coref: crate::types::CorefMode::Fuzzy,
+            ..Default::default()
+        };
+        let fuzzy = SchemaJsonExtractor::with_spec(Arc::new(MockBackend::single(json)), spec)
+            .extract("Acme Corp. produces Widget.")
+            .await
+            .unwrap();
+
+        assert!(
+            fuzzy.num_entities() < off.num_entities(),
+            "CorefMode::Fuzzy must merge the Acme surface variants \
+             (off={} entities, fuzzy={})",
+            off.num_entities(),
+            fuzzy.num_entities()
+        );
     }
 }

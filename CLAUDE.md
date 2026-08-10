@@ -13,7 +13,7 @@ The repo uses a `justfile`; feature flags gate the heavy backends:
 
 ```bash
 just build          # cargo build --release --features "llms-backend mcp community community-leiden"
-just test           # cargo test --features mcp
+just test           # cargo test --features "llms-backend mcp community community-leiden"
 just lint           # cargo clippy --all-targets --features "llms-backend mcp community community-leiden"
 just install        # copies kg-extract + kg-extract-mcp to ~/sync/<os>-<arch>-bin/ (override with SYNC_BIN_DIR)
 ```

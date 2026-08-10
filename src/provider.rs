@@ -1107,6 +1107,7 @@ async fn invoke_extract(
                 c.chunker = chunker;
                 c.source_doc = source_doc;
                 c.spec.merge_strategy = merge_strategy;
+                c.spec.coref = coref_mode;
                 c.spec.canonical_direction = canonical_direction;
                 if let Some(m) = &req.model {
                     c.model_name = m.clone();

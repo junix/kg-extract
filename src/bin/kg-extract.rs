@@ -1125,6 +1125,7 @@ async fn main() -> anyhow::Result<()> {
                 c.chunker = cfg.chunker.into();
                 c.source_doc = source_doc.clone();
                 c.spec.merge_strategy = cfg.merge_strategy.into();
+                c.spec.coref = coref_mode;
                 c.spec.canonical_direction = cfg.canonical_direction;
                 if let Some(m) = &cfg.model {
                     c.model_name = m.clone();
