@@ -1,0 +1,123 @@
+\documentclass[tikz,border=10pt]{standalone}
+\usepackage{styles/showcase}
+
+\begin{document}
+\begin{tikzpicture}[x=1cm,y=1cm]
+  \ShowcasePageBackground{Paper}{-.7,-.65}{19.5,10.4}
+  \ShowcaseTitle{0,9.75}{TIKZ / SYSTEM MAP}{kg-extract: multi-strategy KG extraction}
+  \node[showcase/subtitle,anchor=west] at (0,8.82)
+    {Unstructured text in, typed knowledge graph out — four engines, one trait, pluggable backends.};
+
+  \node[showcase/pill,fill=Mint!48,text=Ocean,anchor=east] at (18.8,9.58) {RUST};
+  \node[showcase/pill,fill=Gold!45,text=Ink,anchor=east] at (18.8,8.92) {LLM-POWERED};
+
+  % Execution trace: six numbered steps along the main data flow.
+  \foreach \x/\n/\txt/\col in {0.62/1/input/Ocean,3.0/2/chunk/Teal,5.6/3/extract/Indigo,
+      8.6/4/parse/Teal,11.4/5/merge/Ocean,14.0/6/output/Coral} {
+    \fill[\col!18] (\x,8.2) circle (2.7mm);
+    \node[font=\scriptsize\bfseries,text=\col] at (\x,8.2) {\n};
+    \node[font=\scriptsize,text=Ink,anchor=west] at (\x+.38,8.2) {\txt};
+  }
+  \foreach \a/\b in {1.8/2.5,4.2/5.0,6.8/8.0,9.8/10.8,12.6/13.4}
+    \draw[showcase/data] (\a,8.2) -- (\b,8.2);
+
+  % Edge legend
+  \draw[showcase/data] (16.0,8.2) -- (16.6,8.2);
+  \node[font=\scriptsize,text=Slate,anchor=west] at (16.75,8.2) {data};
+  \draw[showcase/control] (17.8,8.2) -- (18.4,8.2);
+  \node[font=\scriptsize,text=Slate,anchor=west] at (18.55,8.2) {config};
+
+  % === Section 1: Input & Chunking ===
+  \begin{scope}[on background layer]
+    \node[showcase/card,fit={(-0.1,1.5) (3.8,7.5)},inner sep=0pt] (inputcard) {};
+  \end{scope}
+  \node[font=\scriptsize\bfseries,text=Slate,anchor=west] at (.25,7.12) {01 / INPUT};
+
+  \node[showcase/node,minimum width=2.8cm] (text_in) at (1.85,6.3) {Text document};
+  \node[showcase/node,minimum width=2.8cm,fill=Ocean,text=white,draw=Ocean] (chunker) at (1.85,4.75)
+    {chonkie\\chunker};
+  \node[font=\scriptsize,text=Slate,anchor=center] at (1.85,3.85)
+    {Recursive / Char / Token};
+  \node[showcase/node,minimum width=2.8cm] (chunks) at (1.85,2.75) {Segments\\+ source ranges};
+
+  \draw[showcase/data] (text_in) -- (chunker);
+  \draw[showcase/data] (chunker) -- (chunks);
+
+  % Pre-chunked input alternative
+  \draw[showcase/control] (-0.3,2.75) -- (0.45,2.75);
+  \node[font=\scriptsize,text=Slate,anchor=east] at (-0.3,2.75) {pre-chunked};
+
+  % === Section 2: Extraction Engines ===
+  \begin{scope}[on background layer]
+    \node[showcase/card,fit={(4.35,1.5) (13.0,7.5)},inner sep=0pt] (enginecard) {};
+  \end{scope}
+  \node[font=\scriptsize\bfseries,text=Slate,anchor=west] at (4.7,7.12) {02 / EXTRACT};
+
+  % The four engines
+  \node[showcase/node,minimum width=3.2cm,fill=Indigo!12,draw=Indigo,text=Ink] (simple)
+    at (6.4,6.2) {SimpleExtractor\\{\scriptsize delimiter + gleaning}};
+  \node[showcase/node,minimum width=3.2cm,fill=Teal!12,draw=Teal,text=Ink] (schema_json)
+    at (10.7,6.2) {SchemaJsonExtractor\\{\scriptsize schema-guided JSON}};
+  \node[showcase/node,minimum width=3.2cm,fill=Ocean!12,draw=Ocean,text=Ink] (toolcall)
+    at (6.4,4.4) {ToolCallExtractor\\{\scriptsize typed tool calls}};
+  \node[showcase/node,minimum width=3.2cm,fill=Gold!18,draw=Gold!80!Ink,text=Ink] (agentic)
+    at (10.7,4.4) {AgenticExtractor\\{\scriptsize multi-turn + grep}};
+
+  % Extractor trait
+  \node[draw=Slate!55,line width=.7pt,dashed,rounded corners=2mm,
+    minimum width=8.6cm,minimum height=6mm,anchor=center] at (8.55,3.4)
+    {\fontencoding{T1}\fontseries{l}\selectfont\scriptsize Extractor trait (async)};
+  \node[font=\scriptsize,text=Slate,anchor=west] at (4.7,2.65) {mechanism:};
+  \node[font=\scriptsize,text=Indigo,anchor=west] at (6.5,2.65) {prompt→parse};
+  \node[font=\scriptsize,text=Slate,anchor=west] at (9.2,2.65) {|};
+  \node[font=\scriptsize,text=Teal,anchor=west] at (9.5,2.65) {tool→structured};
+  \node[font=\scriptsize,text=Slate,anchor=west] at (4.7,2.15) {schema:};
+  \node[font=\scriptsize,text=Ocean,anchor=west] at (6.5,2.15) {Open / Fixed / Evolving};
+
+  % === Section 3: Backend & Output ===
+  \begin{scope}[on background layer]
+    \node[showcase/card,fit={(13.55,1.5) (19.2,7.5)},inner sep=0pt] (outcard) {};
+  \end{scope}
+  \node[font=\scriptsize\bfseries,text=Slate,anchor=west] at (13.9,7.12) {03 / BACKEND + OUTPUT};
+
+  \node[showcase/node,minimum width=2.9cm,fill=Coral!12,draw=Coral] (backend) at (16.35,6.2)
+    {LlmBackend};
+  \node[font=\scriptsize,text=Slate,anchor=center] at (16.35,5.35)
+    {Llms / SdkAgent / Mock};
+  \node[showcase/node,minimum width=2.9cm] (llm) at (16.35,4.4) {LLM service};
+  \node[showcase/node,minimum width=2.9cm,fill=Ocean!10,draw=Ocean] (graph) at (16.35,3.1)
+    {graph\_build + merger};
+  \node[font=\scriptsize,text=Slate,anchor=center] at (16.35,2.3)
+    {entity\_id = md5[:8]};
+
+  \node[showcase/node,minimum width=2.9cm,fill=Mint!30,draw=Teal] (output) at (16.35,1.5)
+    {KnowledgeGraph};
+  \node[font=\scriptsize,text=Teal,anchor=center] at (16.35,0.75)
+    {JSON · Mermaid · ladybug · communities};
+
+  % Connections between sections
+  \draw[showcase/data] (chunks.east) -- ++(0.6,0) |- (simple.west);
+  \draw[showcase/data] (chunks.east) -- ++(0.6,0) |- (schema_json.west);
+  \draw[showcase/data] (simple.east) -- ++(0.3,0) |- (backend.north west);
+  \draw[showcase/data] (schema_json.east) -- ++(0.15,0) |- (backend.north);
+  \draw[showcase/data] (toolcall.east) -- ++(0.7,0) |- (backend.south west);
+  \draw[showcase/data] (agentic.east) -- ++(0.55,0) |- (backend.south);
+  \draw[showcase/data] (backend) -- (llm);
+  \draw[showcase/control] (llm.south) -- (graph.north);
+  \draw[showcase/data] (graph) -- (output);
+
+  % Schema/presets connection
+  \draw[showcase/control] (8.55,2.15) -- ++(0,-0.45) -| (14.5,2.6) -- (14.5,3.1) -- (graph.west);
+
+  % MCP server (bottom bar)
+  \begin{scope}[on background layer]
+    \fill[Ink,rounded corners=2.6mm] (0,-.1) rectangle (19.2,0.95);
+  \end{scope}
+  \node[anchor=west,text=white,font=\scriptsize\bfseries] at (.38,.42) {MCP · PROVIDER};
+  \foreach \x/\label/\col in {3.0/add\_entity/Teal,5.8/add\_relation/Sky,8.6/invoke/Gold,
+    11.4/describe/Coral,13.8/community/Mint,16.2/coref/Indigo} {
+    \fill[\col] (\x,.42) circle (2.2pt);
+    \node[anchor=west,text=white!82,font=\scriptsize] at (\x+.17,.42) {\label};
+  }
+\end{tikzpicture}
+\end{document}

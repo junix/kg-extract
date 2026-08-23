@@ -1,0 +1,719 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <script data-code2arch-runtime-bootstrap>
+    window.__docReady = false;
+    window.__docErrors = [];
+    window.addEventListener("error", (event) => {
+      window.__docErrors.push(String(event.error || event.message || "unknown error"));
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      window.__docErrors.push(String(event.reason || "unhandled rejection"));
+    });
+  </script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kg-extract 架构总览</title>
+<script type="application/json" id="doc-meta">
+{
+  "id": "architecture",
+  "title": "kg-extract 架构总览",
+  "status": "draft",
+  "audience": "architects",
+  "last_updated": "2026-08-21",
+  "owners": [],
+  "revisions": [{ "date": "2026-08-21", "reason": "首次生成" }]
+}
+</script>
+<script>document.documentElement.className += " js";</script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #fafbfc; --surface: #ffffff; --ink: #171a1f; --slate: #656b73;
+  --border: #d7dce3; --blue: #2563eb; --blue-lit: #e8f0fe; --blue-deep: #1d4ed8;
+  --ext-bg: #eef0f2; --font: -apple-system, "PingFang SC", "Segoe UI", sans-serif;
+  --mono: "SF Mono", "Menlo", "Consolas", monospace;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 16px; line-height: 1.8; }
+a { color: var(--blue); }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+main { max-width: 920px; margin: 0 auto; padding: 40px 24px 96px; }
+header { padding: 96px 0 40px; border-bottom: 1px solid var(--border); margin-bottom: 64px; }
+header h1 { font-size: 2.5rem; font-weight: 700; letter-spacing: -0.02em; line-height: 1.2; }
+header p.tagline { font-size: 1.1rem; color: var(--slate); margin-top: 8px; }
+header .badges { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+.badge { display: inline-block; padding: 2px 10px; border-radius: 4px; font-size: 14px; font-weight: 500; }
+.badge-blue { background: var(--blue-lit); color: var(--blue-deep); }
+.badge-gray { background: #eef0f2; color: var(--slate); }
+section { margin-bottom: 72px; }
+section > h2 { font-size: 1.5rem; font-weight: 650; padding-top: 40px; margin-bottom: 24px; border-top: 1px solid var(--border); }
+h3 { font-size: 1.15rem; font-weight: 600; margin: 24px 0 12px; }
+p, li { max-width: 34em; }
+ul { padding-left: 1.5em; }
+li { margin-bottom: 6px; }
+dl { display: grid; grid-template-columns: 180px 1fr; gap: 4px 16px; margin: 12px 0 24px; }
+dt { font-weight: 600; color: var(--ink); }
+dd { color: var(--slate); margin-bottom: 8px; }
+figure { margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; overflow-x: auto; }
+figure svg { display: block; width: 100%; max-width: 100%; }
+figcaption { margin-top: 12px; padding-top: 8px; border-top: 1px solid var(--border); color: var(--slate); font-size: 14px; line-height: 1.6; }
+.explain { margin: 12px 0 0; font-size: 16px; line-height: 1.8; }
+.explain strong { color: var(--ink); }
+.flash { background: var(--blue-lit); box-shadow: -3px 0 0 var(--blue); transition: background .3s ease; }
+.replay { padding: 6px 14px; border: 1px solid var(--blue); border-radius: 6px; background: var(--surface); color: var(--blue); font-size: 14px; cursor: pointer; margin-top: 8px; }
+.replay:hover { background: var(--blue-lit); }
+.step-hint { margin: 8px 0 0; color: var(--slate); font-size: 14px; font-variant-numeric: tabular-nums; }
+[data-explains] { cursor: pointer; }
+.walkthrough { background: var(--blue-lit); border-left: 3px solid var(--blue); border-radius: 0 8px 8px 0; padding: 20px 24px; margin: 16px 0; }
+.walkthrough h3 { margin-top: 0; color: var(--blue-deep); }
+.walkthrough ol { padding-left: 1.4em; }
+.walkthrough li { margin-bottom: 10px; max-width: 100%; }
+footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--border); color: var(--slate); font-size: 14px; line-height: 1.6; }
+code { font-family: var(--mono); font-size: 0.9em; background: #f0f2f5; padding: 1px 5px; border-radius: 3px; }
+
+/* SVG node/edge styling */
+svg .node { opacity: .92; transition: opacity .12s; }
+svg.focus-mode .node { opacity: .5; }
+svg.focus-mode .node.hl { opacity: 1; }
+svg path.edge { transition: stroke-dashoffset .8s var(--e-pen) .34s; }
+.flow-dot { fill: var(--blue); }
+
+/* Sequence animation */
+.step { opacity: .3; transition: opacity .35s ease; cursor: pointer; }
+.step .edge { stroke: #656b73; stroke-width: 1.5; fill: none; marker-end: url(#arr-dim); transition: stroke .35s ease, stroke-width .2s ease; }
+.step .label { fill: #ffffff; stroke: var(--border); transition: fill .35s ease, stroke .35s ease; }
+.step text { font-size: 13px; text-anchor: middle; fill: var(--slate); transition: fill .35s ease; }
+.step.done { opacity: .6; }
+.step.cur { opacity: 1; }
+.step.done .edge, .step.cur .edge { stroke: var(--blue); marker-end: url(#arr-lit); }
+.step.done .label, .step.cur .label { fill: var(--blue-lit); stroke: var(--blue); }
+.step.done text, .step.cur text { fill: var(--blue-deep); }
+.step.cur .edge { stroke-width: 2.5; }
+.step.cur text { font-weight: 600; }
+figure.seq.ended .step { opacity: 1; }
+.step.focus .edge { stroke-width: 2.5; }
+.step:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+
+/* Entrance animations */
+.anim .node { opacity: 0; transform: translateY(8px); transition: opacity .5s ease, transform .5s ease; transition-delay: calc(var(--i) * 80ms); }
+.anim.in-view .node { opacity: 1; transform: none; }
+.anim path.edge { transition: stroke-dashoffset .8s ease .3s; }
+.anim.in-view path.edge { stroke-dashoffset: 0 !important; }
+
+/* C4 colors */
+.c4-actor rect { fill: #e8f0fe; stroke: var(--blue); }
+.c4-ext rect { fill: var(--ext-bg); stroke: #b0b8c1; }
+.c4-system rect { fill: #dbeafe; stroke: var(--blue); stroke-width: 1.8; }
+.c4-container rect { fill: var(--blue-lit); stroke: var(--blue); }
+.c4-storage rect { fill: #fef3c7; stroke: #d97706; }
+.c4-internal rect { fill: #f0fdf4; stroke: #16a34a; }
+
+@media (prefers-reduced-motion: reduce) {
+  .anim .node { opacity: 1; transform: none; transition: none; }
+  .flash { transition: none; }
+  .anim path.edge { stroke-dashoffset: 0 !important; transition: none; }
+  .flow-dot { display: none; }
+  .step { opacity: 1; transition: none; }
+  .step .edge, .step .label, .step text { transition: none; }
+}
+@media print {
+  .replay { display: none; }
+  .step { opacity: 1; transition: none; }
+  .step .edge, .step .label, .step text { transition: none; }
+  .anim .node { opacity: 1; transform: none; transition: none; }
+  .flow-dot { display: none; }
+  figure.seq.ended .step { opacity: 1; }
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <h1>kg-extract · 架构总览</h1>
+  <p class="tagline">多策略知识图谱抽取引擎：把非结构化文本变成类型化实体与谓词三元组的有向图。</p>
+  <div class="badges">
+    <span class="badge badge-blue">Rust</span>
+    <span class="badge badge-blue">LLM-powered</span>
+    <span class="badge badge-blue">MCP server</span>
+    <span class="badge badge-gray">v0.1.0</span>
+    <span class="badge badge-gray">2026-08-21</span>
+  </div>
+</header>
+
+<!-- ===== 产品介绍 ===== -->
+<section id="product">
+  <h2>产品介绍</h2>
+  <p><strong>kg-extract</strong> 是一个 Rust 知识图谱抽取库和 CLI 工具，从 Python <code>graph.kg_extractor</code> 忠实移植而来。它接收一段非结构化文本，输出一张 <code>KnowledgeGraph</code>——其中包含带类型的实体节点和带谓词标签的关系三元组。</p>
+  <p>面向的用户是构建知识图谱流水线的工程师：你可以用 CLI 直接抽取文档，也可以把 kg-extract 当库嵌入自己的 Rust 服务，或者通过 MCP 协议让它作为外部 AI Agent 的图构建工具。</p>
+  <p>与同类工具的核心差异：<strong>四套抽取策略</strong>（Simple / SchemaJson / ToolCall / Agentic）共享同一个 <code>Extractor</code> trait，背后插拔 <code>LlmBackend</code>（进程内 LLM SDK 或 Agent CLI 子进程）。同一份声明式 <code>ExtractionSpec</code>（schema + mode + 策略）可以在不同引擎之间切换，结果互换。</p>
+</section>
+
+<!-- ===== 功能与特性 ===== -->
+<section id="features">
+  <h2>功能与特性</h2>
+  <ul>
+    <li><strong>四引擎抽取</strong>：Simple（分隔符 + 多轮精炼）、SchemaJson（schema-guided JSON）、ToolCall（工具调用，结构化输出免解析）、Agentic（单会话多轮 + 文档 grep），按场景选。</li>
+    <li><strong>三档 Schema 模式</strong>：Open（自由抽取）、Fixed（封闭世界，只允许 schema 内类型）、Evolving（种子 schema + 允许新增类型）。Fixed/Evolving 必须提供非空 seed schema。</li>
+    <li><strong>插拔 LLM 后端</strong>：<code>LlmsBackend</code>（进程内 llms crate）、<code>SdkAgentBackend</code>（minimaxcc / glmcc / mimocc 流式 Agent）、<code>MockBackend</code>（测试），统一 <code>LlmBackend</code> trait。</li>
+    <li><strong>确定性图构建</strong>：<code>graph_build.rs</code> 提供 <code>entity_&lt;md5&gt;</code> id 方案和名称解析，所有引擎和 MCP server 共享，输出互换。</li>
+    <li><strong>模糊合并与 coref</strong>：merger 支持精确/归一化/编辑距离/token-set 三条 coref 通道，类型门控，<code>MergeStrategy</code> 四档。</li>
+    <li><strong>来源追溯</strong>：每条实体和三元组携带 <code>metadata.citations</code>，行号/页码/bbox 三种精度，跨文档合并自动累积。</li>
+    <li><strong>37 套领域模板</strong>：presets（finance / legal / medicine / tcm 等 8 域）嵌入二进制，<code>--preset general/concept_graph</code> 一行启用。</li>
+    <li><strong>MCP 图构建服务</strong>：<code>kg-extract-mcp</code> 暴露 <code>add_entity</code> / <code>add_relation</code> 等工具，外部 Agent 直接驱动。</li>
+    <li><strong>社区检测</strong>：label propagation + hierarchical Leiden，可选 GraphRAG 风格 <code>--community-summaries</code> 每社区一个 LLM 摘要。</li>
+    <li><strong>Provider 自描述</strong>：<code>kg.provider/v1</code> 协议（describe / available / invoke），kg-acme 能力中心可自动发现和链式调用。</li>
+  </ul>
+</section>
+
+<!-- ===== 架构总览图 ===== -->
+<section id="overview">
+  <h2>架构总览</h2>
+  <figure class="anim" id="fig-overview">
+    <svg role="group" aria-label="kg-extract 分层架构" viewBox="0 0 880 520" min-width="880">
+      <defs>
+        <marker id="arr-dim" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#656b73"/></marker>
+        <marker id="arr-lit" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#2563eb"/></marker>
+        <marker id="arr-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#16a34a"/></marker>
+        <marker id="arr-amber" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#d97706"/></marker>
+      </defs>
+
+      <!-- External users -->
+      <g class="node c4-actor" style="--i:0" data-node="user" data-explains="product">
+        <rect x="20" y="225" width="100" height="44" rx="22"/>
+        <text x="70" y="251" font-size="13" text-anchor="middle" fill="#171a1f">用户 / Agent</text>
+      </g>
+
+      <!-- Layer: Input & Chunking -->
+      <g class="node c4-container" style="--i:1" data-node="chunking">
+        <rect x="170" y="195" width="120" height="50" rx="6"/>
+        <text x="230" y="216" font-size="12" font-weight="600" text-anchor="middle" fill="#171a1f">chonkie 分块器</text>
+        <text x="230" y="233" font-size="11" text-anchor="middle" fill="#656b73">Recursive / Char / Token</text>
+      </g>
+
+      <!-- Layer: Engine -->
+      <g class="node c4-system" style="--i:2" data-node="extractor">
+        <rect x="340" y="80" width="200" height="180" rx="8" stroke-width="2.2"/>
+        <text x="440" y="100" font-size="13" font-weight="700" text-anchor="middle" fill="#171a1f">抽取引擎层</text>
+      </g>
+      <!-- Engine sub-nodes -->
+      <g class="node c4-internal" style="--i:2" data-node="simple">
+        <rect x="355" y="112" width="82" height="34" rx="4"/>
+        <text x="396" y="133" font-size="11" text-anchor="middle" fill="#171a1f">Simple</text>
+      </g>
+      <g class="node c4-internal" style="--i:2" data-node="schema_json">
+        <rect x="443" y="112" width="82" height="34" rx="4"/>
+        <text x="484" y="133" font-size="11" text-anchor="middle" fill="#171a1f">SchemaJson</text>
+      </g>
+      <g class="node c4-internal" style="--i:2" data-node="toolcall">
+        <rect x="355" y="152" width="82" height="34" rx="4"/>
+        <text x="396" y="173" font-size="11" text-anchor="middle" fill="#171a1f">ToolCall</text>
+      </g>
+      <g class="node c4-internal" style="--i:2" data-node="agentic">
+        <rect x="443" y="152" width="82" height="34" rx="4"/>
+        <text x="484" y="173" font-size="11" text-anchor="middle" fill="#171a1f">Agentic</text>
+      </g>
+      <!-- Extractor trait label -->
+      <g class="node" style="--i:2">
+        <rect x="380" y="195" width="120" height="24" rx="3" fill="none" stroke="#b0b8c1" stroke-dasharray="4 3"/>
+        <text x="440" y="211" font-size="10" text-anchor="middle" fill="#656b73">Extractor trait</text>
+      </g>
+
+      <!-- Layer: Backend -->
+      <g class="node c4-container" style="--i:3" data-node="backend">
+        <rect x="590" y="80" width="260" height="120" rx="8"/>
+        <text x="720" y="100" font-size="13" font-weight="700" text-anchor="middle" fill="#171a1f">LLM 后端层</text>
+      </g>
+      <g class="node c4-internal" style="--i:3" data-node="llms">
+        <rect x="605" y="112" width="110" height="34" rx="4"/>
+        <text x="660" y="133" font-size="11" text-anchor="middle" fill="#171a1f">LlmsBackend</text>
+      </g>
+      <g class="node c4-internal" style="--i:3" data-node="sdk_agent">
+        <rect x="725" y="112" width="110" height="34" rx="4"/>
+        <text x="780" y="133" font-size="11" text-anchor="middle" fill="#171a1f">SdkAgent</text>
+      </g>
+      <g class="node" style="--i:3">
+        <rect x="630" y="155" width="180" height="24" rx="3" fill="none" stroke="#b0b8c1" stroke-dasharray="4 3"/>
+        <text x="720" y="171" font-size="10" text-anchor="middle" fill="#656b73">LlmBackend trait (pluggable)</text>
+      </g>
+
+      <!-- External LLM -->
+      <g class="node c4-ext" style="--i:4" data-node="llm_provider">
+        <rect x="740" y="225" width="110" height="44" rx="6"/>
+        <text x="795" y="251" font-size="12" text-anchor="middle" fill="#656b73">LLM 服务</text>
+      </g>
+
+      <!-- Layer: Graph Construction -->
+      <g class="node c4-container" style="--i:3" data-node="graph_build">
+        <rect x="170" y="290" width="150" height="60" rx="6"/>
+        <text x="245" y="315" font-size="12" font-weight="600" text-anchor="middle" fill="#171a1f">图构建核心</text>
+        <text x="245" y="333" font-size="10" text-anchor="middle" fill="#656b73">graph_build + merger</text>
+      </g>
+
+      <!-- Layer: Output -->
+      <g class="node c4-container" style="--i:4" data-node="output">
+        <rect x="370" y="290" width="170" height="60" rx="6"/>
+        <text x="455" y="315" font-size="12" font-weight="600" text-anchor="middle" fill="#171a1f">输出格式层</text>
+        <text x="455" y="333" font-size="10" text-anchor="middle" fill="#656b73">JSON / Mermaid / Stats</text>
+      </g>
+
+      <!-- Storage / Export -->
+      <g class="node c4-storage" style="--i:5" data-node="ladybug">
+        <rect x="590" y="300" width="120" height="44" rx="6"/>
+        <text x="650" y="326" font-size="12" text-anchor="middle" fill="#171a1f">LadybugDB</text>
+      </g>
+      <g class="node c4-internal" style="--i:5" data-node="community">
+        <rect x="730" y="300" width="120" height="44" rx="4"/>
+        <text x="790" y="326" font-size="12" text-anchor="middle" fill="#171a1f">社区检测</text>
+      </g>
+
+      <!-- MCP Server -->
+      <g class="node c4-container" style="--i:1" data-node="mcp">
+        <rect x="170" y="400" width="150" height="50" rx="6"/>
+        <text x="245" y="422" font-size="12" font-weight="600" text-anchor="middle" fill="#171a1f">MCP Server</text>
+        <text x="245" y="438" font-size="10" text-anchor="middle" fill="#656b73">kg-extract-mcp</text>
+      </g>
+
+      <!-- Provider Protocol -->
+      <g class="node c4-internal" style="--i:5" data-node="provider">
+        <rect x="590" y="400" width="140" height="50" rx="4"/>
+        <text x="660" y="422" font-size="12" font-weight="600" text-anchor="middle" fill="#171a1f">Provider 协议</text>
+        <text x="660" y="438" font-size="10" text-anchor="middle" fill="#656b73">kg.provider/v1</text>
+      </g>
+
+      <!-- Schema & Presets -->
+      <g class="node c4-ext" style="--i:1" data-node="presets">
+        <rect x="370" y="400" width="170" height="50" rx="6"/>
+        <text x="455" y="422" font-size="12" font-weight="600" text-anchor="middle" fill="#171a1f">Schema & Presets</text>
+        <text x="455" y="438" font-size="10" text-anchor="middle" fill="#656b73">37 套领域模板</text>
+      </g>
+
+      <!-- Data flow edges -->
+      <path class="edge" data-from="user" data-to="chunking" d="M120,247 H170" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#arr-lit)" data-flow/>
+      <path class="edge" data-from="chunking" data-to="extractor" d="M290,220 Q310,220 330,175 L340,160" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#arr-lit)"/>
+      <path class="edge" data-from="user" data-to="mcp" d="M70,269 V410 L170,425" stroke="#16a34a" stroke-width="1.2" fill="none" marker-end="url(#arr-green)" stroke-dasharray="6 4"/>
+      <path class="edge" data-from="extractor" data-to="backend" d="M540,170 H590" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#arr-lit)"/>
+      <path class="edge" data-from="backend" data-to="llm_provider" d="M720,200 V225" stroke="#656b73" stroke-width="1.2" fill="none" marker-end="url(#arr-dim)"/>
+      <path class="edge" data-from="extractor" data-to="graph_build" d="M440,260 V290 Q340,285 245,290" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#arr-lit)"/>
+      <path class="edge" data-from="graph_build" data-to="output" d="M320,320 H370" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#arr-lit)" data-flow/>
+      <path class="edge" data-from="output" data-to="ladybug" d="M540,320 H590" stroke="#d97706" stroke-width="1.2" fill="none" marker-end="url(#arr-amber)"/>
+      <path class="edge" data-from="output" data-to="community" d="M540,330 H730" stroke="#d97706" stroke-width="1.2" fill="none" marker-end="url(#arr-amber)"/>
+      <path class="edge" data-from="presets" data-to="extractor" d="M455,400 V360 Q440,280 440,260" stroke="#656b73" stroke-width="1" fill="none" marker-end="url(#arr-dim)" stroke-dasharray="6 4"/>
+      <path class="edge" data-from="provider" data-to="output" d="M660,400 V360 Q540,350 540,340" stroke="#16a34a" stroke-width="1" fill="none" marker-end="url(#arr-green)" stroke-dasharray="6 4"/>
+
+      <!-- Legend -->
+      <g transform="translate(20,480)">
+        <text font-size="11" font-weight="600" fill="#656b73">图例</text>
+        <line x1="0" y1="18" x2="30" y2="18" stroke="#2563eb" stroke-width="1.5"/>
+        <text x="36" y="22" font-size="10" fill="#656b73">数据流</text>
+        <line x1="80" y1="18" x2="110" y2="18" stroke="#656b73" stroke-width="1" stroke-dasharray="6 4"/>
+        <text x="116" y="22" font-size="10" fill="#656b73">可选 / 配置</text>
+        <line x1="180" y1="18" x2="210" y2="18" stroke="#16a34a" stroke-width="1" stroke-dasharray="6 4"/>
+        <text x="216" y="22" font-size="10" fill="#656b73">MCP / Provider</text>
+        <line x1="300" y1="18" x2="330" y2="18" stroke="#d97706" stroke-width="1.2"/>
+        <text x="336" y="22" font-size="10" fill="#656b73">导出</text>
+        <rect x="410" y="10" width="40" height="16" rx="2" fill="#eef0f2" stroke="#b0b8c1"/>
+        <text x="456" y="22" font-size="10" fill="#656b73">外部系统</text>
+      </g>
+    </svg>
+    <figcaption>分层架构：文本从左侧进入，经分块器切片后由四引擎之一驱动 LLM 抽取，图构建核心合并去重，最终输出多种格式或导出到图数据库。</figcaption>
+  </figure>
+
+  <div class="explain" id="explain-chunking">
+    <p><strong>chonkie 分块器</strong>负责把输入文本切成适合 LLM 上下文窗口的片段。默认的 Recursive 策略按词/句边界切分，Char 策略复现 Python 原版的字符滑动窗口，Token 策略按 tiktoken 真实 token 数分段。预分块输入（<code>--input-format chunks</code>）可直接灌入，跳过再分块。</p>
+  </div>
+  <div class="explain" id="explain-extractor">
+    <p><strong>抽取引擎层</strong>是四套策略的宿主。Simple 用分隔符提示 + 多轮精炼（gleaning）；SchemaJson 在 schema 约束下输出 JSON；ToolCall 让 LLM 调用 typed 工具（<code>add_entity</code> / <code>add_relation</code>）——输出天然结构化，免解析；Agentic 把整份文档放入一个多轮 SDK 会话，模型可 grep 文档，跨段落 coref 效果最好。四者共享 <code>Extractor</code> trait。</p>
+  </div>
+  <div class="explain" id="explain-backend">
+    <p><strong>LLM 后端层</strong>屏蔽 LLM 服务差异。<code>LlmsBackend</code> 通过 llms crate 在进程内调用（OpenAI / Anthropic / Ollama 等）；<code>SdkAgentBackend</code> 驱动 Agent CLI（minimaxcc / glmcc / mimocc）的 stream-json 协议，支持原生多轮会话；<code>MockBackend</code> 返回确定性响应用于测试。</p>
+  </div>
+  <div class="explain" id="explain-graph_build">
+    <p><strong>图构建核心</strong>（<code>graph_build.rs</code> + <code>merger.rs</code>）是所有引擎和 MCP server 的共享接缝。<code>entity_id()</code> 用 <code>entity_&lt;md5(name)[:8]&gt;</code> 生成确定性 id；merger 按小写 label 合并实体、按 (subj, pred, obj) 合并三元组，支持编辑距离（≥6 字符、相似度 ≥ 0.85）和 token-set（Jaccard ≥ 0.6）两条 coref 通道。</p>
+  </div>
+  <div class="explain" id="explain-output">
+    <p><strong>输出格式层</strong>将 <code>KnowledgeGraph</code> 序列化为 JSON（默认）、JSONL、kg-protocol（portable core-types 格式）、node-link（前端渲染）、Mermaid（文档内嵌）、stats（统计摘要），以及 <code>ladybug-import</code>（直接导入 LadybugDB 图数据库）和 <code>communities</code>（社区检测结果）。</p>
+  </div>
+</section>
+
+<!-- ===== 主走查：一次完整抽取 ===== -->
+<section id="walkthrough">
+  <h2>主走查：一次 SchemaJson 抽取</h2>
+  <p>选一个真实场景：用户用 <code>kg-extract -e schema-json --schema-mode fixed -f doc.md -o json</code> 从一篇 Markdown 文档抽取知识图谱。</p>
+
+  <figure class="seq" id="fig-seq" data-hint="seq-hint">
+    <svg role="group" aria-label="抽取流程时序" viewBox="0 0 800 300" min-width="800">
+      <defs>
+        <marker id="arr-dim2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#656b73"/></marker>
+        <marker id="arr-lit2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#2563eb"/></marker>
+      </defs>
+      <!-- Actors -->
+      <g><rect x="20" y="10" width="100" height="34" rx="6" fill="#e8f0fe" stroke="#2563eb"/><text x="70" y="32" font-size="13" text-anchor="middle" fill="#171a1f">CLI</text></g>
+      <g><rect x="180" y="10" width="100" height="34" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.8"/><text x="230" y="32" font-size="13" text-anchor="middle" fill="#171a1f">SchemaJson</text></g>
+      <g><rect x="340" y="10" width="100" height="34" rx="6" fill="#e8f0fe" stroke="#2563eb"/><text x="390" y="32" font-size="13" text-anchor="middle" fill="#171a1f">chonkie</text></g>
+      <g><rect x="500" y="10" width="100" height="34" rx="6" fill="#eef0f2" stroke="#b0b8c1"/><text x="550" y="32" font-size="13" text-anchor="middle" fill="#656b73">LlmBackend</text></g>
+      <g><rect x="660" y="10" width="120" height="34" rx="6" fill="#dbeafe" stroke="#2563eb" stroke-width="1.8"/><text x="720" y="32" font-size="13" text-anchor="middle" fill="#171a1f">graph_build</text></g>
+      <!-- Lifelines -->
+      <line x1="70" y1="44" x2="70" y2="280" stroke="#d7dce3" stroke-width="1"/>
+      <line x1="230" y1="44" x2="230" y2="280" stroke="#d7dce3" stroke-width="1"/>
+      <line x1="390" y1="44" x2="390" y2="280" stroke="#d7dce3" stroke-width="1"/>
+      <line x1="550" y1="44" x2="550" y2="280" stroke="#d7dce3" stroke-width="1"/>
+      <line x1="720" y1="44" x2="720" y2="280" stroke="#d7dce3" stroke-width="1"/>
+      <!-- Steps -->
+      <g class="step" tabindex="0" aria-label="CLI 解析参数，创建 SchemaJsonExtractor">
+        <path class="edge" d="M70 75 H225" /><rect class="label" x="100" y="60" width="160" height="22" rx="4"/><text x="180" y="76">1 解析配置创建引擎</text>
+      </g>
+      <g class="step" tabindex="0" aria-label="chonkie 将文档切成递归段落">
+        <path class="edge" d="M230 115 H385" /><rect class="label" x="260" y="100" width="150" height="22" rx="4"/><text x="335" y="116">2 分块器切片文档</text>
+      </g>
+      <g class="step" tabindex="0" aria-label="拼接 chunk 文本发送给 LLM">
+        <path class="edge" d="M390 155 H545" /><rect class="label" x="415" y="140" width="160" height="22" rx="4"/><text x="495" y="156">3 发送 prompt 给 LLM</text>
+      </g>
+      <g class="step" tabindex="0" aria-label="LLM 返回 schema-guided JSON">
+        <path class="edge" d="M550 195 H235" /><rect class="label" x="310" y="180" width="180" height="22" rx="4"/><text x="400" y="196">4 返回 JSON 实体与关系</text>
+      </g>
+      <g class="step" tabindex="0" aria-label="Fixed 模式过滤 schema 外类型">
+        <path class="edge" d="M230 235 H230" stroke="none"/><rect class="label" x="180" y="225" width="140" height="22" rx="4"/><text x="250" y="241">5 Fixed 模式过滤</text>
+      </g>
+      <g class="step" tabindex="0" aria-label="图构建核心生成确定性图结构">
+        <path class="edge" d="M230 265 H715" /><rect class="label" x="380" y="250" width="200" height="22" rx="4"/><text x="480" y="266">6 合并去重 → KnowledgeGraph</text>
+      </g>
+    </svg>
+    <figcaption>一次 SchemaJson Fixed 抽取的完整流程：CLI 解析 → 分块 → LLM 推理 → 解析 → 过滤 → 合并出图。</figcaption>
+  </figure>
+  <button class="replay" type="button">▶ 重放动效</button>
+  <p class="step-hint" id="seq-hint">等待进场…</p>
+
+  <div class="walkthrough">
+    <h3>主走查：「完整抽取」</h3>
+    <ol>
+      <li><strong>CLI 解析参数</strong>：用户传入 <code>-e schema-json --schema-mode fixed --schema schema.json</code>，CLI 创建 <code>SchemaJsonExtractor</code>，加载 <code>ExtractionConfig</code>（含 <code>ExtractionSpec</code>）。</li>
+      <li><strong>分块</strong>：chonkie 的 Recursive 策略把文档切成若干段落，每段保留字符偏移量，后续用于行号追溯。</li>
+      <li><strong>LLM 推理</strong>：SchemaJson 引擎将 schema + 分块文本拼成 prompt 发给 LlmBackend；模型在 schema 约束下输出 JSON 格式的实体与关系。</li>
+      <li><strong>解析</strong>：引擎解析 JSON，生成初步实体和三元组列表。解析器容错处理缺失字段和格式异常。</li>
+      <li><strong>Fixed 过滤</strong>：不在 seed schema 中的实体类型和关系类型被丢弃，记录到 <code>schema_dropped_records</code>。</li>
+      <li><strong>图构建</strong>：<code>graph_build</code> 的 <code>GraphBuilder</code> 为每个实体生成 <code>entity_&lt;md5&gt;</code> id，通过名称解析关系端点，丢弃悬挂关系；merger 执行 lowercased label 去重。输出 JSON 格式的 <code>KnowledgeGraph</code>。</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ===== 抽取策略详解 ===== -->
+<section id="engines">
+  <h2>抽取策略详解</h2>
+  <figure class="anim" id="fig-engines">
+    <svg role="group" aria-label="四引擎对比" viewBox="0 0 880 340" min-width="880">
+      <defs>
+        <marker id="arr-dim3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#656b73"/></marker>
+        <marker id="arr-lit3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="#2563eb"/></marker>
+      </defs>
+      <!-- Input -->
+      <g class="node c4-actor" style="--i:0">
+        <rect x="10" y="140" width="90" height="44" rx="22"/>
+        <text x="55" y="166" font-size="12" text-anchor="middle" fill="#171a1f">输入文本</text>
+      </g>
+      <!-- Simple -->
+      <g class="node c4-container" style="--i:1" data-node="simple_e">
+        <rect x="140" y="30" width="160" height="90" rx="6"/>
+        <text x="220" y="50" font-size="12" font-weight="700" text-anchor="middle" fill="#171a1f">SimpleExtractor</text>
+        <text x="220" y="70" font-size="10" text-anchor="middle" fill="#656b73">分隔符提示</text>
+        <text x="220" y="85" font-size="10" text-anchor="middle" fill="#656b73">多轮 gleaning</text>
+        <text x="220" y="100" font-size="10" text-anchor="middle" fill="#656b73">高召回率</text>
+      </g>
+      <!-- SchemaJson -->
+      <g class="node c4-container" style="--i:1" data-node="sj_e">
+        <rect x="140" y="130" width="160" height="90" rx="6"/>
+        <text x="220" y="150" font-size="12" font-weight="700" text-anchor="middle" fill="#171a1f">SchemaJsonExtractor</text>
+        <text x="220" y="170" font-size="10" text-anchor="middle" fill="#656b73">schema-guided JSON</text>
+        <text x="220" y="185" font-size="10" text-anchor="middle" fill="#656b73">Open / Fixed / Evolving</text>
+        <text x="220" y="200" font-size="10" text-anchor="middle" fill="#656b73">单轮抽取</text>
+      </g>
+      <!-- ToolCall -->
+      <g class="node c4-container" style="--i:2" data-node="tc_e">
+        <rect x="140" y="230" width="160" height="90" rx="6"/>
+        <text x="220" y="250" font-size="12" font-weight="700" text-anchor="middle" fill="#171a1f">ToolCallExtractor</text>
+        <text x="220" y="270" font-size="10" text-anchor="middle" fill="#656b73">工具调用 (add_entity)</text>
+        <text x="220" y="285" font-size="10" text-anchor="middle" fill="#656b73">结构化输出免解析</text>
+        <text x="220" y="300" font-size="10" text-anchor="middle" fill="#656b73">单/多轮</text>
+      </g>
+      <!-- Agentic -->
+      <g class="node c4-system" style="--i:2" data-node="ag_e">
+        <rect x="360" y="80" width="160" height="110" rx="6" stroke-width="1.8"/>
+        <text x="440" y="100" font-size="12" font-weight="700" text-anchor="middle" fill="#171a1f">AgenticExtractor</text>
+        <text x="440" y="120" font-size="10" text-anchor="middle" fill="#656b73">单会话多轮</text>
+        <text x="440" y="135" font-size="10" text-anchor="middle" fill="#656b73">文档写入 tempdir</text>
+        <text x="440" y="150" font-size="10" text-anchor="middle" fill="#656b73">只读 grep sandbox</text>
+        <text x="440" y="165" font-size="10" text-anchor="middle" fill="#656b73">跨段落 coref 最佳</text>
+      </g>
+      <!-- Output -->
+      <g class="node c4-container" style="--i:3">
+        <rect x="580" y="130" width="140" height="60" rx="6"/>
+        <text x="650" y="155" font-size="12" font-weight="600" text-anchor="middle" fill="#171a1f">KnowledgeGraph</text>
+        <text x="650" y="173" font-size="10" text-anchor="middle" fill="#656b73">统一输出</text>
+      </g>
+      <!-- Edges -->
+      <path class="edge" data-from="simple_e" data-to="sj_e" d="M220,120 V130" stroke="#d7dce3" stroke-width="1" fill="none"/>
+      <path class="edge" data-from="sj_e" data-to="tc_e" d="M220,220 V230" stroke="#d7dce3" stroke-width="1" fill="none"/>
+      <path class="edge" d="M100,162 H140" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#arr-lit3)"/>
+      <path class="edge" d="M300,75 L360,100" stroke="#2563eb" stroke-width="1.2" fill="none" marker-end="url(#arr-lit3)"/>
+      <path class="edge" d="M300,175 L360,150" stroke="#2563eb" stroke-width="1.2" fill="none" marker-end="url(#arr-lit3)"/>
+      <path class="edge" d="M300,275 Q380,290 440,190" stroke="#2563eb" stroke-width="1.2" fill="none" marker-end="url(#arr-lit3)"/>
+      <path class="edge" d="M520,140 H580" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#arr-lit3)"/>
+      <!-- Arrow for Agentic to output -->
+      <path class="edge" d="M520,170 H580" stroke="#2563eb" stroke-width="1.2" fill="none" marker-end="url(#arr-lit3)"/>
+    </svg>
+    <figcaption>四引擎共享同一个输出形状但机制不同：Simple/SchemaJson 是 prompt→parse，ToolCall 是 tool→structured，Agentic 是单会话多轮+grep。</figcaption>
+  </figure>
+  <div class="explain">
+    <p><strong>SimpleExtractor</strong> 用 GraphRAG 风格的分隔符格式提示 LLM 输出实体/关系，然后通过多轮 gleaning（"你漏掉了什么？"）提高召回率。它支持 <code>open_session</code> 原生多轮（SdkAgentBackend），或通过 <code>ReplaySession</code> 回放历史。</p>
+    <p><strong>SchemaJsonExtractor</strong> 和 <strong>ToolCallExtractor</strong> 都是 schema 驱动的——共享 <code>ExtractionSpec</code>，只在机制上不同。SchemaJson 让 LLM 输出 JSON，ToolCall 让 LLM 调用 typed 工具。Fixed 模式下 ToolCall 通过 JSON-Schema enum 约束参数，SchemaJson 先 parse 再 drop。</p>
+    <p><strong>AgenticExtractor</strong> 是差异最大的一个：它把整份文档写进 tempdir，在只读 sandbox（Read/Grep/Glob）里让 Agent 逐段抽取。一个连续会话保证了跨段落的一致性——同一个实体名不会分裂成多个节点。代价是串行、速度较慢。适合中小篇幅、对一致性要求高的场景。</p>
+  </div>
+</section>
+
+<!-- ===== 图构建与合并 ===== -->
+<section id="graph-core">
+  <h2>图构建与合并</h2>
+  <p>图构建核心是所有引擎的共享接缝，保证不同引擎输出可互换。</p>
+  <dl>
+    <dt><code>entity_id()</code></dt><dd>对实体名做 MD5 取前 8 位：<code>entity_&lt;md5[:8]&gt;</code>，确定性 id。</dd>
+    <dt><code>GraphBuilder</code></dt><dd>累积实体（小写 label 去重），通过名称（大小写不敏感）解析关系端点，丢弃悬挂关系。</dd>
+    <dt>merger</dt><dd>三条 coref 通道：精确 → 归一化（去冠词/法人后缀）→ fuzzy（编辑距离 ≥ 0.85、token-set Jaccard ≥ 0.6），类型门控。</dd>
+    <dt><code>MergeStrategy</code></dt><dd>KeepExisting（默认）/ KeepIncoming / FieldUnion / Llm（异步模型合成）。</dd>
+  </dl>
+  <p>merger 合并实体时自动累积两侧的 <code>metadata.citations</code>——跨文档合并后，一个实体能追溯到所有出现过的文档。</p>
+</section>
+
+<!-- ===== 技术栈 ===== -->
+<section id="stack">
+  <h2>技术栈</h2>
+  <dl>
+    <dt>语言</dt><dd>Rust (edition 2021)，async/await (tokio)</dd>
+    <dt>序列化</dt><dd>serde + serde_json + serde_yaml</dd>
+    <dt>分块</dt><dd>chonkie crate（Recursive / Char / Token 策略）</dd>
+    <dt>类型系统</dt><dd>kg-vocab（EntityType 122 变体 / PredicateType 108 变体），core-types-rs（SourceRange / protocol）</dd>
+    <dt>Agent 驱动</dt><dd>claude-agent-sdk-rs（stream-json 协议），rmcp（MCP server）</dd>
+    <dt>社区检测</dt><dd>kg-community（label propagation + hierarchical Leiden）</dd>
+    <dt>CLI</dt><dd>clap 4（derive），tokio multi-thread runtime</dd>
+    <dt>模板</dt><dd>include_dir（嵌入 presets/**/*.yaml）</dd>
+  </dl>
+</section>
+
+<!-- ===== 架构特征与取舍 ===== -->
+<section id="tradeoffs">
+  <h2>架构特征与取舍</h2>
+  <ul>
+    <li><strong>引擎可互换</strong>：同一 <code>ExtractionSpec</code> 可跑 SchemaJson 也可跑 ToolCall，结果形状一致。代价是每种引擎有自己的 fallback 语义，需要分别测试。</li>
+    <li><strong>Agentic 是 coref 策略而非 recall 策略</strong>：单会话保证实体名一致性（62KB 文档：Simple 516 碎片 vs Agentic 136），但丢失一些细粒度实体。去碎片效果不可被 post-hoc merge 复现。</li>
+    <li><strong>来源追溯由代码计算，不依赖 LLM</strong>：chunker 记录字符偏移，代码推导行号/页码/bbox。模型永远不数行号。</li>
+    <li><strong>Schema 模式正交于机制</strong>：Fixed/Evolving 用不同方式在不同引擎中实现（ToolCall: JSON-Schema enum；SchemaJson/Agentic: parse-then-drop + 反馈），但外部契约一致。</li>
+    <li><strong>确定性输出</strong>：entity_id 方案和 merger 保证相同输入→相同图。社区检测用固定 seed，成员排序。</li>
+    <li><strong>Provider 协议</strong>：kg.provider/v1 让 kg-extract 在 kg-acme 能力中心中自描述，hub 不硬编码 provider 枚举。</li>
+  </ul>
+</section>
+
+<footer>
+  <p>生成工具：code2arch · 代码快照：2026-08-21 · 如何更新：修改代码后重新运行 code2arch 即可增量同步架构文档。</p>
+  <p>详细设计规格见 <code>spec/</code> 目录：<code>01-concept.md</code>（概念模型）、<code>02-data-model.md</code>（数据模型）、<code>03-runtime-model.md</code>（运行时模型）。</p>
+</footer>
+</main>
+
+<script>
+// -- Error self-collection (earliest registration) --
+window.__docErrors = [];
+window.addEventListener("error", (e) => window.__docErrors.push(String(e.message)));
+window.addEventListener("unhandledrejection", (e) => window.__docErrors.push(String(e.reason)));
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const ePen = "linear(0,.028 10%,.104 20%,.216 30%,.352 40%,.5 50%,.648 60%,.784 70%,.896 80%,.972 90%,1)";
+
+// -- Fallback watchdog --
+let ioArmed = false;
+setTimeout(() => { if (!ioArmed) document.querySelectorAll("figure.anim")
+  .forEach((f) => f.classList.add("in-view")); }, 1500);
+
+// -- IntersectionObserver entrance --
+const io = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (e.isIntersecting) { e.target.classList.add("in-view"); io.unobserve(e.target); }
+  }
+}, { rootMargin: "0px 0px -15% 0px" });
+document.querySelectorAll("figure.anim").forEach((f) => io.observe(f));
+ioArmed = true;
+
+// -- Focus reduction (§5.5): dim others, not just highlight neighbors --
+function bindHover(svg) {
+  svg.querySelectorAll("[data-node]").forEach((n) => {
+    ["mouseenter", "focus"].forEach((ev) => n.addEventListener(ev, () => setHl(svg, n.dataset.node, true)));
+    ["mouseleave", "blur"].forEach((ev) => n.addEventListener(ev, () => setHl(svg, n.dataset.node, false)));
+  });
+}
+function adjacent(svg, a, b) {
+  if (a === b) return true;
+  return [...svg.querySelectorAll("[data-from]")].some((e) =>
+    (e.dataset.from === a && e.dataset.to === b) || (e.dataset.from === b && e.dataset.to === a));
+}
+function setHl(svg, id, on) {
+  svg.classList.toggle("focus-mode", on);
+  svg.querySelectorAll("[data-node]").forEach((n) =>
+    n.classList.toggle("hl", on && adjacent(svg, id, n.dataset.node)));
+  svg.querySelectorAll("[data-from]").forEach((e) =>
+    e.classList.toggle("hl", on && (e.dataset.from === id || e.dataset.to === id)));
+}
+document.querySelectorAll("figure.anim svg").forEach(bindHover);
+
+// -- Figure → text linkage (click node to scroll to its explanation) --
+document.querySelectorAll("[data-explains]").forEach((n) => {
+  if (!n.hasAttribute("tabindex")) n.setAttribute("tabindex", "0");
+  const go = () => {
+    const t = document.getElementById(n.dataset.explains);
+    if (!t) return;
+    t.scrollIntoView({ behavior: REDUCED ? "auto" : "smooth", block: "center" });
+    t.classList.add("flash");
+    setTimeout(() => t.classList.remove("flash"), 1200);
+  };
+  n.addEventListener("click", go);
+  n.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } });
+});
+
+// -- Flow particles (§5.3): same period, offset phase --
+const FLOW_MS = 3200;
+const flows = [...document.querySelectorAll("[data-flow]")];
+function flowDot(pathEl, dur, phase) {
+  const len = pathEl.getTotalLength();
+  const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  dot.setAttribute("r", "3.5"); dot.setAttribute("class", "flow-dot");
+  pathEl.parentNode.appendChild(dot);
+  const t0 = performance.now() - phase;
+  requestAnimationFrame(function step(t) {
+    const pt = pathEl.getPointAtLength((((t - t0) % dur) / dur) * len);
+    dot.setAttribute("cx", pt.x); dot.setAttribute("cy", pt.y);
+    requestAnimationFrame(step);
+  });
+}
+if (!REDUCED) flows.forEach((p, i) => flowDot(p, FLOW_MS, (i * FLOW_MS) / flows.length));
+
+// -- Step sequence controller (§5.6) --
+const seqTimers = new WeakMap();
+const dwell = (s) => Math.max(550, Math.min(1500,
+  550 + (s.getAttribute("aria-label") || "").replace(/\s/g, "").length * 70));
+function render(fig, n) {
+  const steps = [...fig.querySelectorAll(".step")];
+  const hint = document.getElementById(fig.dataset.hint);
+  const k = Math.max(0, Math.min(n, steps.length));
+  steps.forEach((s, i) => {
+    s.classList.toggle("done", i < k - 1);
+    s.classList.toggle("cur", i === k - 1);
+  });
+  fig.classList.toggle("ended", k >= steps.length);
+  if (hint) hint.textContent = k === 0 ? "共 " + steps.length + " 步"
+    : k >= steps.length ? "全部 " + steps.length + " 步"
+    : "第 " + k + " / " + steps.length + " 步";
+  return (fig.dataset.n = k);
+}
+function seek(fig, n) {
+  (seqTimers.get(fig) || []).forEach(clearTimeout);
+  return render(fig, n);
+}
+function playSeq(fig) {
+  const steps = [...fig.querySelectorAll(".step")];
+  if (REDUCED) return seek(fig, steps.length);
+  seek(fig, 0);
+  const timers = []; seqTimers.set(fig, timers);
+  let t = 340;
+  steps.forEach((s, i) => { timers.push(setTimeout(() => render(fig, i + 1), t)); t += dwell(s); });
+}
+document.querySelectorAll("figure.seq").forEach((fig) => {
+  const play = () => playSeq(fig);
+  const obs = new IntersectionObserver((entries, o) => {
+    for (const e of entries) if (e.isIntersecting) { play(); o.unobserve(e.target); }
+  }, { rootMargin: "0px 0px -15% 0px" });
+  obs.observe(fig);
+  const btn = fig.parentNode.querySelector(".replay");
+  if (btn) btn.addEventListener("click", play);
+  fig.setAttribute("tabindex", "0"); fig.setAttribute("role", "group");
+  fig.addEventListener("keydown", (e) => {
+    const n = +(fig.dataset.n || 0), N = fig.querySelectorAll(".step").length;
+    const map = { ArrowRight: n + 1, ArrowLeft: n - 1, Home: 0, End: N };
+    if (!(e.key in map)) return;
+    e.preventDefault(); seek(fig, map[e.key]);
+  });
+  fig.querySelectorAll(".step").forEach((s) => {
+    ["mouseenter", "focus"].forEach((ev) => s.addEventListener(ev, () => s.classList.add("focus")));
+    ["mouseleave", "blur"].forEach((ev) => s.addEventListener(ev, () => s.classList.remove("focus")));
+    s.addEventListener("click", () => {
+      document.getElementById(fig.dataset.hint).textContent = "这一步：" + s.getAttribute("aria-label");
+    });
+  });
+});
+addEventListener("beforeprint", () =>
+  document.querySelectorAll("figure.seq").forEach((f) => seek(f, 999)));
+window.__seqSeek = (id, n) => { const f = document.getElementById(id); return f ? seek(f, n) : -1; };
+
+// -- Ready --
+window.__docReady = true;
+</script>
+  <script data-code2arch-edge-layer-fix>
+    (() => {
+      const visibleNodeRect = (rect, svg) => {
+        const box = rect.getBoundingClientRect();
+        const canvas = svg.getBoundingClientRect();
+        const style = getComputedStyle(rect);
+        return box.width >= 28 && box.height >= 14 &&
+          box.width < canvas.width * 0.85 && box.height < canvas.height * 0.85 &&
+          style.display !== "none" && style.visibility !== "hidden" &&
+          style.fill !== "none" && style.fill !== "transparent" &&
+          Number(style.fillOpacity || 1) >= 0.98;
+      };
+
+      const containsNode = (element, svg) => {
+        if (element.matches("rect") && visibleNodeRect(element, svg)) return true;
+        return Array.from(element.querySelectorAll("rect"))
+          .some((rect) => visibleNodeRect(rect, svg));
+      };
+
+      const containsEdge = (element) =>
+        element.matches("path, line, polyline") ||
+        Boolean(element.querySelector("path, line, polyline"));
+
+      document.querySelectorAll("svg").forEach((svg) => {
+        [svg, ...svg.querySelectorAll("g")].forEach((parent) => {
+          const children = Array.from(parent.children)
+            .filter((child) => !child.matches("defs, marker, clipPath, mask"));
+          const firstNode = children.find((child) => containsNode(child, svg));
+          if (!firstNode) return;
+          children
+            .filter((child) => child !== firstNode && containsEdge(child) &&
+              !containsNode(child, svg))
+            .forEach((edgeLayer) => parent.insertBefore(edgeLayer, firstNode));
+        });
+      });
+    })();
+  </script>
+  <script data-code2arch-svg-text-floor>
+    (() => {
+      // Leave sub-pixel headroom above the 12px hard gate. Chromium rounds
+      // glyph boxes differently across fonts, so a nominal 12.2px target can
+      // still render as 11.98px and fail the geometry audit.
+      const minimumHeight = 12.8;
+      const repair = () => {
+        document.querySelectorAll("svg text").forEach((label) => {
+          const box = label.getBoundingClientRect();
+          if (box.height <= 0 || box.height >= minimumHeight) return;
+          const fontSize = parseFloat(getComputedStyle(label).fontSize);
+          if (!Number.isFinite(fontSize) || fontSize <= 0) return;
+          const next = Math.ceil(fontSize * minimumHeight / box.height * 10) / 10;
+          label.style.fontSize = `${next}px`;
+        });
+      };
+      repair();
+      repair();
+      requestAnimationFrame(repair);
+      setTimeout(repair, 250);
+      setTimeout(repair, 750);
+      setTimeout(repair, 1500);
+    })();
+  </script>
+  <script data-code2arch-runtime-ready>
+    window.__docReady = true;
+  </script>
+</body>
+</html>
