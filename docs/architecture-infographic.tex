@@ -1,5 +1,12 @@
 \documentclass[tikz,border=10pt]{standalone}
 \usepackage{styles/showcase}
+\usepackage{xeCJK}
+\IfFontExistsTF{Source Han Serif SC}{
+  \setCJKmainfont[BoldFont={Source Han Serif SC Bold}]{Source Han Serif SC}
+}{
+  \setCJKmainfont[BoldFont={FandolHei-Bold}]{FandolHei-Regular}
+}
+
 
 \begin{document}
 \begin{tikzpicture}[x=1cm,y=1cm]
