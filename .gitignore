@@ -4,3 +4,8 @@
 /e2e/
 # Real runtime config (example lives in config.example.json)
 /config.json
+# --- appended by gitignore-sweep on 2026-09-03 ---
+/target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
