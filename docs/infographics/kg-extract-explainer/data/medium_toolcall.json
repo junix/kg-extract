@@ -1,0 +1,29 @@
+{
+ "source": "kg-extract -f medium_product_doc.md -e toolcall -b mock --mock-tool-calls <scripted add_entity/add_relation/finish rounds> -o stats",
+ "stats": {
+  "entity_types": {
+   "CITY": 1,
+   "DIGITAL_ASSET": 2,
+   "EVENT": 1,
+   "LAW": 1,
+   "ORGANIZATION": 1,
+   "PRODUCT": 1,
+   "SOFTWARE": 5,
+   "TECHNOLOGY": 5
+  },
+  "num_entities": 17,
+  "num_segments_processed": 0,
+  "num_triples": 15,
+  "predicate_types": {
+   "DEPLOYED_IN": 1,
+   "DEVELOPED_BY": 1,
+   "EVIDENCED_BY": 1,
+   "GOVERNS": 1,
+   "INCLUDES": 4,
+   "LOCATED_IN": 1,
+   "PRODUCES": 1,
+   "REQUIRES": 1,
+   "USES": 4
+  }
+ }
+}

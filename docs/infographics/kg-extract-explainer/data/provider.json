@@ -1,0 +1,750 @@
+{
+ "available": {
+  "available": true,
+  "missing": [],
+  "ready": [
+   {
+    "kind": "backend",
+    "name": "backend:mock"
+   },
+   {
+    "kind": "backend",
+    "name": "backend:llms"
+   },
+   {
+    "kind": "backend",
+    "name": "backend:agent:minimaxcc"
+   },
+   {
+    "kind": "backend",
+    "name": "backend:agent:glmcc"
+   },
+   {
+    "kind": "backend",
+    "name": "backend:agent:mimocc"
+   },
+   {
+    "kind": "backend",
+    "name": "backend:agent:pi-agent"
+   },
+   {
+    "kind": "feature",
+    "name": "feature:community"
+   },
+   {
+    "kind": "feature",
+    "name": "feature:community-leiden"
+   }
+  ]
+ },
+ "invoke": {
+  "artifacts": [
+   {
+    "checksum": "sha256:900a9e7e45a9d995f3d7b28e3fcac5fb15d8f465f84f01a5634075188284e136",
+    "kind": "kg-document",
+    "path": "/var/folders/6q/xkny9rm10gqbzhz7qd0mjp5r0000gn/T/kg-extract-invoke-jqsvrPnvivtNlt6_4IlI0/kg-document.json"
+   }
+  ],
+  "capability_id": "extract.entities_relations",
+  "diagnostics": [],
+  "protocol": "kg.execution/v1",
+  "provider": "kg-extract",
+  "result": {
+   "document": "/var/folders/6q/xkny9rm10gqbzhz7qd0mjp5r0000gn/T/kg-extract-invoke-jqsvrPnvivtNlt6_4IlI0/kg-document.json",
+   "entity_types": {
+    "ORGANIZATION": 1,
+    "TECHNOLOGY": 1
+   },
+   "num_entities": 2,
+   "num_relations": 1,
+   "num_segments_processed": 3,
+   "num_triples": 1,
+   "predicate_types": {
+    "developed_by": 1
+   }
+  },
+  "status": "ok"
+ },
+ "invoke_stderr": "Warning: input too small (23 < 100 chars)",
+ "manifest": {
+  "capabilities": [
+   {
+    "capability_id": "extract.entities_relations",
+    "cli_spec": {
+     "always": [
+      "-o",
+      "kg-protocol"
+     ],
+     "flags": [
+      {
+       "flag": "--file",
+       "kind": "string",
+       "name": "file",
+       "optional": true,
+       "order": 1
+      },
+      {
+       "default": "text",
+       "flag": "--input-format",
+       "kind": "string",
+       "name": "input_format",
+       "optional": true,
+       "order": 2
+      },
+      {
+       "default": "simple",
+       "flag": "--engine",
+       "kind": "string",
+       "name": "engine",
+       "optional": true,
+       "order": 3
+      },
+      {
+       "default": "llms",
+       "flag": "--backend",
+       "kind": "string",
+       "name": "backend",
+       "optional": true,
+       "order": 4
+      },
+      {
+       "default": "minimaxcc",
+       "flag": "--agent",
+       "kind": "string",
+       "name": "agent",
+       "optional": true,
+       "order": 5
+      },
+      {
+       "flag": "--model",
+       "kind": "string",
+       "name": "model",
+       "optional": true,
+       "order": 6
+      },
+      {
+       "default": "recursive",
+       "flag": "--chunker",
+       "kind": "string",
+       "name": "chunker",
+       "optional": true,
+       "order": 7
+      },
+      {
+       "flag": "--schema",
+       "kind": "string",
+       "name": "schema",
+       "optional": true,
+       "order": 8
+      },
+      {
+       "default": "open",
+       "flag": "--schema-mode",
+       "kind": "string",
+       "name": "schema_mode",
+       "optional": true,
+       "order": 9
+      },
+      {
+       "flag": "--preset",
+       "kind": "string",
+       "name": "preset",
+       "optional": true,
+       "order": 10
+      },
+      {
+       "flag": "--preset-file",
+       "kind": "string",
+       "name": "preset_file",
+       "optional": true,
+       "order": 11
+      },
+      {
+       "flag": "--lang",
+       "kind": "string",
+       "name": "lang",
+       "optional": true,
+       "order": 12
+      },
+      {
+       "default": 1,
+       "flag": "--max-rounds",
+       "kind": "number",
+       "name": "max_rounds",
+       "optional": true,
+       "order": 13
+      },
+      {
+       "default": "keep-existing",
+       "flag": "--merge-strategy",
+       "kind": "string",
+       "name": "merge_strategy",
+       "optional": true,
+       "order": 14
+      },
+      {
+       "default": false,
+       "flag": "--coref",
+       "kind": "boolean",
+       "name": "coref",
+       "optional": true,
+       "order": 15
+      },
+      {
+       "default": false,
+       "flag": "--canonical-direction",
+       "kind": "boolean",
+       "name": "canonical_direction",
+       "optional": true,
+       "order": 16
+      },
+      {
+       "default": 8,
+       "flag": "--max-concurrency",
+       "kind": "number",
+       "name": "max_concurrency",
+       "optional": true,
+       "order": 17
+      },
+      {
+       "default": 0,
+       "flag": "--relation-gleaning",
+       "kind": "number",
+       "name": "relation_gleaning",
+       "optional": true,
+       "order": 18
+      },
+      {
+       "flag": "--mock-response",
+       "kind": "string",
+       "name": "mock_response",
+       "optional": true,
+       "order": 19
+      },
+      {
+       "flag": "--mock-tool-calls",
+       "kind": "string",
+       "name": "mock_tool_calls",
+       "optional": true,
+       "order": 20
+      }
+     ],
+     "positionals": [],
+     "subcommand": []
+    },
+    "description": "Extract a typed knowledge graph (entities + predicate-typed relations) from text and emit it as a kg.protocol.v1 document artifact. Drives an LLM through the chosen engine/backend, so requests leave the machine.",
+    "input_schema": {
+     "additionalProperties": false,
+     "description": "Extraction request: exactly one of `text` / `file` must be set; every other field mirrors the CLI flag of the same name and falls back to the CLI default when omitted.",
+     "properties": {
+      "agent": {
+       "description": "Agent CLI to use with backend `agent`: `minimaxcc` (default), `glmcc`, `mimocc`, or `pi-agent`. The first three need MINIMAX_API_KEY / GLM_API_KEY / MIMO_API_KEY set respectively; `pi-agent` needs the pi-agent binary on PATH.",
+       "type": "string"
+      },
+      "backend": {
+       "default": "llms",
+       "description": "Completion backend that turns prompts into model text.",
+       "oneOf": [
+        {
+         "const": "llms",
+         "description": "In-process `llms` crate; requires a build with the `llms-backend` feature (see `available --json`)."
+        },
+        {
+         "const": "agent",
+         "description": "Agent CLI driven over the stream-json protocol (`agent` field picks minimaxcc/glmcc/mimocc or pi-agent); needs the provider API key in the environment."
+        },
+        {
+         "const": "mock",
+         "description": "Deterministic mock replaying `mock_response`/`mock_tool_calls`; for tests and offline demos, always available."
+        }
+       ]
+      },
+      "canonical_direction": {
+       "default": false,
+       "description": "Canonical predicate direction: flip triples on the non-canonical member of a kg-vocab inverse pair (endpoints swapped, predicate → inverse) before dedup, so (A, USES, B) and (B, IS_USED_BY, A) collapse to one edge. Off by default. Also available standalone as `resolve.canonical_direction`.",
+       "type": "boolean"
+      },
+      "chunker": {
+       "default": "recursive",
+       "description": "Text segmentation strategy applied before prompting.",
+       "oneOf": [
+        {
+         "const": "recursive",
+         "description": "Recursive structure-aware splitting (default)."
+        },
+        {
+         "const": "char",
+         "description": "Fixed character windows, reproducing the Python extractor 1:1."
+        },
+        {
+         "const": "token",
+         "description": "Tokenizer-based windows."
+        }
+       ]
+      },
+      "coref": {
+       "default": false,
+       "description": "Cross-chunk entity coreference: also merge surface variants of the same name (case, punctuation, corporate suffixes, near-identical spellings) instead of exact-label duplicates only. Off by default. Also available standalone as the `resolve.coref` capability (kg-document in, kg-document out).",
+       "type": "boolean"
+      },
+      "engine": {
+       "default": "simple",
+       "description": "Extraction engine (mechanism driving the model).",
+       "oneOf": [
+        {
+         "const": "simple",
+         "description": "Delimiter-format prompt with multi-gleaning for recall; chunk-aware, high recall (default)."
+        },
+        {
+         "const": "schema-json",
+         "description": "Schema-guided JSON prompt; honours `schema_mode`/`schema`/`preset`; joins chunks into one call."
+        },
+        {
+         "const": "toolcall",
+         "description": "Model calls typed add_entity/add_relation tools; structured by construction, no output parsing; `max_rounds` controls tool-calling rounds."
+        },
+        {
+         "const": "agentic",
+         "description": "Experimental: the whole document runs through one sandboxed multi-turn agent session (slices fed as turns, agent can grep the doc). Ignores `backend`; the provider is chosen by `agent`."
+        }
+       ]
+      },
+      "file": {
+       "description": "Path to a UTF-8 text file to extract from (tilde expanded). Alternative to `text`; exactly one of the two must be set. Renders as `--file`.",
+       "type": "string"
+      },
+      "input_format": {
+       "default": "text",
+       "description": "What the input contains.",
+       "oneOf": [
+        {
+         "const": "text",
+         "description": "Plain text, segmented internally per `chunker` (default)."
+        },
+        {
+         "const": "chunks",
+         "description": "Pre-chunked chonkie output (JSON array or JSONL) consumed as-is: the chunking engines (simple/agentic) skip re-chunking and extract per given chunk; the single-shot engines join chunk texts."
+        }
+       ]
+      },
+      "lang": {
+       "description": "Language to render the preset/template guideline in (e.g. `zh`, `en`). Defaults to the template's first declared language.",
+       "type": "string"
+      },
+      "max_concurrency": {
+       "default": 8,
+       "description": "Bound on concurrent backend calls (simple engine per-chunk extraction). 1 = sequential; default 8.",
+       "minimum": 1,
+       "type": "integer"
+      },
+      "max_rounds": {
+       "default": 1,
+       "description": "toolcall engine: maximum tool-calling rounds; 1 = single-round collection (default).",
+       "minimum": 1,
+       "type": "integer"
+      },
+      "merge_strategy": {
+       "default": "keep-existing",
+       "description": "How duplicate entities (same label) are combined at dedup time.",
+       "oneOf": [
+        {
+         "const": "keep-existing",
+         "description": "Keep the first occurrence (default); later duplicates only contribute citations."
+        },
+        {
+         "const": "keep-incoming",
+         "description": "Replace with the later occurrence (id preserved)."
+        },
+        {
+         "const": "field-union",
+         "description": "Field-wise union: max confidence, longer description, specific type over OTHER, metadata union."
+        },
+        {
+         "const": "llm",
+         "description": "Like field-union but the model synthesises one merged description when both differ (uses the backend)."
+        }
+       ]
+      },
+      "mock_response": {
+       "description": "Canned completion for backend `mock` (test/demo path), e.g. the simple engine's delimiter format or a JSON object for schema-json.",
+       "type": "string"
+      },
+      "mock_tool_calls": {
+       "description": "Scripted tool calls for backend `mock` with engine `toolcall`: inline JSON `[{\"name\": ..., \"arguments\": {...}}]` (one round) or `[[...],[...]]` (many rounds), or a path to such a JSON file.",
+       "type": "string"
+      },
+      "model": {
+       "description": "Model name overriding the engine default (e.g. `qwen-max`). Omitted = the backend's built-in default.",
+       "type": "string"
+      },
+      "preset": {
+       "description": "Bundled extraction preset (rich template) by key, e.g. `general/concept_graph` or a bare `graph` (resolved under `general/`). Routes the run through the schema-json engine and drives the prompt from the preset's guideline + fields.",
+       "type": "string"
+      },
+      "preset_file": {
+       "description": "Path to a custom template YAML in the preset format; takes precedence over `preset`.",
+       "type": "string"
+      },
+      "relation_gleaning": {
+       "default": 0,
+       "description": "simple/agentic engines: targeted relation-gleaning rounds re-questioning orphan entities (no relationship) to recover their edges. 0 = off (default).",
+       "minimum": 0,
+       "type": "integer"
+      },
+      "schema": {
+       "description": "Path to a schema JSON file (entity/relation/attribute types) constraining schema-json/toolcall/agentic. Required when `schema_mode` is `fixed` or `evolving`; ignored under `open`.",
+       "type": "string"
+      },
+      "schema_mode": {
+       "default": "open",
+       "description": "How a seed schema constrains extracted types.",
+       "oneOf": [
+        {
+         "const": "open",
+         "description": "No constraint: any type the model emits is accepted (default)."
+        },
+        {
+         "const": "fixed",
+         "description": "Closed world: out-of-schema entities/relations are hard-dropped; requires `schema` (or a preset)."
+        },
+        {
+         "const": "evolving",
+         "description": "Seed from `schema` but allow and record new types; requires `schema` (or a preset)."
+        }
+       ]
+      },
+      "text": {
+       "description": "Source text to extract entities and relations from. Exactly one of `text` / `file` is required. Maps to the CLI's stdin stream (no flag): with cli_spec rendering, pipe this value to the process when `file` is absent.",
+       "type": "string"
+      }
+     },
+     "required": [],
+     "type": "object"
+    },
+    "output": {
+     "kind": "kg-document",
+     "mode": "artifact"
+    },
+    "side_effects": [
+     "network",
+     "data_egress"
+    ],
+    "title": "Extract entities & relations"
+   },
+   {
+    "capability_id": "detect.communities",
+    "cli_spec": {
+     "always": [],
+     "flags": [
+      {
+       "default": "-",
+       "flag": "--request",
+       "kind": "string",
+       "name": "request",
+       "optional": false,
+       "order": 1
+      }
+     ],
+     "positionals": [],
+     "subcommand": [
+      "invoke",
+      "detect.communities"
+     ]
+    },
+    "description": "Label-propagation community detection over a kg.protocol.v1 graph: every relation becomes one weight-1.0 edge and parallel edges are summed, so relation multiplicity acts as edge weight. Pure local computation, deterministic output ({num_communities, quality: null, communities}). Requires a build with the `community` feature (see `available --json`).",
+    "input_schema": {
+     "additionalProperties": false,
+     "description": "Exactly one of `document` / `document_file` must be set; the document is a kg.protocol.v1 JSON graph.",
+     "properties": {
+      "document": {
+       "description": "Inline kg.protocol.v1 document ({schema_version, entities, relations, ...}), e.g. the artifact produced by `extract.entities_relations`. Exactly one of `document` / `document_file` is required.",
+       "type": "object"
+      },
+      "document_file": {
+       "description": "Path to a kg.protocol.v1 JSON file (tilde expanded). Alternative to inline `document`; exactly one of the two must be set.",
+       "type": "string"
+      }
+     },
+     "required": [],
+     "type": "object"
+    },
+    "output": {
+     "kind": "communities",
+     "mode": "result-json"
+    },
+    "side_effects": [],
+    "title": "Detect communities (label propagation)"
+   },
+   {
+    "capability_id": "detect.communities_hierarchy",
+    "cli_spec": {
+     "always": [],
+     "flags": [
+      {
+       "default": "-",
+       "flag": "--request",
+       "kind": "string",
+       "name": "request",
+       "optional": false,
+       "order": 1
+      }
+     ],
+     "positionals": [],
+     "subcommand": [
+      "invoke",
+      "detect.communities_hierarchy"
+     ]
+    },
+    "description": "Hierarchical Leiden levels (coarse → fine) over a kg.protocol.v1 graph, each level carrying its modularity quality score; fixed-seed detection and sorted member ids make the output deterministic. Pure local computation. Requires a build with the `community-leiden` feature (see `available --json`).",
+    "input_schema": {
+     "additionalProperties": false,
+     "description": "Exactly one of `document` / `document_file` must be set; the document is a kg.protocol.v1 JSON graph.",
+     "properties": {
+      "document": {
+       "description": "Inline kg.protocol.v1 document ({schema_version, entities, relations, ...}), e.g. the artifact produced by `extract.entities_relations`. Exactly one of `document` / `document_file` is required.",
+       "type": "object"
+      },
+      "document_file": {
+       "description": "Path to a kg.protocol.v1 JSON file (tilde expanded). Alternative to inline `document`; exactly one of the two must be set.",
+       "type": "string"
+      }
+     },
+     "required": [],
+     "type": "object"
+    },
+    "output": {
+     "kind": "communities",
+     "mode": "result-json"
+    },
+    "side_effects": [],
+    "title": "Detect community hierarchy (hierarchical Leiden)"
+   },
+   {
+    "capability_id": "summarize.communities",
+    "cli_spec": {
+     "always": [],
+     "flags": [
+      {
+       "default": "-",
+       "flag": "--request",
+       "kind": "string",
+       "name": "request",
+       "optional": false,
+       "order": 1
+      }
+     ],
+     "positionals": [],
+     "subcommand": [
+      "invoke",
+      "summarize.communities"
+     ]
+    },
+    "description": "One backend completion per community (per level when `hierarchy` is true) generating a {name, summary} report merged into the communities JSON. Calls run with bounded concurrency and the output is deterministic regardless of completion order; a failed community degrades to null name/summary instead of failing the run. Requires the `community` feature (`community-leiden` when `hierarchy` is true).",
+    "input_schema": {
+     "additionalProperties": false,
+     "description": "Exactly one of `document` / `document_file` must be set; the document is a kg.protocol.v1 JSON graph.",
+     "properties": {
+      "agent": {
+       "description": "Agent CLI to use with backend `agent`: `minimaxcc` (default), `glmcc`, `mimocc`, or `pi-agent`.",
+       "type": "string"
+      },
+      "backend": {
+       "default": "llms",
+       "description": "Completion backend used for the per-community summary calls.",
+       "oneOf": [
+        {
+         "const": "llms",
+         "description": "In-process `llms` crate; requires a build with the `llms-backend` feature."
+        },
+        {
+         "const": "agent",
+         "description": "Agent CLI over stream-json (`agent` picks minimaxcc/glmcc/mimocc or pi-agent); needs the provider API key in the environment."
+        },
+        {
+         "const": "mock",
+         "description": "Deterministic mock replaying `mock_response`; always available."
+        }
+       ]
+      },
+      "document": {
+       "description": "Inline kg.protocol.v1 document ({schema_version, entities, relations, ...}), e.g. the artifact produced by `extract.entities_relations`. Exactly one of `document` / `document_file` is required.",
+       "type": "object"
+      },
+      "document_file": {
+       "description": "Path to a kg.protocol.v1 JSON file (tilde expanded). Alternative to inline `document`; exactly one of the two must be set.",
+       "type": "string"
+      },
+      "hierarchy": {
+       "default": false,
+       "description": "Summarize hierarchical-Leiden levels (coarse → fine) instead of the flat label-propagation partition. Requires the `community-leiden` feature.",
+       "type": "boolean"
+      },
+      "max_concurrency": {
+       "default": 8,
+       "description": "Bound on concurrent summary calls; 1 = sequential; default 8. Output is identical for any value.",
+       "minimum": 1,
+       "type": "integer"
+      },
+      "mock_response": {
+       "description": "Canned completion for backend `mock`, e.g. {\"name\":\"...\",\"summary\":\"...\"} applied to every community.",
+       "type": "string"
+      },
+      "mock_tool_calls": {
+       "description": "Scripted tool-call rounds for backend `mock` (accepted for symmetry with extract; unused by the summary path).",
+       "type": "string"
+      },
+      "model": {
+       "description": "Model name for the summary calls; omitted = the backend's built-in default.",
+       "type": "string"
+      }
+     },
+     "required": [],
+     "type": "object"
+    },
+    "output": {
+     "kind": "communities",
+     "mode": "result-json"
+    },
+    "side_effects": [
+     "network",
+     "data_egress"
+    ],
+    "title": "Summarize communities (GraphRAG-style reports)"
+   },
+   {
+    "capability_id": "resolve.coref",
+    "cli_spec": {
+     "always": [],
+     "flags": [
+      {
+       "default": "-",
+       "flag": "--request",
+       "kind": "string",
+       "name": "request",
+       "optional": false,
+       "order": 1
+      },
+      {
+       "flag": "--artifacts-dir",
+       "kind": "string",
+       "name": "artifacts_dir",
+       "optional": true,
+       "order": 2
+      }
+     ],
+     "positionals": [],
+     "subcommand": [
+      "invoke",
+      "resolve.coref"
+     ]
+    },
+    "description": "Fuzzy coreference resolution over a kg.protocol.v1 graph: merge surface variants of the same entity (case, punctuation, corporate suffixes, near-identical spellings, type-compatible only) and remap relations onto the canonical entity id. Pure local computation; the same pass the extract `coref` option runs, exposed graph-in/graph-out so it can post-process any kg.protocol.v1 document.",
+    "input_schema": {
+     "additionalProperties": false,
+     "description": "Exactly one of `document` / `document_file` must be set; the document is a kg.protocol.v1 JSON graph.",
+     "properties": {
+      "document": {
+       "description": "Inline kg.protocol.v1 document ({schema_version, entities, relations, ...}), e.g. the artifact produced by `extract.entities_relations`. Exactly one of `document` / `document_file` is required.",
+       "type": "object"
+      },
+      "document_file": {
+       "description": "Path to a kg.protocol.v1 JSON file (tilde expanded). Alternative to inline `document`; exactly one of the two must be set.",
+       "type": "string"
+      },
+      "merge_strategy": {
+       "default": "keep-existing",
+       "description": "How a recognised duplicate is folded into the canonical entity.",
+       "oneOf": [
+        {
+         "const": "keep-existing",
+         "description": "Keep the first occurrence (default); duplicates contribute citations only."
+        },
+        {
+         "const": "keep-incoming",
+         "description": "Replace with the later occurrence (id preserved)."
+        },
+        {
+         "const": "field-union",
+         "description": "Field-wise union: max confidence, longer description, specific type over OTHER, metadata union."
+        },
+        {
+         "const": "llm",
+         "description": "Degrades to field-union here (no backend in this capability)."
+        }
+       ]
+      }
+     },
+     "required": [],
+     "type": "object"
+    },
+    "output": {
+     "kind": "kg-document",
+     "mode": "artifact"
+    },
+    "side_effects": [],
+    "title": "Resolve entity coreference"
+   },
+   {
+    "capability_id": "resolve.canonical_direction",
+    "cli_spec": {
+     "always": [],
+     "flags": [
+      {
+       "default": "-",
+       "flag": "--request",
+       "kind": "string",
+       "name": "request",
+       "optional": false,
+       "order": 1
+      },
+      {
+       "flag": "--artifacts-dir",
+       "kind": "string",
+       "name": "artifacts_dir",
+       "optional": true,
+       "order": 2
+      }
+     ],
+     "positionals": [],
+     "subcommand": [
+      "invoke",
+      "resolve.canonical_direction"
+     ]
+    },
+    "description": "Flip triples on the non-canonical member of a kg-vocab inverse pair (endpoints swapped, predicate → inverse) and dedup, so direction variants like (A, USES, B) vs (B, IS_USED_BY, A) collapse to one edge with unioned citations; unpaired predicates are untouched. Pure local computation; the same pass the extract `canonical_direction` option runs, exposed graph-in/graph-out.",
+    "input_schema": {
+     "additionalProperties": false,
+     "description": "Exactly one of `document` / `document_file` must be set; the document is a kg.protocol.v1 JSON graph.",
+     "properties": {
+      "document": {
+       "description": "Inline kg.protocol.v1 document ({schema_version, entities, relations, ...}), e.g. the artifact produced by `extract.entities_relations`. Exactly one of `document` / `document_file` is required.",
+       "type": "object"
+      },
+      "document_file": {
+       "description": "Path to a kg.protocol.v1 JSON file (tilde expanded). Alternative to inline `document`; exactly one of the two must be set.",
+       "type": "string"
+      }
+     },
+     "required": [],
+     "type": "object"
+    },
+    "output": {
+     "kind": "kg-document",
+     "mode": "artifact"
+    },
+    "side_effects": [],
+    "title": "Normalize canonical predicate direction"
+   }
+  ],
+  "protocol": "kg.provider/v1",
+  "protocol_versions": [
+   1
+  ],
+  "provider": {
+   "description": "Multi-strategy knowledge-graph extraction (simple / schema-json / toolcall / agentic engines) with community detection, GraphRAG-style community summaries, and graph-in/graph-out coref and canonical-direction resolution.",
+   "id": "kg-extract",
+   "version": "0.1.0"
+  }
+ },
+ "source": "kg-extract describe --json / available --json / invoke extract.entities_relations --request -"
+}

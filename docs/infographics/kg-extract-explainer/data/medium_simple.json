@@ -1,0 +1,742 @@
+{
+ "graph": {
+  "directed": true,
+  "graph": {},
+  "links": [
+   {
+    "confidence": 0.95,
+    "label": "developed_by",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "Aurora Portal is developed by Helio Systems.",
+     "source_name": "Aurora Portal",
+     "target_name": "Helio Systems"
+    },
+    "normalized_type": "DEVELOPED_BY",
+    "source": "entity_81804bb2",
+    "target": "entity_e9544d7a",
+    "type": "developed_by"
+   },
+   {
+    "confidence": 0.95,
+    "label": "located_in",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "Helio Systems is located in Singapore.",
+     "source_name": "Helio Systems",
+     "target_name": "Singapore"
+    },
+    "normalized_type": "LOCATED_IN",
+    "source": "entity_e9544d7a",
+    "target": "entity_458e4cbc",
+    "type": "located_in"
+   },
+   {
+    "confidence": 0.9,
+    "label": "includes",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "Aurora Portal includes the Identity Service.",
+     "source_name": "Aurora Portal",
+     "target_name": "Identity Service"
+    },
+    "normalized_type": "INCLUDES",
+    "source": "entity_81804bb2",
+    "target": "entity_b24d4eec",
+    "type": "includes"
+   },
+   {
+    "confidence": 0.9,
+    "label": "includes",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "Aurora Portal includes the Billing Worker.",
+     "source_name": "Aurora Portal",
+     "target_name": "Billing Worker"
+    },
+    "normalized_type": "INCLUDES",
+    "source": "entity_81804bb2",
+    "target": "entity_96062e0e",
+    "type": "includes"
+   },
+   {
+    "confidence": 0.9,
+    "label": "includes",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "Aurora Portal includes the Audit Console.",
+     "source_name": "Aurora Portal",
+     "target_name": "Audit Console"
+    },
+    "normalized_type": "INCLUDES",
+    "source": "entity_81804bb2",
+    "target": "entity_bf1ddb78",
+    "type": "includes"
+   },
+   {
+    "confidence": 0.9,
+    "label": "includes",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "Aurora Portal includes the Export Job.",
+     "source_name": "Aurora Portal",
+     "target_name": "Export Job"
+    },
+    "normalized_type": "INCLUDES",
+    "source": "entity_81804bb2",
+    "target": "entity_99e50a8a",
+    "type": "includes"
+   },
+   {
+    "confidence": 0.9,
+    "label": "requires",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "The API Gateway requires the Identity Service.",
+     "source_name": "Api Gateway",
+     "target_name": "Identity Service"
+    },
+    "normalized_type": "REQUIRES",
+    "source": "entity_3eefabd6",
+    "target": "entity_b24d4eec",
+    "type": "requires"
+   },
+   {
+    "confidence": 0.9,
+    "label": "uses",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "The Identity Service uses PostgreSQL.",
+     "source_name": "Identity Service",
+     "target_name": "Postgresql"
+    },
+    "normalized_type": "USES",
+    "source": "entity_b24d4eec",
+    "target": "entity_c26c231d",
+    "type": "uses"
+   },
+   {
+    "confidence": 0.9,
+    "label": "uses",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "The Billing Worker uses Kafka.",
+     "source_name": "Billing Worker",
+     "target_name": "Kafka"
+    },
+    "normalized_type": "USES",
+    "source": "entity_96062e0e",
+    "target": "entity_51be25b0",
+    "type": "uses"
+   },
+   {
+    "confidence": 0.9,
+    "label": "uses",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "The Audit Console uses ClickHouse.",
+     "source_name": "Audit Console",
+     "target_name": "Clickhouse"
+    },
+    "normalized_type": "USES",
+    "source": "entity_bf1ddb78",
+    "target": "entity_864d6972",
+    "type": "uses"
+   },
+   {
+    "confidence": 0.9,
+    "label": "uses",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "The Export Job uses Object Storage.",
+     "source_name": "Export Job",
+     "target_name": "Object Storage"
+    },
+    "normalized_type": "USES",
+    "source": "entity_99e50a8a",
+    "target": "entity_4dd09616",
+    "type": "uses"
+   },
+   {
+    "confidence": 0.9,
+    "label": "deployed_in",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "Aurora Portal is deployed in Kubernetes.",
+     "source_name": "Aurora Portal",
+     "target_name": "Kubernetes"
+    },
+    "normalized_type": "DEPLOYED_IN",
+    "source": "entity_81804bb2",
+    "target": "entity_30136395",
+    "type": "deployed_in"
+   },
+   {
+    "confidence": 0.9,
+    "label": "produces",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "The Billing Worker produces Invoice Events.",
+     "source_name": "Billing Worker",
+     "target_name": "Invoice Events"
+    },
+    "normalized_type": "PRODUCES",
+    "source": "entity_96062e0e",
+    "target": "entity_4d615947",
+    "type": "produces"
+   },
+   {
+    "confidence": 0.9,
+    "label": "governs",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "The Data Retention Policy governs Audit Logs.",
+     "source_name": "Data Retention Policy",
+     "target_name": "Audit Logs"
+    },
+    "normalized_type": "GOVERNS",
+    "source": "entity_9defcb2c",
+    "target": "entity_e5655bd1",
+    "type": "governs"
+   },
+   {
+    "confidence": 0.9,
+    "label": "evidenced_by",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ],
+     "description": "Incident Reports are evidenced by Audit Logs.",
+     "source_name": "Incident Reports",
+     "target_name": "Audit Logs"
+    },
+    "normalized_type": "EVIDENCED_BY",
+    "source": "entity_d84aae34",
+    "target": "entity_e5655bd1",
+    "type": "evidenced_by"
+   }
+  ],
+  "multigraph": false,
+  "nodes": [
+   {
+    "confidence": null,
+    "description": "The messaging system used by the Billing Worker.",
+    "id": "entity_51be25b0",
+    "label": "Kafka",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "TECHNOLOGY",
+    "type": "TECHNOLOGY"
+   },
+   {
+    "confidence": null,
+    "description": "Logs governed by the Data Retention Policy and used as evidence.",
+    "id": "entity_e5655bd1",
+    "label": "Audit Logs",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "DIGITAL_ASSET",
+    "type": "DIGITAL_ASSET"
+   },
+   {
+    "confidence": null,
+    "description": "The job that creates generated CSV exports.",
+    "id": "entity_99e50a8a",
+    "label": "Export Job",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "SOFTWARE",
+    "type": "SOFTWARE"
+   },
+   {
+    "confidence": null,
+    "description": "The storage used by the Export Job for CSV exports.",
+    "id": "entity_4dd09616",
+    "label": "Object Storage",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "TECHNOLOGY",
+    "type": "TECHNOLOGY"
+   },
+   {
+    "confidence": null,
+    "description": "The governance policy for audit log retention.",
+    "id": "entity_9defcb2c",
+    "label": "Data Retention Policy",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "LAW",
+    "type": "LAW"
+   },
+   {
+    "confidence": null,
+    "description": "Reports that are evidenced by Audit Logs.",
+    "id": "entity_d84aae34",
+    "label": "Incident Reports",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "DIGITAL_ASSET",
+    "type": "DIGITAL_ASSET"
+   },
+   {
+    "confidence": null,
+    "description": "The analytics database used by the Audit Console.",
+    "id": "entity_864d6972",
+    "label": "Clickhouse",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "TECHNOLOGY",
+    "type": "TECHNOLOGY"
+   },
+   {
+    "confidence": null,
+    "description": "The gateway that accepts customer requests after identity checks.",
+    "id": "entity_3eefabd6",
+    "label": "Api Gateway",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "SOFTWARE",
+    "type": "SOFTWARE"
+   },
+   {
+    "confidence": null,
+    "description": "The runtime environment where Aurora Portal is deployed.",
+    "id": "entity_30136395",
+    "label": "Kubernetes",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "TECHNOLOGY",
+    "type": "TECHNOLOGY"
+   },
+   {
+    "confidence": null,
+    "description": "A customer operations product developed by Helio Systems.",
+    "id": "entity_81804bb2",
+    "label": "Aurora Portal",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "PRODUCT",
+    "type": "PRODUCT"
+   },
+   {
+    "confidence": null,
+    "description": "The database used by the Identity Service.",
+    "id": "entity_c26c231d",
+    "label": "Postgresql",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "TECHNOLOGY",
+    "type": "TECHNOLOGY"
+   },
+   {
+    "confidence": null,
+    "description": "The worker that handles asynchronous billing messages and invoice calculations.",
+    "id": "entity_96062e0e",
+    "label": "Billing Worker",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "SOFTWARE",
+    "type": "SOFTWARE"
+   },
+   {
+    "confidence": null,
+    "description": "Events produced by the Billing Worker after invoice calculations.",
+    "id": "entity_4d615947",
+    "label": "Invoice Events",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "EVENT",
+    "type": "EVENT"
+   },
+   {
+    "confidence": null,
+    "description": "The console used for analytical audit queries.",
+    "id": "entity_bf1ddb78",
+    "label": "Audit Console",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "SOFTWARE",
+    "type": "SOFTWARE"
+   },
+   {
+    "confidence": null,
+    "description": "The company that develops Aurora Portal and is located in Singapore.",
+    "id": "entity_e9544d7a",
+    "label": "Helio Systems",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "ORGANIZATION",
+    "type": "ORGANIZATION"
+   },
+   {
+    "confidence": null,
+    "description": "The city where Helio Systems is located.",
+    "id": "entity_458e4cbc",
+    "label": "Singapore",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "CITY",
+    "type": "CITY"
+   },
+   {
+    "confidence": null,
+    "description": "The service used by Aurora Portal for user profiles and sessions.",
+    "id": "entity_b24d4eec",
+    "label": "Identity Service",
+    "metadata": {
+     "citations": [
+      {
+       "doc": "medium_product_doc.md",
+       "lines": [
+        1,
+        26
+       ]
+      }
+     ]
+    },
+    "normalized_type": "SOFTWARE",
+    "type": "SOFTWARE"
+   }
+  ]
+ },
+ "protocol_entities": [
+  {
+   "entity_type": "LAW",
+   "evidence": [
+    {
+     "range": {
+      "line": {
+       "end": 26,
+       "start": 1
+      }
+     },
+     "source_file": "medium_product_doc.md"
+    }
+   ],
+   "id": "entity_9defcb2c",
+   "label": "Data Retention Policy"
+  },
+  {
+   "entity_type": "SOFTWARE",
+   "evidence": [
+    {
+     "range": {
+      "line": {
+       "end": 26,
+       "start": 1
+      }
+     },
+     "source_file": "medium_product_doc.md"
+    }
+   ],
+   "id": "entity_99e50a8a",
+   "label": "Export Job"
+  },
+  {
+   "entity_type": "TECHNOLOGY",
+   "evidence": [
+    {
+     "range": {
+      "line": {
+       "end": 26,
+       "start": 1
+      }
+     },
+     "source_file": "medium_product_doc.md"
+    }
+   ],
+   "id": "entity_864d6972",
+   "label": "Clickhouse"
+  }
+ ],
+ "source": "kg-extract -f medium_product_doc.md -e simple -b mock --mock-response <medium_product_simple.mock.txt> -o stats|json|node-link|kg-protocol",
+ "stats": {
+  "entity_types": {
+   "CITY": 1,
+   "DIGITAL_ASSET": 2,
+   "EVENT": 1,
+   "LAW": 1,
+   "ORGANIZATION": 1,
+   "PRODUCT": 1,
+   "SOFTWARE": 5,
+   "TECHNOLOGY": 5
+  },
+  "num_entities": 17,
+  "num_segments_processed": 3,
+  "num_triples": 15,
+  "predicate_types": {
+   "deployed_in": 1,
+   "developed_by": 1,
+   "evidenced_by": 1,
+   "governs": 1,
+   "includes": 4,
+   "located_in": 1,
+   "produces": 1,
+   "requires": 1,
+   "uses": 4
+  }
+ },
+ "stderr": ""
+}
