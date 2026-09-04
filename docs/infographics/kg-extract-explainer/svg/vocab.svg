@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="400" viewBox="0 0 1120 400">
+<rect x="1" y="1" width="1118" height="398" rx="14" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="24" y="30" font-size="16" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">类型归一：任意叫法 → 规范类型</text>
+<rect x="24.0" y="56" width="440" height="52" rx="8" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1.4"/>
+<text x="244.0" y="78" font-size="13" fill="#16233B" font-weight="700" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">模型给的任意类型串</text>
+<text x="244.0" y="97" font-size="10.5" fill="#5A6B84" font-weight="normal" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">"digital asset" / "公司" / "Tech" …</text>
+<path d="M 244 108 L 244 126" fill="none" stroke="#60A5FA" stroke-width="1.8"/>
+<polygon points="240.28,124 247.72,124 244,130" fill="#60A5FA"/>
+<rect x="59.0" y="130" width="370" height="52" rx="8" fill="#FFFFFF" stroke="#3B82F6" stroke-width="1.4"/>
+<text x="244.0" y="152" font-size="13" fill="#16233B" font-weight="700" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">① 精确匹配</text>
+<text x="244.0" y="171" font-size="10.5" fill="#5A6B84" font-weight="normal" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">命中规范词表（SCREAMING_SNAKE_CASE 串）</text>
+<path d="M 244 182 L 244 200" fill="none" stroke="#60A5FA" stroke-width="1.8"/>
+<polygon points="240.28,198 247.72,198 244,204" fill="#60A5FA"/>
+<rect x="94.0" y="204" width="300" height="52" rx="8" fill="#FFFFFF" stroke="#2563EB" stroke-width="1.4"/>
+<text x="244.0" y="226" font-size="13" fill="#16233B" font-weight="700" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">② 别名解析</text>
+<text x="244.0" y="245" font-size="10.5" fill="#5A6B84" font-weight="normal" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">73 张实体别名表兜住变体叫法</text>
+<path d="M 244 256 L 244 274" fill="none" stroke="#60A5FA" stroke-width="1.8"/>
+<polygon points="240.28,272 247.72,272 244,278" fill="#60A5FA"/>
+<rect x="129.0" y="278" width="230" height="52" rx="8" fill="#FFFFFF" stroke="#1D4ED8" stroke-width="1.4"/>
+<text x="244.0" y="300" font-size="13" fill="#16233B" font-weight="700" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">③ 回退桶</text>
+<text x="244.0" y="319" font-size="10.5" fill="#5A6B84" font-weight="normal" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">无法识别的落入显式回退类型，可审计</text>
+<text x="540" y="56" font-size="12.5" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">权威词表清点（kg-vocab，按引擎依赖锁定的版本）</text>
+<text x="540" y="91" font-size="12" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">实体类型变体</text>
+<rect x="690" y="78" width="300.0" height="20" rx="4" fill="#2563EB"/>
+<text x="1000.0" y="93" font-size="13.5" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">122</text>
+<text x="540" y="137" font-size="12" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">谓词类型变体</text>
+<rect x="690" y="124" width="265.57377049180326" height="20" rx="4" fill="#2563EB"/>
+<text x="965.5737704918033" y="139" font-size="13.5" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">108</text>
+<text x="540" y="183" font-size="12" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">实体别名</text>
+<rect x="690" y="170" width="179.50819672131146" height="20" rx="4" fill="#60A5FA"/>
+<text x="879.5081967213115" y="185" font-size="13.5" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">73</text>
+<text x="540" y="229" font-size="12" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">逆谓词对</text>
+<rect x="690" y="216" width="29.508196721311474" height="20" rx="4" fill="#60A5FA"/>
+<text x="729.5081967213115" y="231" font-size="13.5" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">12</text>
+<text x="540" y="275" font-size="12" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">谓词消歧规则</text>
+<rect x="690" y="262" width="164.75409836065575" height="20" rx="4" fill="#60A5FA"/>
+<text x="864.7540983606557" y="277" font-size="13.5" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">67</text>
+<text x="540" y="312.0" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">词表独立于引擎、单独锁定发布；与其移植来源的 Python 枚举逐字对齐（122 / 108 双向核对）。本页只</text>
+<text x="540" y="329.05" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">引用清点数字，词表文件名不上页。</text>
+<text x="24" y="386" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">声明：C11 · D03。清点方法：对锁定版本词表数据做程序化计数，非文档转抄。</text>
+</svg>

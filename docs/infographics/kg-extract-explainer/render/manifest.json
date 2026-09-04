@@ -1,0 +1,118 @@
+{
+ "dpr": 2,
+ "cssWidth": 1200,
+ "cssHeight": 6223,
+ "sliceH": 900,
+ "slices": 7,
+ "bitmaps": [
+  {
+   "name": "slice-000.png",
+   "cssY": 0,
+   "cssH": 900
+  },
+  {
+   "name": "slice-001.png",
+   "cssY": 900,
+   "cssH": 900
+  },
+  {
+   "name": "slice-002.png",
+   "cssY": 1800,
+   "cssH": 900
+  },
+  {
+   "name": "slice-003.png",
+   "cssY": 2700,
+   "cssH": 900
+  },
+  {
+   "name": "slice-004.png",
+   "cssY": 3600,
+   "cssH": 900
+  },
+  {
+   "name": "slice-005.png",
+   "cssY": 4500,
+   "cssH": 900
+  },
+  {
+   "name": "slice-006.png",
+   "cssY": 5400,
+   "cssH": 823
+  }
+ ],
+ "panels": [
+  {
+   "src": "svg/kpi.svg",
+   "x": 40,
+   "y": 400,
+   "w": 1120,
+   "h": 168,
+   "sectionY": 400
+  },
+  {
+   "src": "svg/pipeline.svg",
+   "x": 40,
+   "y": 658,
+   "w": 1120,
+   "h": 780,
+   "sectionY": 568
+  },
+  {
+   "src": "svg/aurora_graph.svg",
+   "x": 40,
+   "y": 1552,
+   "w": 1120,
+   "h": 640,
+   "sectionY": 1438
+  },
+  {
+   "src": "svg/mechanisms.svg",
+   "x": 40,
+   "y": 2307,
+   "w": 1120,
+   "h": 470,
+   "sectionY": 2192
+  },
+  {
+   "src": "svg/schema_modes.svg",
+   "x": 40,
+   "y": 2892,
+   "w": 1120,
+   "h": 480,
+   "sectionY": 2777
+  },
+  {
+   "src": "svg/citations.svg",
+   "x": 40,
+   "y": 3461,
+   "w": 1120,
+   "h": 520,
+   "sectionY": 3372
+  },
+  {
+   "src": "svg/vocab.svg",
+   "x": 40,
+   "y": 4071,
+   "w": 1120,
+   "h": 400,
+   "sectionY": 3981
+  },
+  {
+   "src": "svg/presets.svg",
+   "x": 40,
+   "y": 4560,
+   "w": 1120,
+   "h": 430,
+   "sectionY": 4471
+  },
+  {
+   "src": "svg/surfaces.svg",
+   "x": 40,
+   "y": 5079,
+   "w": 1120,
+   "h": 620,
+   "sectionY": 4990
+  }
+ ]
+}

@@ -1,0 +1,226 @@
+{
+ "domains": {
+  "code": 2,
+  "finance": 5,
+  "general": 12,
+  "industry": 5,
+  "knowledge": 1,
+  "legal": 5,
+  "medicine": 5,
+  "tcm": 5
+ },
+ "items": [
+  {
+   "description": "业务域流程图模板 - 从代码库中提取业务领域、业务流程及其步骤，把代码结构映射到真实业务过程，形成横向流程图",
+   "key": "code/business_domain_flow",
+   "kind": "temporal_graph"
+  },
+  {
+   "description": "代码库结构图模板 - 从源代码文件、配置、文档、基础设施定义中提取文件、函数、类、模块等结构节点及其依赖、调用、包含等关系",
+   "key": "code/codebase_graph",
+   "kind": "graph"
+  },
+  {
+   "description": "财报会议摘要模板 - 从财报电话会议记录中提取公司业绩、预期对比和前瞻指引",
+   "key": "finance/earnings_summary",
+   "kind": "model"
+  },
+  {
+   "description": "重大事件时间线模板 - 从8-K报告、新闻稿和公司公告中提取公司重大事件的时间线",
+   "key": "finance/event_timeline",
+   "kind": "temporal_graph"
+  },
+  {
+   "description": "股权结构图模板 - 从招股说明书和年报中提取股东持股关系和控制结构",
+   "key": "finance/ownership_graph",
+   "kind": "graph"
+  },
+  {
+   "description": "风险因子集合模板 - 从年报风险章节中提取和归类风险因子",
+   "key": "finance/risk_factor_set",
+   "kind": "set"
+  },
+  {
+   "description": "市场情绪模型模板 - 从财经新闻和市场评论中提取量化情绪指标",
+   "key": "finance/sentiment_model",
+   "kind": "model"
+  },
+  {
+   "description": "传记图模板 - 从人物传记、回忆录、年谱中提取实体和关系",
+   "key": "general/biography_graph",
+   "kind": "temporal_graph"
+  },
+  {
+   "description": "概念关系图模板 - 从教科书、百科全书、学术论文中提取概念层级关系和语义关联",
+   "key": "general/concept_graph",
+   "kind": "graph"
+  },
+  {
+   "description": "文档结构图模板 - 从技术文档、论文、报告中提取章节层级结构和交叉引用关系",
+   "key": "general/doc_structure",
+   "kind": "graph"
+  },
+  {
+   "description": "通用图结构知识模板 - 从任意文本中提取实体节点及实体之间的二元关系，构建简单知识图谱。",
+   "key": "general/graph",
+   "kind": "graph"
+  },
+  {
+   "description": "通用超图结构知识模板 - 从任意文本中提取超图结构，包含节点（实体、概念、地点等）以及连接多个节点的多元关系超边（事件、会议、合作、冲突等）。",
+   "key": "general/hypergraph",
+   "kind": "hypergraph"
+  },
+  {
+   "description": "通用列表结构知识模板 - 从任意文本中提取项目列表，每个项目可以是关键词、标签、要点或任意文本片段。",
+   "key": "general/list",
+   "kind": "list"
+  },
+  {
+   "description": "通用结构模型知识模板 - 从任意文本中提取单个结构化对象，包含对象的名称和简要描述。",
+   "key": "general/model",
+   "kind": "model"
+  },
+  {
+   "description": "通用实体集合结构知识模板 - 从任意文本中识别关键实体，汇总为可复用的实体清单。",
+   "key": "general/set",
+   "kind": "set"
+  },
+  {
+   "description": "通用空间图结构知识模板 - 从任意文本中提取实体之间的关系，并在文本提供位置信息时为关系补充空间属性。",
+   "key": "general/spatial_graph",
+   "kind": "spatial_graph"
+  },
+  {
+   "description": "通用时空图结构知识模板 - 从任意文本中提取实体之间的关系，并在文本提供时间和位置信息时为关系补充时空属性。",
+   "key": "general/spatio_temporal_graph",
+   "kind": "spatio_temporal_graph"
+  },
+  {
+   "description": "通用时序图结构知识模板 - 从任意文本中提取实体之间的关系，并在文本提供时间信息时为关系补充时间属性。",
+   "key": "general/temporal_graph",
+   "kind": "temporal_graph"
+  },
+  {
+   "description": "工作流程图模板 - 从Skill定义文件、Agent工作流文档、SOP操作手册中提取流程步骤及其执行顺序、依赖关系和条件分支",
+   "key": "general/workflow_graph",
+   "kind": "temporal_graph"
+  },
+  {
+   "description": "应急响应图模板 - 从应急预案中提取事故场景、响应动作和责任人的关系",
+   "key": "industry/emergency_response",
+   "kind": "graph"
+  },
+  {
+   "description": "设备拓扑图模板 - 从设备手册中提取设备之间的物理连接和层级关系",
+   "key": "industry/equipment_topology",
+   "kind": "graph"
+  },
+  {
+   "description": "故障案例图模板 - 从故障分析报告中提取故障现象、原因和措施的因果关系",
+   "key": "industry/failure_case",
+   "kind": "graph"
+  },
+  {
+   "description": "操作流程图模板 - 从SOP操作手册中提取操作步骤和流程关系",
+   "key": "industry/operation_flow",
+   "kind": "graph"
+  },
+  {
+   "description": "安全控制图模板 - 从安全管理手册中提取危险源、风险和控制措施的关系",
+   "key": "industry/safety_control",
+   "kind": "graph"
+  },
+  {
+   "description": "知识库图谱模板 - 从 Karpathy 模式 LLM wiki（带 [[wikilink]] 的 markdown 文档、原始资料、index.md 分类目录）中提取文章、实体、主题、论断、资料来源及其引用、支撑、归类等关系",
+   "key": "knowledge/wiki_graph",
+   "kind": "graph"
+  },
+  {
+   "description": "判例引用图模板 - 从判决书和法律意见书中提取判例引用关系",
+   "key": "legal/case_citation",
+   "kind": "graph"
+  },
+  {
+   "description": "案件事实时间线模板 - 从判决书和证据材料中提取案件事实的时间线",
+   "key": "legal/case_fact_timeline",
+   "kind": "temporal_graph"
+  },
+  {
+   "description": "合规要求清单模板 - 从合规手册和审计报告中提取结构化的合规要求",
+   "key": "legal/compliance_list",
+   "kind": "list"
+  },
+  {
+   "description": "合同义务图模板 - 从服务合同和采购合同中提取各方的权利义务关系",
+   "key": "legal/contract_obligation",
+   "kind": "hypergraph"
+  },
+  {
+   "description": "定义术语集合模板 - 从合同和法律文书中提取术语定义",
+   "key": "legal/defined_term_set",
+   "kind": "set"
+  },
+  {
+   "description": "解剖结构图模板 - 从解剖学教材中提取人体结构的层级关系",
+   "key": "medicine/anatomy_graph",
+   "kind": "graph"
+  },
+  {
+   "description": "出院指导模板 - 从出院小结中提取患者出院后需知的医疗指导信息",
+   "key": "medicine/discharge_instruction",
+   "kind": "model"
+  },
+  {
+   "description": "药物相互作用图模板 - 从药品说明书中提取药物之间的相互作用关系",
+   "key": "medicine/drug_interaction",
+   "kind": "graph"
+  },
+  {
+   "description": "住院病程时间线模板 - 从病程记录和手术记录中提取患者住院期间的事件时间线",
+   "key": "medicine/hospital_timeline",
+   "kind": "temporal_graph"
+  },
+  {
+   "description": "治疗方案图模板 - 从临床指南中提取诊断、治疗和结果的映射关系",
+   "key": "medicine/treatment_map",
+   "kind": "hypergraph"
+  },
+  {
+   "description": "方剂组成图模板 - 从经典方剂著作中提取方剂的组成和配伍关系",
+   "key": "tcm/formula_composition",
+   "kind": "hypergraph"
+  },
+  {
+   "description": "药材属性模型模板 - 从中药学教材中提取药材的基本属性信息",
+   "key": "tcm/herb_property",
+   "kind": "model"
+  },
+  {
+   "description": "药材关联图模板 - 从方剂学文献中提取药材之间的配伍关系",
+   "key": "tcm/herb_relation",
+   "kind": "graph"
+  },
+  {
+   "description": "经络流注图模板 - 从针灸学教材中提取穴位和经脉的关系",
+   "key": "tcm/meridian_graph",
+   "kind": "graph"
+  },
+  {
+   "description": "证候推理图模板 - 从医案和临床经验中提取完整的辨证论治推理链条，建模 {症状群} → {证候} → {治法} → {方剂} 的多元关系。",
+   "key": "tcm/syndrome_reasoning",
+   "kind": "hypergraph"
+  }
+ ],
+ "kinds": {
+  "graph": 16,
+  "hypergraph": 5,
+  "list": 2,
+  "model": 5,
+  "set": 3,
+  "spatial_graph": 1,
+  "spatio_temporal_graph": 1,
+  "temporal_graph": 7
+ },
+ "source": "kg-extract --list-presets",
+ "total": 40
+}

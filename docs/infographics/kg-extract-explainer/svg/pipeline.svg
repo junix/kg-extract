@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="780" viewBox="0 0 1120 780">
+<rect x="1" y="1" width="1118" height="778" rx="14" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="24" y="28" font-size="15" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">① 输入</text>
+<rect x="24" y="36" width="250" height="74" rx="10" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="38" y="64" font-size="13.5" fill="#16233B" font-weight="600" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">纯文本  -f doc.md</text>
+<text x="38" y="88" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">或标准输入；文档名成为引用出处</text>
+<rect x="288" y="36" width="280" height="74" rx="10" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="302" y="64" font-size="13.5" fill="#16233B" font-weight="600" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">预切分输入  -F chunks</text>
+<text x="302" y="88" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">JSONL 逐块喂入：块自带行/页/框坐标</text>
+<path d="M 300 110 L 300 140" fill="none" stroke="#2563EB" stroke-width="2"/>
+<polygon points="295.66,140 304.34,140 300,147" fill="#2563EB"/>
+<text x="24" y="139" font-size="15" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">② 分段</text>
+<rect x="24" y="147" width="460" height="66" rx="10" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1.2"/>
+<text x="38" y="173" font-size="13.5" fill="#16233B" font-weight="600" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">三种分段器  -k recursive | char | token</text>
+<text x="38" y="197" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">递归（默认，尊重词/句边界）· 字符滑窗（Python 对齐）· token 计量</text>
+<rect x="510" y="147" width="440" height="66" rx="10" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="524" y="173" font-size="13.5" fill="#16233B" font-weight="600" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">预切分输入跳过分段</text>
+<text x="524" y="197" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">给的块即抽取单元；块的坐标直接成为引用坐标</text>
+<path d="M 300 213 L 300 243" fill="none" stroke="#2563EB" stroke-width="2"/>
+<polygon points="295.66,243 304.34,243 300,250" fill="#2563EB"/>
+<text x="24" y="242" font-size="15" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">③ 抽取机制 × schema 模式（两个正交维度）</text>
+<rect x="24.0" y="250" width="259.0" height="128" rx="10" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="36.0" y="274" font-size="13.5" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">simple</text>
+<text x="36.0" y="296" font-size="12.5" fill="#16233B" font-weight="600" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">分隔符提示 + 多轮补捞</text>
+<text x="36.0" y="318.0" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">每段一个会话，追问「漏了什么」拉高召回</text>
+<rect x="295.0" y="250" width="259.0" height="128" rx="10" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="307.0" y="274" font-size="13.5" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">schema-json</text>
+<text x="307.0" y="296" font-size="12.5" fill="#16233B" font-weight="600" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">模式化 JSON 输出</text>
+<text x="307.0" y="318.0" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">种子 schema 引导，输出直接可解析</text>
+<rect x="566.0" y="250" width="259.0" height="128" rx="10" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="578.0" y="274" font-size="13.5" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">toolcall</text>
+<text x="578.0" y="296" font-size="12.5" fill="#16233B" font-weight="600" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">类型化工具调用</text>
+<text x="578.0" y="318.0" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">调 add_entity / add_relation 记录事实</text>
+<rect x="837.0" y="250" width="259.0" height="128" rx="10" fill="#E0F2FE" stroke="#7DD3FC" stroke-width="1"/>
+<text x="849.0" y="274" font-size="13.5" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">agentic</text>
+<text x="849.0" y="296" font-size="12.5" fill="#16233B" font-weight="600" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">单会话连续多轮</text>
+<text x="849.0" y="318.0" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">全文入只读沙箱，跨切片复用实体名</text>
+<text x="24" y="402" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">schema 模式（机制通用）：</text>
+<rect x="183.845" y="386" width="92.47500000000001" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="191.845" y="402.14" font-size="11.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">open 自由推断</text>
+<rect x="284.32" y="386" width="118.925" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="292.32" y="402.14" font-size="11.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">fixed 闭世界硬约束</text>
+<rect x="411.245" y="386" width="129.16000000000003" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="419.245" y="402.14" font-size="11.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">evolving 种子+可生长</text>
+<path d="M 300 414 L 300 444" fill="none" stroke="#2563EB" stroke-width="2"/>
+<polygon points="295.66,444 304.34,444 300,451" fill="#2563EB"/>
+<text x="24" y="443" font-size="15" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">④ 解析 · 归并 · 去重</text>
+<rect x="24.0" y="451" width="259.0" height="96" rx="10" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="36.0" y="481" font-size="13" fill="#16233B" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">解析</text>
+<text x="36.0" y="503.0" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">分隔符记录 / JSON / 工具参数</text>
+<line x1="285.0" y1="499.0" x2="293.0" y2="499.0" stroke="#60A5FA" stroke-width="1.6"/>
+<polygon points="289.0,495.28 289.0,502.72 295.0,499.0" fill="#60A5FA"/>
+<rect x="295.0" y="451" width="259.0" height="96" rx="10" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="307.0" y="481" font-size="13" fill="#16233B" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">合并去重</text>
+<text x="307.0" y="503.0" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">实体按小写标签；三元组按（主，谓，宾）</text>
+<line x1="556.0" y1="499.0" x2="564.0" y2="499.0" stroke="#60A5FA" stroke-width="1.6"/>
+<polygon points="560.0,495.28 560.0,502.72 566.0,499.0" fill="#60A5FA"/>
+<rect x="566.0" y="451" width="259.0" height="96" rx="10" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="578.0" y="481" font-size="13" fill="#16233B" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">共指（可选）</text>
+<text x="578.0" y="503.0" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">跨块模糊共指：编辑距离 + 词集双通道</text>
+<line x1="827.0" y1="499.0" x2="835.0" y2="499.0" stroke="#60A5FA" stroke-width="1.6"/>
+<polygon points="831.0,495.28 831.0,502.72 837.0,499.0" fill="#60A5FA"/>
+<rect x="837.0" y="451" width="259.0" height="96" rx="10" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="849.0" y="481" font-size="13" fill="#16233B" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">方向归一（可选）</text>
+<text x="849.0" y="503.0" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">逆谓词对翻转到正典方向再去重</text>
+<path d="M 300 547 L 300 577" fill="none" stroke="#2563EB" stroke-width="2"/>
+<polygon points="295.66,577 304.34,577 300,584" fill="#2563EB"/>
+<text x="24" y="576" font-size="15" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">⑤ 知识图谱</text>
+<rect x="24" y="584" width="1072" height="78" rx="10" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1.4"/>
+<text x="40" y="614" font-size="14.5" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">类型化实体 + 谓词三元组 + 引用出处（由代码按块坐标盖章）</text>
+<text x="40" y="642" font-size="11.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif" opacity="0.75">实体身份确定性派生；重复记录与平行边在归并中收敛；每条记录可携带多条出处</text>
+<path d="M 560 662 L 560 690" fill="none" stroke="#2563EB" stroke-width="2"/>
+<polygon points="555.66,690 564.34,690 560,697" fill="#2563EB"/>
+<text x="24" y="701" font-size="15" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">⑥ 输出</text>
+<rect x="24" y="711" width="50.8" height="26" rx="13" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1"/>
+<text x="35" y="728.5" font-size="12" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">json</text>
+<rect x="82.8" y="711" width="58.0" height="26" rx="13" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1"/>
+<text x="93.8" y="728.5" font-size="12" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">jsonl</text>
+<rect x="148.8" y="711" width="101.19999999999999" height="26" rx="13" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1"/>
+<text x="159.8" y="728.5" font-size="12" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">kg-protocol</text>
+<rect x="258.0" y="711" width="86.8" height="26" rx="13" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1"/>
+<text x="269.0" y="728.5" font-size="12" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">node-link</text>
+<rect x="352.8" y="711" width="122.79999999999998" height="26" rx="13" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1"/>
+<text x="363.8" y="728.5" font-size="12" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">ladybug-import</text>
+<rect x="483.6" y="711" width="101.19999999999999" height="26" rx="13" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1"/>
+<text x="494.6" y="728.5" font-size="12" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">communities</text>
+<rect x="592.8" y="711" width="173.2" height="26" rx="13" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1"/>
+<text x="603.8" y="728.5" font-size="12" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">communities-hierarchy</text>
+<rect x="774.0" y="711" width="72.39999999999999" height="26" rx="13" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1"/>
+<text x="785.0" y="728.5" font-size="12" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">mermaid</text>
+<rect x="854.4" y="711" width="58.0" height="26" rx="13" fill="#FFFFFF" stroke="#93C5FD" stroke-width="1"/>
+<text x="865.4" y="728.5" font-size="12" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">stats</text>
+</svg>

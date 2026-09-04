@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="620" viewBox="0 0 1120 620">
+<rect x="1" y="1" width="1118" height="618" rx="14" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="24" y="30" font-size="16" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">四个可组合表面</text>
+<rect x="24" y="48" width="530" height="250" rx="12" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1.2"/>
+<text x="40" y="74" font-size="13.5" fill="#1D4ED8" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">CLI · 一次调用一个图</text>
+<text x="40" y="100" font-size="11.5" fill="#047857" font-weight="bold" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">$ </text>
+<text x="56" y="100" font-size="11.5" fill="#047857" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">kg-extract -f medium_product_doc.md \</text>
+<text x="40" y="119" font-size="11.5" fill="#3B82F6" font-weight="bold" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace"></text>
+<text x="56" y="119" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">    -e schema-json -b mock -o stats</text>
+<text x="40" y="138" font-size="11.5" fill="#3B82F6" font-weight="bold" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace"></text>
+<text x="56" y="138" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace"></text>
+<text x="40" y="157" font-size="11.5" fill="#3B82F6" font-weight="bold" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace"># </text>
+<text x="56" y="157" font-size="11.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">输出: 17 实体 · 15 三元组 · 8 种类型</text>
+<text x="40" y="194" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">常用旗标：</text>
+<rect x="40" y="203" width="55.49" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="48" y="218.96" font-size="11" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">-e 引擎</text>
+<rect x="105.49000000000001" y="203" width="55.49" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="113.49000000000001" y="218.96" font-size="11" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">-b 后端</text>
+<rect x="170.98000000000002" y="203" width="66.49000000000001" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="178.98000000000002" y="218.96" font-size="11" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">-k 分段器</text>
+<rect x="247.47000000000003" y="203" width="126.66" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="255.47000000000003" y="218.96" font-size="11" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">--schema-mode 模式</text>
+<rect x="384.13" y="203" width="90.47" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="392.13" y="218.96" font-size="11" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">--preset 模板</text>
+<rect x="40" y="233" width="84.64" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="48" y="248.96" font-size="11" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">--coref 共指</text>
+<rect x="134.64" y="233" width="157.46" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="142.64" y="248.96" font-size="11" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">--max-concurrency 并发界</text>
+<rect x="302.1" y="233" width="55.49" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="310.1" y="248.96" font-size="11" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">-o 输出</text>
+<rect x="570" y="48" width="530" height="250" rx="12" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1.2"/>
+<text x="586" y="74" font-size="13.5" fill="#1D4ED8" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">配置 · 三层优先级</text>
+<circle cx="596" cy="100" r="11" fill="#2563EB"/>
+<text x="596" y="104.5" font-size="11.5" fill="#FFFFFF" font-weight="bold" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">1</text>
+<text x="616" y="98" font-size="12" fill="#16233B" font-weight="600" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">命令行显式旗标</text>
+<text x="616" y="114.0" font-size="10.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">最高优先；布尔存在性旗标永远开启特性</text>
+<circle cx="596" cy="144" r="11" fill="#2563EB"/>
+<text x="596" y="148.5" font-size="11.5" fill="#FFFFFF" font-weight="bold" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">2</text>
+<text x="616" y="142" font-size="12" fill="#16233B" font-weight="600" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">配置文件</text>
+<text x="616" y="158.0" font-size="10.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">--config 路径 / 内联 JSON / 默认 ~/.kg-extract/config.json</text>
+<circle cx="596" cy="188" r="11" fill="#2563EB"/>
+<text x="596" y="192.5" font-size="11.5" fill="#FFFFFF" font-weight="bold" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">3</text>
+<text x="616" y="186" font-size="12" fill="#16233B" font-weight="600" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">内置默认值</text>
+<text x="616" y="202.0" font-size="10.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">开箱即跑：simple 引擎 + recursive 分段</text>
+<text x="586" y="234" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">公开配置键（节选）：</text>
+<rect x="586" y="242" width="45.5" height="22" rx="11.0" fill="#F1F5FB" stroke="#D7DEEA" stroke-width="1"/>
+<text x="594" y="256.6" font-size="10" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">engine</text>
+<rect x="637.5" y="242" width="53.10000000000001" height="22" rx="11.0" fill="#F1F5FB" stroke="#D7DEEA" stroke-width="1"/>
+<text x="645.5" y="256.6" font-size="10" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">backend</text>
+<rect x="696.6" y="242" width="53.10000000000001" height="22" rx="11.0" fill="#F1F5FB" stroke="#D7DEEA" stroke-width="1"/>
+<text x="704.6" y="256.6" font-size="10" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">chunker</text>
+<rect x="755.7" y="242" width="80.7" height="22" rx="11.0" fill="#F1F5FB" stroke="#D7DEEA" stroke-width="1"/>
+<text x="763.7" y="256.6" font-size="10" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">schema_mode</text>
+<rect x="842.4000000000001" y="242" width="47.800000000000004" height="22" rx="11.0" fill="#F1F5FB" stroke="#D7DEEA" stroke-width="1"/>
+<text x="850.4000000000001" y="256.6" font-size="10" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">preset</text>
+<rect x="896.2" y="242" width="98.70000000000002" height="22" rx="11.0" fill="#F1F5FB" stroke="#D7DEEA" stroke-width="1"/>
+<text x="904.2" y="256.6" font-size="10" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">max_concurrency</text>
+<rect x="1000.9000000000001" y="242" width="47.800000000000004" height="22" rx="11.0" fill="#F1F5FB" stroke="#D7DEEA" stroke-width="1"/>
+<text x="1008.9000000000001" y="256.6" font-size="10" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">output</text>
+<text x="586" y="284" font-size="10.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">未知键一律拒绝；显式 --config 缺失或 JSON 损坏即报错。</text>
+<rect x="24" y="314" width="700" height="246" rx="12" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1.2"/>
+<text x="40" y="340" font-size="13.5" fill="#1D4ED8" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">Provider 协议 · 自描述能力面</text>
+<rect x="40" y="358" width="148.615" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="48" y="373.78" font-size="10.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">extract.entities_relations</text>
+<rect x="200.615" y="358" width="115.645" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="208.615" y="373.78" font-size="10.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">detect.communities</text>
+<rect x="328.26" y="358" width="168.88" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="336.26" y="373.78" font-size="10.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">detect.communities_hierarchy</text>
+<rect x="509.14" y="358" width="136.64499999999998" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="517.14" y="373.78" font-size="10.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">summarize.communities</text>
+<rect x="40" y="388" width="83.515" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="48" y="403.78" font-size="10.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">resolve.coref</text>
+<rect x="135.515" y="388" width="151.76500000000001" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="143.515" y="403.78" font-size="10.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">resolve.canonical_direction</text>
+<text x="40" y="422" font-size="11" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">$ echo '{ … }' | kg-extract invoke extract.entities_relations --request -</text>
+<text x="56" y="444" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">"protocol": "kg.execution/v1"</text>
+<text x="56" y="461" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">"status": "ok"</text>
+<text x="56" y="478" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">"artifacts": [ { "kind": "kg-document",</text>
+<text x="56" y="495" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">  "checksum": "sha256:900a9e7e45a9d995f3d…" } ]</text>
+<text x="56" y="512" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">"result": { "num_entities": 2, "num_triples": 1 }</text>
+<text x="40" y="539.0" font-size="10.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">describe 列能力清单；available 只读探测（退出码恒 0）；invoke 恰好打印一个执行信封，失败非零退出。</text>
+<rect x="740" y="314" width="356" height="246" rx="12" fill="#E0F2FE" stroke="#7DD3FC" stroke-width="1.2"/>
+<text x="756" y="340" font-size="13.5" fill="#075985" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">MCP · 无模型的图构建</text>
+<text x="756" y="364.0" font-size="11" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">服务端不调模型：外部 MCP 客户端读源文本、逐条驱动变更。出</text>
+<text x="756" y="381.05" font-size="11" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">处字段组（source_file + 起止行）先验证后写入——路径必须相对</text>
+<text x="756" y="398.1" font-size="11" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif"> source 根、行距必须落在文件内，违规即工具错误。</text>
+<text x="756" y="434" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">工具名：</text>
+<rect x="756" y="442" width="66.7" height="22" rx="11.0" fill="#FFFFFF" stroke="#7DD3FC" stroke-width="1"/>
+<text x="764" y="456.6" font-size="10" fill="#075985" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">add_entity</text>
+<rect x="828.7" y="442" width="75.0" height="22" rx="11.0" fill="#FFFFFF" stroke="#7DD3FC" stroke-width="1"/>
+<text x="836.7" y="456.6" font-size="10" fill="#075985" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">add_relation</text>
+<rect x="909.7" y="442" width="82.60000000000001" height="22" rx="11.0" fill="#FFFFFF" stroke="#7DD3FC" stroke-width="1"/>
+<text x="917.7" y="456.6" font-size="10" fill="#075985" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">add_attribute</text>
+<rect x="756" y="470" width="119.9" height="22" rx="11.0" fill="#FFFFFF" stroke="#7DD3FC" stroke-width="1"/>
+<text x="764" y="484.6" font-size="10" fill="#075985" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">propose_schema_type</text>
+<text x="756" y="510" font-size="10.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">同一实体/关系的重复调用合并引用而非复制记录。</text>
+<text x="24" y="608" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">声明：C02 · D04 · D11。信封、能力清单、旗标表均为冻结实跑输出。</text>
+</svg>

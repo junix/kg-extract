@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="430" viewBox="0 0 1120 430">
+<rect x="1" y="1" width="1118" height="428" rx="14" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="24" y="30" font-size="16" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">40 份领域模板 · 8 个域（实跑清点）</text>
+<text x="178" y="72" font-size="12.5" fill="#16233B" font-weight="normal" text-anchor="end" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">通用 general</text>
+<rect x="190" y="58" width="560.0" height="22" rx="4" fill="#2563EB"/>
+<text x="760.0" y="73" font-size="13" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">12</text>
+<text x="178" y="106" font-size="12.5" fill="#16233B" font-weight="normal" text-anchor="end" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">金融 finance</text>
+<rect x="190" y="92" width="233.33333333333334" height="22" rx="4" fill="#60A5FA"/>
+<text x="433.33333333333337" y="107" font-size="13" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">5</text>
+<text x="178" y="140" font-size="12.5" fill="#16233B" font-weight="normal" text-anchor="end" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">工业 industry</text>
+<rect x="190" y="126" width="233.33333333333334" height="22" rx="4" fill="#60A5FA"/>
+<text x="433.33333333333337" y="141" font-size="13" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">5</text>
+<text x="178" y="174" font-size="12.5" fill="#16233B" font-weight="normal" text-anchor="end" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">法律 legal</text>
+<rect x="190" y="160" width="233.33333333333334" height="22" rx="4" fill="#60A5FA"/>
+<text x="433.33333333333337" y="175" font-size="13" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">5</text>
+<text x="178" y="208" font-size="12.5" fill="#16233B" font-weight="normal" text-anchor="end" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">医学 medicine</text>
+<rect x="190" y="194" width="233.33333333333334" height="22" rx="4" fill="#60A5FA"/>
+<text x="433.33333333333337" y="209" font-size="13" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">5</text>
+<text x="178" y="242" font-size="12.5" fill="#16233B" font-weight="normal" text-anchor="end" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">中医 tcm</text>
+<rect x="190" y="228" width="233.33333333333334" height="22" rx="4" fill="#60A5FA"/>
+<text x="433.33333333333337" y="243" font-size="13" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">5</text>
+<text x="178" y="276" font-size="12.5" fill="#16233B" font-weight="normal" text-anchor="end" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">代码 code</text>
+<rect x="190" y="262" width="93.33333333333333" height="22" rx="4" fill="#60A5FA"/>
+<text x="293.3333333333333" y="277" font-size="13" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">2</text>
+<text x="178" y="310" font-size="12.5" fill="#16233B" font-weight="normal" text-anchor="end" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">知识库 knowledge</text>
+<rect x="190" y="296" width="46.666666666666664" height="22" rx="4" fill="#60A5FA"/>
+<text x="246.66666666666666" y="311" font-size="13" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">1</text>
+<text x="830" y="58" font-size="12.5" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">8 种结构类型</text>
+<circle cx="830" cy="84" r="5" fill="#3B82F6"/>
+<text x="844" y="88" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">图</text>
+<text x="922" y="88" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">graph</text>
+<text x="1080" y="88" font-size="11.5" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">16 份</text>
+<circle cx="830" cy="120" r="5" fill="#3B82F6"/>
+<text x="844" y="124" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">超图</text>
+<text x="922" y="124" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">hypergraph</text>
+<text x="1080" y="124" font-size="11.5" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">5 份</text>
+<circle cx="830" cy="156" r="5" fill="#3B82F6"/>
+<text x="844" y="160" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">列表</text>
+<text x="922" y="160" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">list</text>
+<text x="1080" y="160" font-size="11.5" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">2 份</text>
+<circle cx="830" cy="192" r="5" fill="#3B82F6"/>
+<text x="844" y="196" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">结构模型</text>
+<text x="922" y="196" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">model</text>
+<text x="1080" y="196" font-size="11.5" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">5 份</text>
+<circle cx="830" cy="228" r="5" fill="#3B82F6"/>
+<text x="844" y="232" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">集合</text>
+<text x="922" y="232" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">set</text>
+<text x="1080" y="232" font-size="11.5" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">3 份</text>
+<circle cx="830" cy="264" r="5" fill="#3B82F6"/>
+<text x="844" y="268" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">空间图</text>
+<text x="922" y="268" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">spatial_graph</text>
+<text x="1080" y="268" font-size="11.5" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">1 份</text>
+<circle cx="830" cy="300" r="5" fill="#3B82F6"/>
+<text x="844" y="304" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">时空图</text>
+<text x="922" y="304" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">spatio_temporal_graph</text>
+<text x="1080" y="304" font-size="11.5" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">1 份</text>
+<circle cx="830" cy="336" r="5" fill="#3B82F6"/>
+<text x="844" y="340" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">时序图</text>
+<text x="922" y="340" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">temporal_graph</text>
+<text x="1080" y="340" font-size="11.5" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">7 份</text>
+<text x="24" y="340.0" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">每份模板 = 多语种（zh/en）抽取目标说明：输出字段结构 + 领域人设与抽取守则 + 命名约定；随二进制内嵌，按名加载、零外部文件，也可自带同格</text>
+<text x="24" y="357.825" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">式模板文件。模板引导「抽什么」，不改变输出 JSON 契约——图谱构建端无感。</text>
+<text x="24" y="414" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">示例键（实跑 --list-presets 输出，数据白名单判例）：</text>
+<rect x="305.21" y="398" width="130.45" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="313.21" y="413.78" font-size="10.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">general/concept_graph</text>
+<rect x="443.65999999999997" y="398" width="146.83" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="451.65999999999997" y="413.78" font-size="10.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">tcm/formula_composition</text>
+<rect x="598.49" y="398" width="142.525" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="606.49" y="413.78" font-size="10.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">finance/ownership_graph</text>
+<rect x="749.015" y="398" width="121.73500000000001" height="24" rx="12.0" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="757.015" y="413.78" font-size="10.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">code/codebase_graph</text>
+<rect x="1010" y="14" width="31.799999999999997" height="18" rx="9" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="1016" y="26.5" font-size="11" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">C01</text>
+</svg>

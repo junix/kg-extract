@@ -1,0 +1,98 @@
+{
+ "runs": {
+  "evolving": {
+   "stats": {
+    "entity_types": {
+     "CITY": 1,
+     "DIGITAL_ASSET": 2,
+     "EVENT": 1,
+     "LAW": 1,
+     "ORGANIZATION": 1,
+     "PRODUCT": 1,
+     "SOFTWARE": 5,
+     "TECHNOLOGY": 5
+    },
+    "num_entities": 17,
+    "num_segments_processed": 0,
+    "num_triples": 15,
+    "predicate_types": {
+     "DEPLOYED_IN": 1,
+     "DEVELOPED_BY": 1,
+     "EVIDENCED_BY": 1,
+     "GOVERNS": 1,
+     "INCLUDES": 4,
+     "LOCATED_IN": 1,
+     "PRODUCES": 1,
+     "REQUIRES": 1,
+     "USES": 4
+    }
+   },
+   "stderr": ""
+  },
+  "fixed": {
+   "stats": {
+    "entity_types": {
+     "ORGANIZATION": 1,
+     "PRODUCT": 1,
+     "TECHNOLOGY": 5
+    },
+    "num_entities": 7,
+    "num_segments_processed": 0,
+    "num_triples": 1,
+    "predicate_types": {
+     "DEVELOPED_BY": 1
+    }
+   },
+   "stderr": "schema-json: dropped 24 out-of-schema record(s): CITY, DEPLOYED_IN, DIGITAL_ASSET, EVENT, EVIDENCED_BY, GOVERNS, LAW, PRODUCES, REQUIRES, SOFTWARE\nschema-json: dropped 24 out-of-schema record(s): CITY, DEPLOYED_IN, DIGITAL_ASSET, EVENT, EVIDENCED_BY, GOVERNS, LAW, PRODUCES, REQUIRES, SOFTWARE",
+   "survivor_entity_types": {
+    "ORGANIZATION": 1,
+    "PRODUCT": 1,
+    "TECHNOLOGY": 5
+   }
+  },
+  "open": {
+   "stats": {
+    "entity_types": {
+     "CITY": 1,
+     "DIGITAL_ASSET": 2,
+     "EVENT": 1,
+     "LAW": 1,
+     "ORGANIZATION": 1,
+     "PRODUCT": 1,
+     "SOFTWARE": 5,
+     "TECHNOLOGY": 5
+    },
+    "num_entities": 17,
+    "num_segments_processed": 0,
+    "num_triples": 15,
+    "predicate_types": {
+     "DEPLOYED_IN": 1,
+     "DEVELOPED_BY": 1,
+     "EVIDENCED_BY": 1,
+     "GOVERNS": 1,
+     "INCLUDES": 4,
+     "LOCATED_IN": 1,
+     "PRODUCES": 1,
+     "REQUIRES": 1,
+     "USES": 4
+    }
+   },
+   "stderr": ""
+  }
+ },
+ "seed_schema": {
+  "attributes": [],
+  "nodes": [
+   "PRODUCT",
+   "ORGANIZATION",
+   "TECHNOLOGY"
+  ],
+  "relations": [
+   "developed_by",
+   "uses",
+   "located_in",
+   "includes"
+  ]
+ },
+ "source": "kg-extract -f medium_product_doc.md -e schema-json -b mock --mock-response <medium_product_schema.mock.json> --schema-mode {open,fixed,evolving} --schema <seed_schema.json> -o stats|json"
+}

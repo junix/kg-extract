@@ -1,0 +1,13 @@
+{
+ "backend": "mock (deterministic, offline)",
+ "build_command": "cargo build --release --features \"llms-backend mcp community community-leiden\"",
+ "engine_binary": "target/release/kg-extract",
+ "engine_binary_sha256": "cd2e666d677d8f4f0c57ec193712ad69e36cb60514dcfbb6a58fda2b799d1c38",
+ "engine_commit": "e52b1f9d17abc16f3898d8e8b2779b6bef5b74db",
+ "fixture_inputs_sha256": {
+  "medium_product_doc.md": "3f87372e54c89dd2035f3c26a6b7f9deecaf963c7914bdfe2b602623d00959df",
+  "medium_product_schema.mock.json": "2bae046d6ef111d206e969a3658f12a4136ea0d7a0b713efa3c835b4774a617d",
+  "medium_product_simple.mock.txt": "8fed013c035e5800d53a0ef3bf1cbe68f3b5c851d8ecb412a1635a9b10ec7a4c"
+ },
+ "frozen_at": "2026-09-04"
+}

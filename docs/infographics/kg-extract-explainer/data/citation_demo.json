@@ -1,0 +1,133 @@
+{
+ "entity_sample": {
+  "citations": [
+   {
+    "doc": "aurora_note.md",
+    "lines": [
+     1,
+     7
+    ]
+   },
+   {
+    "doc": "aurora_note.md",
+    "range": {
+     "bbox": {
+      "x0": 72.0,
+      "x1": 540.0,
+      "y0": 120.5,
+      "y1": 380.0
+     },
+     "char_span": {
+      "end": 500,
+      "start": 250
+     },
+     "line": {
+      "end": 16,
+      "start": 9
+     },
+     "page": {
+      "end": 3,
+      "start": 3
+     }
+    }
+   }
+  ],
+  "label": "Kubernetes"
+ },
+ "input_chunks": [
+  {
+   "id": "chnk_1",
+   "range": {
+    "char_span": {
+     "end": 250,
+     "start": 0
+    },
+    "line": {
+     "end": 7,
+     "start": 1
+    }
+   },
+   "source_file": "aurora_note.md",
+   "text": "Aurora Portal is a customer operations product developed by Helio Systems. Helio Systems is located in Singapore. Aurora Portal includes the Identity Service, the Billing Worker, the Audit Console, and the Export Job. The API Gateway requires the Identity Service."
+  },
+  {
+   "id": "chnk_2",
+   "range": {
+    "bbox": {
+     "x0": 72.0,
+     "x1": 540.0,
+     "y0": 120.5,
+     "y1": 380.0
+    },
+    "char_span": {
+     "end": 500,
+     "start": 250
+    },
+    "line": {
+     "end": 16,
+     "start": 9
+    },
+    "page": {
+     "end": 3,
+     "start": 3
+    }
+   },
+   "source_file": "aurora_note.md",
+   "text": "The Identity Service uses PostgreSQL for user profiles. The Billing Worker uses Kafka. Aurora Portal is deployed in Kubernetes. The Data Retention Policy governs Audit Logs."
+  }
+ ],
+ "source": "kg-extract -F chunks -e simple -b mock --mock-response <medium_product_simple.mock.txt> -o json < chunks_demo.jsonl",
+ "triple_sample": {
+  "citations": [
+   {
+    "doc": "aurora_note.md",
+    "lines": [
+     1,
+     7
+    ]
+   },
+   {
+    "doc": "aurora_note.md",
+    "range": {
+     "bbox": {
+      "x0": 72.0,
+      "x1": 540.0,
+      "y0": 120.5,
+      "y1": 380.0
+     },
+     "char_span": {
+      "end": 500,
+      "start": 250
+     },
+     "line": {
+      "end": 16,
+      "start": 9
+     },
+     "page": {
+      "end": 3,
+      "start": 3
+     }
+    }
+   }
+  ],
+  "subject": {
+   "confidence": null,
+   "description": "A customer operations product developed by Helio Systems.",
+   "id": "entity_81804bb2",
+   "label": "Aurora Portal",
+   "metadata": {
+    "citations": [
+     {
+      "doc": "aurora_note.md",
+      "lines": [
+       1,
+       7
+      ]
+     }
+    ]
+   },
+   "normalized_type": "PRODUCT",
+   "type": "PRODUCT"
+  }
+ }
+}

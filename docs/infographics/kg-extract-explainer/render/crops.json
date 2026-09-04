@@ -1,0 +1,47 @@
+[
+ {
+  "panel": "svg/kpi.svg",
+  "css_y": 400,
+  "crop": "crops/crop-00-kpi.svg.png"
+ },
+ {
+  "panel": "svg/pipeline.svg",
+  "css_y": 658,
+  "crop": "crops/crop-01-pipeline.svg.png"
+ },
+ {
+  "panel": "svg/aurora_graph.svg",
+  "css_y": 1552,
+  "crop": "crops/crop-02-aurora_graph.svg.png"
+ },
+ {
+  "panel": "svg/mechanisms.svg",
+  "css_y": 2307,
+  "crop": "crops/crop-03-mechanisms.svg.png"
+ },
+ {
+  "panel": "svg/schema_modes.svg",
+  "css_y": 2892,
+  "crop": "crops/crop-04-schema_modes.svg.png"
+ },
+ {
+  "panel": "svg/citations.svg",
+  "css_y": 3461,
+  "crop": "crops/crop-05-citations.svg.png"
+ },
+ {
+  "panel": "svg/vocab.svg",
+  "css_y": 4071,
+  "crop": "crops/crop-06-vocab.svg.png"
+ },
+ {
+  "panel": "svg/presets.svg",
+  "css_y": 4560,
+  "crop": "crops/crop-07-presets.svg.png"
+ },
+ {
+  "panel": "svg/surfaces.svg",
+  "css_y": 5079,
+  "crop": "crops/crop-08-surfaces.svg.png"
+ }
+]

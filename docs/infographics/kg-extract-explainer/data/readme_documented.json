@@ -1,0 +1,92 @@
+{
+ "source": "README.md at engine commit e52b1f9d17abc16f3898d8e8b2779b6bef5b74db (repo-documented measurements and contracts; quoted for the audit record — identifiers quoted here stay off the page)",
+ "notes_on_discrepancy": {
+  "presets": {
+   "readme_claim": "gallery of 37 presets across six domains",
+   "readme_anchor": "README.md:155-156",
+   "actual_run": {
+    "value": "40 presets across 8 domains",
+    "evidence": "data/presets.json (from `kg-extract --list-presets` at the frozen binary)"
+   },
+   "resolution": "page shows the run value (40 / 8 domains); README value kept here as the documented discrepancy"
+  }
+ },
+ "claims": [
+  {
+   "id": "D01",
+   "statement_zh": "出处由代码计算，绝不来自模型：纯文本的分段器跟踪字符偏移，逐文档行号索引推导行区间",
+   "quote": "Provenance is computed **by the code, never by the model**: for plain text, the chunker tracks char offsets and a per-document line index derives the line span.",
+   "anchor": "README.md:237-239"
+  },
+  {
+   "id": "D02",
+   "statement_zh": "同一记录在多处出现会累积多条引用：切片级复现在会话内并集，所有去重/合并路径都会并集两侧引用——跨文档合并后实体引用它出现过的每一份文档",
+   "quote": "A record seen in several places accumulates **multiple citations**: slice-level recurrences union within the agentic session, and every dedup/merge path ... unions the two sides' citations — so merging graphs from different documents yields entities citing every document they appeared in.",
+   "anchor": "README.md:250-254"
+  },
+  {
+   "id": "D03",
+   "statement_zh": "类型词表：实体类型 122 个变体、谓词类型 108 个变体（枚举字符串值为 SCREAMING_SNAKE_CASE，从 Python 枚举逐字移植）",
+   "quote": "`EntityType` (122 variants) and `PredicateType` (108 variants) are enums whose string values are SCREAMING_SNAKE_CASE ..., ported verbatim from the Python enums.",
+   "anchor": "README.md:258-261",
+   "cross_check": "data/vocab_census.json 独立清点 kg-vocab@2084415 词表数据：entity_variants=122, predicate_variants=108"
+  },
+  {
+   "id": "D04",
+   "statement_zh": "配置三层优先级：命令行显式旗标 > 配置文件（--config 路径 / 内联 JSON / 默认位置的 ~/.kg-extract/config.json）> 内置默认值",
+   "quote": "Every setting can come from three places, highest precedence first: 1. an explicit command-line flag, 2. a config file ..., 3. the built-in default.",
+   "anchor": "README.md:327-333"
+  },
+  {
+   "id": "D05",
+   "statement_zh": "社区检测用标签传播：边权按三元组重数计——每条三元组给两端点贡献一条权重 1.0 的无向边，平行边相加；社区键从 \"0\" 升序、成员排序，输出跨运行稳定",
+   "quote": "label-propagation community detection over the extracted graph ... Edges are weighted by **triple multiplicity**: every triple contributes one weight-1.0 undirected edge between its endpoints and parallel edges are summed ... Community keys ascend from \"0\"; member ids are sorted, so the output is stable across runs.",
+   "anchor": "README.md:399-423"
+  },
+  {
+   "id": "D06",
+   "statement_zh": "社区摘要提示词有界：成员 32 实体、关系 24 条、描述 120 字、回复 1024 token，超出记为「+N 更多」；调用按社区键稳定排序、并发有界，完成顺序不泄漏进输出——并发跑与顺序跑字节一致",
+   "quote": "Prompt size is bounded — `SUMMARY_MAX_MEMBERS` (32 entities), `SUMMARY_MAX_TRIPLES` (24 relationships), `SUMMARY_MAX_DESC_CHARS` (120 chars per description), `SUMMARY_MAX_TOKENS` (1024 reply tokens) ... a concurrent run is byte-identical to a sequential one.",
+   "anchor": "README.md:477-485",
+   "page_form": "界值以「名词(参数=值)」文字形态上页；常量标识符本身留在本记录"
+  },
+  {
+   "id": "D07",
+   "statement_zh": "agentic 引擎把整篇文档放进一个连续多轮 SDK 会话：全文写入隔离临时目录，智能体在只读工具沙箱（Read/Grep/Glob，无 Write/Edit/Bash）中运行，按切片喂入；因同一会话携带上下文，模型跨切片复用实体名（抽取时共指）",
+   "quote": "it drives the **whole document through one continuous multi-turn SDK session**: the full text is written to `document.md` in an isolated temp dir, the agent runs there in a **read-only tool sandbox** (Read/Grep/Glob; no Write/Edit/Bash), and slices are fed as turns. Because one conversation carries the context, the model **reuses entity names across slices**",
+   "anchor": "README.md:592-598"
+  },
+  {
+   "id": "D08",
+   "statement_zh": "62 KB 手册实测：simple 每段并发抽取得 516 实体（严重碎片化，一个术语裂成约 7 个节点）、孤儿率约 1%；agentic 单会话串行得 136 实体（合并为一个节点）、孤儿率约 0%；agentic 是合并/共指策略而非召回策略，其抽取时去重不可被事后 merge 复现",
+   "quote": "Trade-offs vs `simple` (measured on a 62 KB manual): | entities | 516 (heavily fragmented — `在线课堂` split into ~7 nodes) | 136 (consolidated — one node) | | orphan rate | ~1 % | ~0 %| ... So `agentic` is a **consolidation / coreference** strategy, not a recall one — its extraction-time deduplication is *not* reproducible by a post-hoc merge pass",
+   "anchor": "README.md:604-617"
+  },
+  {
+   "id": "D09",
+   "statement_zh": "kg-protocol 输出把已识别的 legacy/富引用数组提升为一等 Evidence 区间；已识别的 citations 键从协议 properties 中移除，出处不双写",
+   "quote": "entities and relations use open string vocabularies, relations reference entity ids, and fully recognized legacy or rich citation arrays are lifted into first-class `Evidence` ranges. A recognized `citations` key is removed from protocol `properties`, so provenance is not serialized twice",
+   "anchor": "README.md:374-380"
+  },
+  {
+   "id": "D10",
+   "statement_zh": "fixed/evolving 必须有非空种子 schema——向空 schema 收敛或从空 schema 生长都无意义，直接报错而非静默降级（schema 存在 × 允许加类型的网格中唯一退化格）",
+   "quote": "`Fixed` and `Evolving` **require a non-empty seed schema** — constraining to (or evolving from) an *empty* schema is meaningless, so it is rejected with an error rather than silently degrading. (It is the one degenerate cell of the *schema-present × may-add-types* grid, made unrepresentable.)",
+   "anchor": "README.md:87-90"
+  },
+  {
+   "id": "D11",
+   "statement_zh": "工具调用引擎暴露类型化工具：add_entity 记实体、add_relation 记关系、add_attribute 挂属性、propose_schema_type 提议新类型、list_entities 读已录实体（多轮）、finish 收尾；默认单轮收集（轮数=1），可设多轮有界智能体循环",
+   "quote": "| `add_entity(name, type, description, attributes)` | record an entity | | `add_relation(source, predicate, target, description, strength)` | record a relationship | ... Execution is **single-round collection** by default (`max_rounds = 1`)",
+   "anchor": "README.md:198-208",
+   "page_form": "工具名（add_entity 等）属 MCP/工具面，允许上页；调用参数用文字形态"
+  },
+  {
+   "id": "D12",
+   "statement_zh": "每个抽取引擎走公共接口（同一 extract 契约），机制与 schema 模式是正交维度",
+   "quote": "All three implement the `Extractor` trait ... This axis is **orthogonal to the extraction mechanism**",
+   "anchor": "README.md:16-17,63-67",
+   "page_form": "trait 名等标识符不上页；页面用「同一抽取契约」表述"
+  }
+ ]
+}

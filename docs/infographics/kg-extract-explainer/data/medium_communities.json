@@ -1,0 +1,34 @@
+{
+ "result": {
+  "communities": {
+   "0": [
+    "entity_30136395",
+    "entity_458e4cbc",
+    "entity_4dd09616",
+    "entity_81804bb2",
+    "entity_864d6972",
+    "entity_99e50a8a",
+    "entity_bf1ddb78",
+    "entity_e9544d7a"
+   ],
+   "1": [
+    "entity_9defcb2c",
+    "entity_d84aae34",
+    "entity_e5655bd1"
+   ],
+   "2": [
+    "entity_4d615947",
+    "entity_51be25b0",
+    "entity_96062e0e"
+   ],
+   "3": [
+    "entity_3eefabd6",
+    "entity_b24d4eec",
+    "entity_c26c231d"
+   ]
+  },
+  "num_communities": 4,
+  "quality": null
+ },
+ "source": "kg-extract -f medium_product_doc.md -e simple -b mock --mock-response <medium_product_simple.mock.txt> -o communities"
+}

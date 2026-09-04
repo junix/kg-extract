@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="168" viewBox="0 0 1120 168">
+<rect x="1.0" y="1" width="174.66666666666666" height="166" rx="12" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="88.33333333333333" y="62" font-size="44" fill="#1D4ED8" font-weight="bold" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">4</text>
+<text x="88.33333333333333" y="96" font-size="15" fill="#16233B" font-weight="600" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">种抽取机制</text>
+<text x="88.33333333333333" y="124" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">同一抽取契约</text>
+<rect x="189.66666666666666" y="1" width="174.66666666666666" height="166" rx="12" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="277.0" y="62" font-size="44" fill="#1D4ED8" font-weight="bold" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">3</text>
+<text x="277.0" y="96" font-size="15" fill="#16233B" font-weight="600" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">种模型后端</text>
+<text x="277.0" y="124" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">llms / agent / mock</text>
+<rect x="378.3333333333333" y="1" width="174.66666666666666" height="166" rx="12" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="465.66666666666663" y="62" font-size="44" fill="#1D4ED8" font-weight="bold" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">4</text>
+<text x="465.66666666666663" y="96" font-size="15" fill="#16233B" font-weight="600" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">个智能体 CLI</text>
+<text x="465.66666666666663" y="124" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">minimaxcc · glmcc · mimocc · pi-agent</text>
+<rect x="567.0" y="1" width="174.66666666666666" height="166" rx="12" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="654.3333333333334" y="62" font-size="44" fill="#1D4ED8" font-weight="bold" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">9</text>
+<text x="654.3333333333334" y="96" font-size="15" fill="#16233B" font-weight="600" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">种输出格式</text>
+<text x="654.3333333333334" y="124" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">图谱 · 协议 · 社区 · 图表</text>
+<rect x="755.6666666666666" y="1" width="174.66666666666666" height="166" rx="12" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="843.0" y="62" font-size="44" fill="#1D4ED8" font-weight="bold" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">40</text>
+<text x="843.0" y="96" font-size="15" fill="#16233B" font-weight="600" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">份领域模板</text>
+<text x="843.0" y="124" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">8 个域 · 实跑清点</text>
+<rect x="944.3333333333333" y="1" width="174.66666666666666" height="166" rx="12" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="1031.6666666666665" y="62" font-size="44" fill="#1D4ED8" font-weight="bold" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">6</text>
+<text x="1031.6666666666665" y="96" font-size="15" fill="#16233B" font-weight="600" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">项 provider 能力</text>
+<text x="1031.6666666666665" y="124" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="middle" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">describe / available / invoke</text>
+</svg>
