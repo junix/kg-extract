@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="520" viewBox="0 0 1120 520">
+<rect x="1" y="1" width="1118" height="518" rx="14" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="24" y="30" font-size="16" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">出处由代码盖章，不由模型口说</text>
+<rect x="24" y="50" width="330" height="118" rx="10" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="38" y="74" font-size="12.5" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">输入块 1 · aurora_note.md</text>
+<text x="38" y="98" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">range: char_span 0-250</text>
+<text x="38" y="118" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">line: 1-7</text>
+<text x="38" y="142" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">只有行坐标 → 走 legacy 引用形态</text>
+<rect x="24" y="182" width="330" height="138" rx="10" fill="#E0F2FE" stroke="#7DD3FC" stroke-width="1"/>
+<text x="38" y="206" font-size="12.5" fill="#075985" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">输入块 2 · aurora_note.md</text>
+<text x="38" y="230" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">range: char_span 250-500</text>
+<text x="38" y="250" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">line: 9-16 · page: 3</text>
+<text x="38" y="270" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">bbox: 72.0, 120.5 -&gt; 540.0, 380.0</text>
+<text x="38" y="296" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">带页/框坐标 → 完整坐标原样保留</text>
+<path d="M 354 109 L 388 109" fill="none" stroke="#3B82F6" stroke-width="2"/>
+<polygon points="387,104.66 387,113.34 394,109" fill="#2563EB"/>
+<path d="M 354 251 L 388 251" fill="none" stroke="#0284C7" stroke-width="2"/>
+<polygon points="387,246.66 387,255.34 394,251" fill="#2563EB"/>
+<rect x="398" y="50" width="430" height="270" rx="10" fill="#FFFFFF" stroke="#3B82F6" stroke-width="1.4"/>
+<text x="412" y="74" font-size="12.5" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">记录「Kubernetes」的引用数组（实跑输出）</text>
+<text x="412" y="98" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">[</text>
+<text x="424" y="118" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">{ "doc": "aurora_note.md",</text>
+<text x="424" y="135" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">"lines": [1, 7] }</text>
+<text x="424" y="152" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">,</text>
+<text x="424" y="169" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">{ "doc": "aurora_note.md",</text>
+<text x="424" y="186" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">"range": { char_span 250-500,</text>
+<text x="424" y="203" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">line 9-16, page 3,</text>
+<text x="424" y="220" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">bbox (72.0, 120.5)-(540.0, 380.0) } }</text>
+<text x="412" y="237" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">]</text>
+<text x="412" y="263.0" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">同一记录出现在两个块里 → 两条出处并集保留：legacy 行形态 + 富坐标形态同</text>
+<text x="412" y="280.05" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">存，一条不丢。</text>
+<rect x="844" y="50" width="252" height="270" rx="10" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1.2"/>
+<text x="858" y="74" font-size="12.5" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">kg-protocol：提升为一等证据</text>
+<text x="858" y="98" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">（-o kg-protocol 实跑实体节选）</text>
+<text x="858" y="126" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">label: "Data Retention Policy"</text>
+<text x="858" y="143" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">entity_type: LAW</text>
+<text x="858" y="160" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">evidence: [ {</text>
+<text x="858" y="177" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">  source_file: "medium_product_doc.md",</text>
+<text x="858" y="194" font-size="11" fill="#0B2E6B" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">  range: { line: 1-26 } } ]</text>
+<text x="858" y="221.0" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">协议输出里证据是一等字段：已识别的引用数</text>
+<text x="858" y="238.05" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">组被提升，出处绝不双重序列化。</text>
+<rect x="24" y="340" width="1072" height="84" rx="10" fill="#FAFBFE" stroke="#D7DEEA" stroke-width="1"/>
+<text x="38" y="368" font-size="12.5" fill="#16233B" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">为什么不可伪造：</text>
+<text x="146.0" y="368.0" font-size="12" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">纯文本的行号由分段器跟踪的字符偏移 + 逐文档行号索引推导；预切分输入的页/框坐标由代码原样透传。模型输出的只有实体与关系本身——坐标它说了不算。</text>
+<text x="38" y="406" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">引用数值均来自冻结实跑；声明：C08 · C09 · D01 · D02 · D09。</text>
+</svg>

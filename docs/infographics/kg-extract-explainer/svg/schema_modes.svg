@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="480" viewBox="0 0 1120 480">
+<rect x="1" y="1" width="1118" height="478" rx="14" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="24" y="30" font-size="16" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">schema 模式：同一份数据的三种纪律</text>
+<rect x="24" y="46" width="350" height="240" rx="12" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1.2"/>
+<rect x="24" y="46" width="350" height="34" rx="12" fill="#2563EB"/>
+<rect x="24" y="68" width="350" height="12" rx="0" fill="#2563EB"/>
+<text x="38" y="69" font-size="14" fill="#FFFFFF" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">open · 自由</text>
+<text x="38" y="104.0" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">种子 schema：不需要</text>
+<text x="38" y="128.0" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">模型可自由命名实体/关系类型</text>
+<text x="38" y="158" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">实跑（窄种子：3 类实体 · 4 个谓词）</text>
+<text x="38" y="190" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">实体</text>
+<rect x="82" y="178" width="220" height="16" rx="4" fill="#F1F5FB"/>
+<rect x="82" y="178" width="220.0" height="16" rx="4" fill="#2563EB"/>
+<text x="310" y="190" font-size="13" fill="#2563EB" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">17</text>
+<text x="38" y="224" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">三元组</text>
+<rect x="82" y="212" width="220" height="16" rx="4" fill="#F1F5FB"/>
+<rect x="82" y="212" width="220.0" height="16" rx="4" fill="#2563EB"/>
+<text x="310" y="224" font-size="13" fill="#2563EB" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">15</text>
+<text x="38" y="254" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">分段数 0 · 实体类型 8 种 · 谓词 9 种</text>
+<rect x="390" y="46" width="350" height="240" rx="12" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1.2"/>
+<rect x="390" y="46" width="350" height="34" rx="12" fill="#B45309"/>
+<rect x="390" y="68" width="350" height="12" rx="0" fill="#B45309"/>
+<text x="404" y="69" font-size="14" fill="#FFFFFF" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">fixed · 闭世界</text>
+<text x="404" y="104.0" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">种子 schema：必须非空</text>
+<text x="404" y="128.0" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">只能用 schema 里的类型；越界即弃</text>
+<text x="404" y="158" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">实跑（窄种子：3 类实体 · 4 个谓词）</text>
+<text x="404" y="190" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">实体</text>
+<rect x="448" y="178" width="220" height="16" rx="4" fill="#F1F5FB"/>
+<rect x="448" y="178" width="90.58823529411765" height="16" rx="4" fill="#B45309"/>
+<text x="676" y="190" font-size="13" fill="#B45309" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">7</text>
+<text x="404" y="224" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">三元组</text>
+<rect x="448" y="212" width="220" height="16" rx="4" fill="#F1F5FB"/>
+<rect x="448" y="212" width="14.666666666666666" height="16" rx="4" fill="#B45309"/>
+<text x="676" y="224" font-size="13" fill="#B45309" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">1</text>
+<text x="404" y="254" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">分段数 0 · 实体类型 3 种 · 谓词 1 种</text>
+<rect x="756" y="46" width="350" height="240" rx="12" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1.2"/>
+<rect x="756" y="46" width="350" height="34" rx="12" fill="#0284C7"/>
+<rect x="756" y="68" width="350" height="12" rx="0" fill="#0284C7"/>
+<text x="770" y="69" font-size="14" fill="#FFFFFF" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">evolving · 生长</text>
+<text x="770" y="104.0" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">种子 schema：必须非空</text>
+<text x="770" y="128.0" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">以 schema 为引导，可提议新类型</text>
+<text x="770" y="158" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">实跑（窄种子：3 类实体 · 4 个谓词）</text>
+<text x="770" y="190" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">实体</text>
+<rect x="814" y="178" width="220" height="16" rx="4" fill="#F1F5FB"/>
+<rect x="814" y="178" width="220.0" height="16" rx="4" fill="#0284C7"/>
+<text x="1042" y="190" font-size="13" fill="#0284C7" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">17</text>
+<text x="770" y="224" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">三元组</text>
+<rect x="814" y="212" width="220" height="16" rx="4" fill="#F1F5FB"/>
+<rect x="814" y="212" width="220.0" height="16" rx="4" fill="#0284C7"/>
+<text x="1042" y="224" font-size="13" fill="#0284C7" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">15</text>
+<text x="770" y="254" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">分段数 0 · 实体类型 8 种 · 谓词 9 种</text>
+<rect x="24" y="306" width="700" height="130" rx="10" fill="#FFFBEB" stroke="#F59E0B" stroke-width="1"/>
+<text x="38" y="330" font-size="12.5" fill="#B45309" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">fixed 模式丢弃实录（运行 stderr 原文）</text>
+<text x="38" y="352" font-size="11" fill="#92400E" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">schema-json: dropped 24 out-of-schema record(s): CITY, DEPLOYED_IN, DIGITAL_ASSET, EVENT, EVIDENCED_B</text>
+<text x="38" y="369" font-size="11" fill="#92400E" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">Y, GOVERNS, LAW, PRODUCES, REQUIRES, SOFTWARE</text>
+<text x="38" y="390" font-size="10" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">同文在 stderr 中重复出现 2 次；证据文件原样冻结。</text>
+<text x="38" y="422" font-size="10.5" fill="#B45309" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">24 条越界记录被丢弃；存活 7 实体 · 1 三元组，类型只剩种子三类。</text>
+<rect x="740" y="306" width="356" height="130" rx="10" fill="#EFF6FF" stroke="#93C5FD" stroke-width="1"/>
+<text x="754" y="330" font-size="12.5" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">退化格：直接拒绝</text>
+<text x="754" y="354.0" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">schema 存在 × 允许加类型 的网格里，唯一退化格是「向空 sche</text>
+<text x="754" y="371.05" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">ma 收敛 / 从空 schema 生长」。fixed / evolving 遇到空种子</text>
+<text x="754" y="388.1" font-size="11" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">直接报错，绝不静默降级。</text>
+<text x="24" y="468" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">窄种子（3 类实体 · 4 谓词）为演示用自造 schema；同语料全量数据见 C03。声明：C06 · C07 · D10。</text>
+</svg>

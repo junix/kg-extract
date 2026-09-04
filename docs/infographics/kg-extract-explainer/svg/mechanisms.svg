@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="470" viewBox="0 0 1120 470">
+<rect x="1" y="1" width="1118" height="468" rx="14" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="24" y="30" font-size="16" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">三条机制 · 同一份图契约</text>
+<rect x="24" y="48" width="250" height="150" rx="10" fill="#EFF6FF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="38" y="74" font-size="13.5" fill="#2563EB" font-weight="700" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">simple</text>
+<text x="38" y="96" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">分段并发，每段独立会话</text>
+<text x="38" y="122" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">分隔符记录 → 解析</text>
+<text x="38" y="150" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">分段数 3</text>
+<path d="M 149.0 198 L 149.0 226" fill="none" stroke="#2563EB" stroke-width="2"/>
+<rect x="292" y="48" width="250" height="150" rx="10" fill="#EFF6FF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="306" y="74" font-size="13.5" fill="#3B82F6" font-weight="700" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">schema-json</text>
+<text x="306" y="96" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">整篇一次调用</text>
+<text x="306" y="122" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">模式化 JSON → 解析</text>
+<text x="306" y="150" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">分段数 0</text>
+<path d="M 417.0 198 L 417.0 226" fill="none" stroke="#3B82F6" stroke-width="2"/>
+<rect x="560" y="48" width="250" height="150" rx="10" fill="#EFF6FF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="574" y="74" font-size="13.5" fill="#0284C7" font-weight="700" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">toolcall</text>
+<text x="574" y="96" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">类型化工具调用轮次</text>
+<text x="574" y="122" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">工具参数即结构</text>
+<text x="574" y="150" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">分段数 0</text>
+<path d="M 685.0 198 L 685.0 226" fill="none" stroke="#0284C7" stroke-width="2"/>
+<rect x="828" y="48" width="268" height="150" rx="10" fill="#DBEAFE" stroke="#3B82F6" stroke-width="1.4"/>
+<text x="844" y="76" font-size="15" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">同一契约</text>
+<text x="844" y="112" font-size="24" fill="#1D4ED8" font-weight="bold" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">17 实体 · 15 三元组</text>
+<text x="844" y="140.0" font-size="11.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">三条机制对同一语料、同一份事实数据收敛到</text>
+<text x="844" y="157.825" font-size="11.5" fill="#1E3A8A" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">同一张图——机制可替换，图谱契约不变。</text>
+<path d="M 274 78 L 820 78" fill="none" stroke="#60A5FA" stroke-width="1.8" stroke-dasharray="5 4"/>
+<polygon points="817,73.66 817,82.34 824,78" fill="#60A5FA"/>
+<path d="M 542 123 L 820 123" fill="none" stroke="#60A5FA" stroke-width="1.8" stroke-dasharray="5 4"/>
+<polygon points="817,118.66 817,127.34 824,123" fill="#60A5FA"/>
+<path d="M 810 168 L 820 168" fill="none" stroke="#60A5FA" stroke-width="1.8" stroke-dasharray="5 4"/>
+<polygon points="817,163.66 817,172.34 824,168" fill="#60A5FA"/>
+<line x1="24" y1="226" x2="1096" y2="226" stroke="#D7DEEA" stroke-width="1"/>
+<text x="24" y="254" font-size="16" fill="#1E3A8A" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">第四条机制：agentic —— 换一种取舍</text>
+<text x="24" y="278.0" font-size="12.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">整篇文档进一个连续多轮会话：全文写入隔离目录，智能体在只读工具沙箱（Read/Grep/Glob，无写入/执行）里按切片工作。同一会话携带上下文，模型跨切片复用实体名——共指发生在抽取时</text>
+<text x="24" y="297.375" font-size="12.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">，而不是事后合并。</text>
+<rect x="24" y="298" width="150" height="28" rx="0" fill="#F1F5FB"/>
+<rect x="174" y="298" width="430" height="28" rx="0" fill="#F1F5FB"/>
+<rect x="604" y="298" width="430" height="28" rx="0" fill="#F1F5FB"/>
+<text x="34" y="317" font-size="11.5" fill="#5A6B84" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">62 KB 手册实测</text>
+<text x="184" y="317" font-size="11.5" fill="#1D4ED8" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">simple（每段并发）</text>
+<text x="614" y="317" font-size="11.5" fill="#0284C7" font-weight="700" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">agentic（单会话串行）</text>
+<rect x="24" y="324" width="1010" height="24" rx="0" fill="#FAFBFE"/>
+<text x="34" y="340" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">实体数</text>
+<text x="184" y="340" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">516（碎片化：一个术语裂成约 7 个节点）</text>
+<text x="614" y="340" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">136（合并：一个节点）</text>
+<text x="34" y="366" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">孤儿率</text>
+<text x="184" y="366" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">约 1%</text>
+<text x="614" y="366" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">约 0%</text>
+<rect x="24" y="376" width="1010" height="24" rx="0" fill="#FAFBFE"/>
+<text x="34" y="392" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">速度</text>
+<text x="184" y="392" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">快（分段并发）</text>
+<text x="614" y="392" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">慢（严格串行）</text>
+<text x="34" y="418" font-size="11.5" fill="#5A6B84" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">定位</text>
+<text x="184" y="418" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">粒度与召回</text>
+<text x="614" y="418" font-size="11.5" fill="#16233B" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">合并与共指</text>
+<rect x="970" y="404" width="84.6" height="18" rx="9" fill="#FFFFFF" stroke="#D7DEEA" stroke-width="1"/>
+<text x="976" y="416.5" font-size="11" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'SF Mono','Menlo','Consolas',monospace">C05 D07 D08</text>
+<text x="24" y="458" font-size="10.5" fill="#8A97AB" font-weight="normal" text-anchor="start" font-family="'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif">62 KB 手册数字为引擎文档记录值（证据记录 D08）；三机制收敛数字来自本页冻结实跑（C05）。</text>
+</svg>
