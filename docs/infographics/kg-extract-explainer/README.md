@@ -13,6 +13,11 @@ export KG_EXTRACT_ROOT="$HOME/projects/kg/kg-extract"
 
 # 1) 冻结证据：真引擎实跑 + 仓库清点 → data/*.json
 #    （只读引擎：要求 HEAD == e52b1f9d…且零跟踪文件改动；产物只进本树 data/）
+#    引擎若已演进（HEAD 前移），不要在新 HEAD 上重冻——用冻结 worktree 复现：
+#      git -C <引擎仓库> worktree add /tmp/kgx-frozen e52b1f9d17abc16f3898d8e8b2779b6bef5b74db
+#      KG_EXTRACT_ROOT=/tmp/kgx-frozen bash freeze_evidence.sh
+#    （冻结快照语料自身排除本树路径 docs/infographics/kg-extract-explainer/，
+#      交付提交后再清点也不会把本树文件吞进禁用名单——防 post-commit 自咬）
 cd <本目录>
 bash freeze_evidence.sh
 
@@ -23,8 +28,9 @@ cd /tmp/ig-kgx-build
 export PYTHONDONTWRITEBYTECODE=1
 python3 panels.py        # 9 张数据驱动 SVG（冻结数字断言，缺数即崩）
 
-# 3) 渲染页面 + 六禁项门禁（引擎文件名 / file:line / 原文摘录 / 标识符 /
-#    内部路径 / 生成器与重建命令——命中任何一类即 exit 4，不产出页面）
+# 3) 渲染页面 + 六禁项门禁 + 字号下限断言（面板 SVG 逐字节内联进 index.html，
+#    页面零 <img> 外链；引擎文件名 / file:line / 原文摘录 / 标识符 / 内部路径 /
+#    生成器与重建命令——命中任何一类即 exit 4；CJK <12px 或任意文本 <11px 即 exit 5）
 python3 build.py
 
 # 4) 1:1 长页截图（Chrome headless + 原生 CDP，无缓存、抛弃式 profile）
@@ -55,4 +61,5 @@ for f in svg/*.svg; do "$HOME/sync/macos-arm64-bin/svg-linter" check --plain "$f
 | `build.py` | 页面渲染 + 六禁项门禁 |
 | `render.mjs` / `stitch.py` | CDP 切片截图 / 拼接与三重断言 |
 | `data/` | 冻结证据（13 个 JSON，含 provenance） |
-| `svg/` `index.html` `render/` | 交付物：面板、页面、位图三件 + 目检裁片 |
+| `data/audit/post-commit.md` | 交付提交后的门禁重跑记录（指纹豁免，可追加不破坏 §4） |
+| `svg/` `index.html` `render/` | 交付物：面板、页面（面板已行内内嵌）、位图三件 + 目检裁片 |

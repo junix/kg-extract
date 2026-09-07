@@ -168,10 +168,37 @@ def code_detail_gate(html):
     return hits, len(banned), len(checked)
 
 
+def font_floor_gate():
+    """Page hard rule, asserted at build time: every SVG text run >= 11 px,
+    CJK-bearing runs >= 12 px. Scans the emitted svg files (the same bodies
+    get inlined into index.html). Returns (n_runs, min_px, cjk_min_px)."""
+    pat = re.compile(r'<text\b[^>]*font-size="([0-9.]+)"[^>]*>(.*?)</text>', re.S)
+    cjk = re.compile(r'[⺀-鿿豈-﫿＀-￯　-〿]')
+    bad, n, mn, cmn = [], 0, None, None
+    for f in SVGS:
+        with open(os.path.join(SVG, f)) as fh:
+            txt = fh.read()
+        for m in pat.finditer(txt):
+            fs = float(m.group(1))
+            has_cjk = bool(cjk.search(m.group(2)))
+            n += 1
+            mn = fs if mn is None else min(mn, fs)
+            if has_cjk:
+                cmn = fs if cmn is None else min(cmn, fs)
+            if fs < 11 or (has_cjk and fs < 12):
+                bad.append(f"{f}: {fs}px CJK={has_cjk} {m.group(2)[:24]!r}")
+    if bad:
+        print(f"FONT-FLOOR GATE FAILED: {len(bad)} run(s) under floor", file=sys.stderr)
+        for b in bad:
+            print("  " + b, file=sys.stderr)
+        sys.exit(5)
+    return n, mn, cmn
+
+
 # ------------------------------------------------------------------ page ----
 CSS = """\:root{--ink:#16233B;--sub:#5A6B84;--faint:#8A97AB;--line:#D7DEEA;--blue:#2563EB;--blue-dark:#1E3A8A;--paper:#FFFFFF;--bg:#F3F6FB}
 *{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--ink);font-family:'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;width:1200px;margin:0 auto}
+body{background:var(--bg);color:var(--ink);font-family:'PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;max-width:1200px;margin:0 auto}
 .wrap{padding:0 40px}
 header{background:linear-gradient(135deg,#1E3A8A 0%,#2563EB 62%,#3B82F6 100%);color:#fff;padding:64px 40px 56px}
 .kicker{font-size:14px;letter-spacing:.35em;opacity:.85;margin-bottom:18px}
@@ -182,7 +209,8 @@ section{padding:44px 0 8px}
 h2{font-size:25px;font-weight:800;color:var(--blue-dark);margin-bottom:8px;display:flex;align-items:baseline;gap:14px}
 h2 .no{font-size:14px;color:var(--faint);font-weight:600;letter-spacing:.08em}
 .lede{font-size:14.5px;line-height:1.75;color:var(--sub);max-width:1010px;margin-bottom:20px}
-.panel{width:100%;height:auto;display:block}
+figure.panel{margin:0}
+.panel svg{display:block;width:100%;height:auto}
 .colophon{background:#0F1D33;color:#C9D6EC;border-radius:14px;padding:34px 38px;margin:52px 0 60px;font-size:13px;line-height:1.8}
 .colophon h3{color:#fff;font-size:16px;margin-bottom:12px}
 .colophon .claims{display:grid;grid-template-columns:1fr 1fr;gap:4px 34px;margin-top:10px}
@@ -192,15 +220,18 @@ footer{padding:0 0 56px;color:var(--faint);font-size:12px;line-height:1.8}"""
 
 
 def section(no, title, lede, svg, extra_html=""):
+    # Panels are INLINED: the page keeps zero external references, so the
+    # "self-contained" claim is literal. data-svg preserves the panel id for
+    # the crop manifest; the svg bytes are the generated file verbatim.
     path = os.path.join(SVG, svg)
     with open(path) as f:
-        first = f.readline().strip()
-    m = re.match(r'<svg[^>]*width="(\d+)"[^>]*height="(\d+)"', first)
+        body = f.read().strip()
+    m = re.match(r'<svg[^>]*width="(\d+)"[^>]*height="(\d+)"', body)
     w, h = m.group(1), m.group(2)
     return f"""<section class="wrap" id="s{no}">
 <h2><span class="no">{no}</span>{title}</h2>
 <p class="lede">{lede}</p>
-<img class="panel" src="svg/{svg}" width="{w}" height="{h}" alt="{title}">
+<figure class="panel" data-svg="svg/{svg}" data-w="{w}" data-h="{h}">{body}</figure>
 {extra_html}</section>"""
 
 
@@ -297,6 +328,8 @@ def main():
         for h in hits:
             print("  " + h, file=sys.stderr)
         sys.exit(4)
+    n_runs, mn, cmn = font_floor_gate()
+    print(f"font-floor gate clean: {n_runs} text runs, min {mn} px, cjk min {cmn} px")
     out = os.path.join(HERE, "index.html")
     with open(out, "w") as f:
         f.write(html)

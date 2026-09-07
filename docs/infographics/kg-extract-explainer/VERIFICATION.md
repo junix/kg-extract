@@ -51,11 +51,14 @@
 
 ## 3. 门禁结果
 
-- **六禁项**（`build.py` 扫 index.html + 9 svg）：范围=105 个禁用文件基名
-  （引擎 git ls-files 实时快照，扣除用户 fixtures）、698 个过滤后引擎标识符；
-  结果 **0 命中**，`gate clean: 0 hits across 6 banned classes`。
+- **六禁项**（`build.py` 扫 index.html + 9 svg；index.html 自 2026-09-06 起
+  行内内嵌 9 张面板，扫描面即页面真实字节）：范围=105 个禁用文件基名
+  （引擎 ls-files 冻结快照，扣除用户 fixtures 与本树自身路径）、698 个过滤后
+  引擎标识符；结果 **0 命中**，`gate clean: 0 hits across 6 banned classes`。
   白名单判例：CLI 动词/旗标值、工具名、公开配置键、JSON 契约键、
   `--list-presets` 实跑输出的模板键（数据白名单判例）。
+- **字号下限**（2026-09-06 新增，`build.py` 构建期断言）：384 个 SVG 文本 run，
+  任意文本 ≥11 px、CJK ≥12 px，`font-floor gate clean: min 11.0 px, cjk min 12.0 px`。
 - **svg-linter**（真二进制 `check --plain`，一次一文件）：
   **9 × (rc=0 ∧ finding 行=0)**。
   首轮 29 findings（描边越界 / 扇出共线 / 文本重叠 / 等宽宽度低估）→ 根因修复
@@ -69,23 +72,23 @@
   + 双 rAF 后截图；全页缩略 + 逐面板裁片（`render/crops/`，9 张）人工核查：
   无重叠、无裁切、断行正常、伪代码块可读。
 
-## 4. 指纹表（sha256）
+## 4. 指纹表（sha256，2026-09-06 refine 后重算）
 
 | 文件 | sha256 |
 |---|---|
-| index.html | 567f18ca70b4c712c642dc25b6a135338bcdba3e6126d57ba341d9682e2a2f68 |
-| svg/kpi.svg | 9ed5ea66c58a1fa5b5f7be100d669cb21dcdb0be7b84cb37ed2e90abbfd8f1f0 |
-| svg/pipeline.svg | 67a99d364f141a9cd341934b1000aecf89af89e67b41988679fe000db79400d3 |
-| svg/aurora_graph.svg | ce0fe9568ae1153a1623755adc4fd0cc2fb80a87d5acc76e1351de2c1787f6a4 |
-| svg/mechanisms.svg | aad29a88c523fadc04b629da467d80b4cc3f6f8612000a5d3a74082b3d47d88e |
-| svg/schema_modes.svg | fef9930df73e5e7f14bc7ee84f29bcdab2b89410c6f5c72d203863af1d2d283e |
-| svg/citations.svg | f1bcbb04d5313aa0551520b8f6a56b587ac2cba300309d106173318f34492ee3 |
-| svg/vocab.svg | 15e8924c018f4d4280db792896f74a4eaa836cd389493e845000c93257e0867a |
-| svg/presets.svg | 5dba89cbf41a729e79195b169be00e1f6a47cce5ffd5e3c8c639c6e26d8b4da2 |
-| svg/surfaces.svg | 4f9e10481ef1aa65880f589fe6704fe6a784a4c695afddedf70d0c42409f7013 |
-| render/full@2x.png | 864ceba4466e74ca844ce45384592a1f5f33646c933b8abdb15070460fa57b5b |
-| render/full-gray.png | 85b227dd9abbeaea35cd8dd24244cbd7cfa079457e308da2393c324e6afb60d3 |
-| render/thumb.png | 02f5bb6871668e63421609ea703b086f6b7cbc438e38c537eb4e0d547a4cd7e1 |
+| index.html | 03d3d9cefd992e289ddef31fac5167580463341498626fd06c56ba1cc446cff6 |
+| svg/kpi.svg | 09dde85453e6c627d3e07287deeee3153f22e517044ad4f8497228da4a5246b8 |
+| svg/pipeline.svg | aee66fcd1c4cc25ee1a853c0947499c96e7412c75a42dd9277ac931f57ed1b5b |
+| svg/aurora_graph.svg | 77a5b18d493b2bd5621c3433fc1f9c59fb2fdbc49fccf96b5dbc84657a8bef9c |
+| svg/mechanisms.svg | 1959885d11a46a6b84e4b479b36bff9c875e7970c783d668f3d925fa37265d67 |
+| svg/schema_modes.svg | e809fbc5f2bf611c8d42eff2ecca85406b1940f9ab260878dc67da18c8a4a8d9 |
+| svg/citations.svg | 1de015e3fc584b1fca1be1addd035fca1d0c18a12f4c18c8086b84f4140a6203 |
+| svg/vocab.svg | 6251bd6c38611df9a4fafb1fa48f4f3aba0d761df461dc92aeb02d5a66c78a5a |
+| svg/presets.svg | c200c1f5dd0cd5fd5c8835402492c4a9e5e110cdc497250d42e934d1cfc9caed |
+| svg/surfaces.svg | 108a43fd2a43434591a2b0afc9b7904c8a913a44d72b68bf1eecf17119398d4c |
+| render/full@2x.png | 67a439f4dcb1705dfafa19a19d0e47ca1e9c7cf636aebee940b5d8d5d20e8b5a |
+| render/full-gray.png | bb81c54792ff5b356b9e5348d486d3f56a748f119eeca8db4cb261dc2b377c29 |
+| render/thumb.png | 69c29af30220d1c55ba5cec59dd69a46024ce0b5ed2e85875971a32852d39772 |
 
 ## 5. 偏差与判例记录（如实）
 
@@ -102,4 +105,50 @@
    全文原样冻结在证据文件，不解读重复原因。
 5. **中间切片不入库**：`render/slice-*.png` 为拼接中间物，验收后从交付树剔除
    （双跑 cmp 已覆盖其内容；manifest.json 保留切片清单）。
-6. **交付不 commit**：本树留在工作区，由主会话统一提交。
+6. **交付不 commit**：本树留在工作区，由主会话统一提交。【后证不实，已修正】
+   主会话已以 `b7a81cc` 提交交付版；当时未留下提交后的门禁重跑记录，2026-09-06
+   补记于 [`data/audit/post-commit.md`](data/audit/post-commit.md)（指纹豁免，
+   可追加不破坏 §4）。2026-09-06 refine 改动同样不自行提交，仍由主会话统一提交。
+
+## 6. 2026-09-06 refine
+
+按 survey（img-external-panel / doc-drift / cjk-small 三项 high 优先）做最小
+修复；冻结证据 `data/*.json`（13 个 JSON）逐字节未动。
+
+**改动清单**
+
+1. **img-external-panel（high，已修）**：`build.py` `section()` 由
+   `<img src="svg/…">` 改为把 SVG 文件逐字节内联进 `index.html`
+   （`<figure class="panel" data-svg=…>`），页面 9 处外链清零，「零外链 ·
+   自包含」声明自此为真。`render.mjs` 面板探测同步从 `document.images`
+   改为 `figure.panel`（含每 figure 恰一 svg 断言），crop 清单沿用
+   `data-svg` 命名；另补 `mkdirSync(outDir)`（原版在新平拷贝里首次运行会
+   ENOENT）。
+2. **doc-drift（high，已修）**：README 首段「零外链、自包含」原与 img 外链
+   构造不符【后证不实，已修正】——修法是内联 SVG 让声明成立（见上），
+   并在 README 管线注释中写明面板为行内内嵌。
+3. **cjk-small（high，已修）+ svg-text-small（med，一并修）**：`panels.py`
+   新增 `floor_fs`（CJK ≥12 px、任意文本 ≥11 px），在 `text_w` /
+   `Canvas.text` / `Canvas.para` 三个入口统一生效，chip 宽度与折行随之下
+   沉，几何无需重排（各面板既有溢出断言全部原样通过）；`build.py` 新增
+   `font_floor_gate()` 构建期断言（violation 即 exit 5），本次实测 384 run、
+   min 11.0 px、CJK min 12.0 px（修复前 161 个 CJK run <12 px、最小 9.0、
+   ≥11 px 占比 76.8%）。
+4. **gate-selfbite（加固）**：`freeze_evidence.sh` 冻结语料（`git ls-files`）
+   显式排除本树自身路径（交付提交后重冻不再自吞）；HEAD 前移时的失败信息
+   区分「引擎演进」并给出冻结 worktree 复现命令（证据漂移仍硬失败）；
+   README 补同款复现配方；新增 `data/audit/post-commit.md`（指纹豁免）记录
+   `b7a81cc` 之后的门禁重跑。
+5. **width-rule**：`body` 由 `width:1200px` 改为 `max-width:1200px;
+   margin:0 auto`（1200 视口下渲染不变，宽屏居中不再依赖固定宽块）。
+
+**重建与门禁复跑**（/tmp 平面拷贝全链，双跑 cmp 13 件产物字节一致）：
+六禁项 PASS（0 命中）· 字号下限 PASS · svg-linter 9×PASS · 渲染三重断言
+PASS（CSS 1200×6223、7 切片、位图 2400×12446，与 refine 前同尺寸）·
+9 张目检裁片人工复核无重叠/无裁切。§4 指纹表已按新产物重算。
+
+**本轮明确不做（登记待后续）**：hero 主面板改版（survey no-hero，med）、
+sidenote 侧注轨（no-sidenote-track，med）、全树指纹 + 机器校验
+（fingerprint-gaps，med，仅按规则刷新了被重建波及的 §4 指纹）、六禁项
+毒丸自证（no-poison，low）、contract.md（other，low）。
+

@@ -45,6 +45,19 @@ MONO = "font-family=\"'SF Mono','Menlo','Consolas',monospace\""
 
 
 # ------------------------------------------------------------- text util ----
+# Font floors (page hard rule): CJK runs never below 12 px; every text run
+# never below 11 px. Applied centrally at the width/draw entry points so
+# geometry (chip widths, wrap, leader offsets) always follows the clamped
+# size and never drifts from what is actually rendered.
+CJK_RUN = re.compile(r'[⺀-鿿豈-﫿＀-￯　-〿]')
+
+
+def floor_fs(s, fs):
+    if CJK_RUN.search(s):
+        return max(fs, 12.0)
+    return max(fs, 11.0)
+
+
 def char_w(ch, fs, mono=False):
     """Advance-width estimate for PingFang SC / SF Mono.
 
@@ -65,6 +78,7 @@ def char_w(ch, fs, mono=False):
 
 
 def text_w(s, fs, mono=False):
+    fs = floor_fs(s, fs)
     return sum(char_w(c, fs, mono) for c in s)
 
 
@@ -102,6 +116,7 @@ class Canvas:
 
     def text(self, x, y, s, fs=14, fill=INK, weight="normal", anchor="start",
              mono=False, opacity=None):
+        fs = floor_fs(s, fs)
         fam = MONO if mono else FONT
         extra = ""
         if opacity:
@@ -112,6 +127,7 @@ class Canvas:
 
     def para(self, x, y, s, fs=14, max_w=400, fill=INK, weight="normal", lh=None,
              anchor="start", mono=False):
+        fs = floor_fs(s, fs)
         lh = lh or fs * 1.55
         lines = wrap(s, fs, max_w, mono=mono)
         for i, ln in enumerate(lines):
