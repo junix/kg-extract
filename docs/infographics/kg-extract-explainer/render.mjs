@@ -13,7 +13,7 @@
 // Usage: node render.mjs <abs-path-to-index.html> <abs-out-dir> [dpr]
 // Env:   CHROME_BIN overrides the Chrome executable (default: macOS path).
 import { execFile } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -29,6 +29,7 @@ const CHROME = process.env.CHROME_BIN ||
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PAGE_W = 1200;      // CSS px, matches the page's own width
 const SLICE_H = 900;      // CSS px per slice, fixed height, from y=0 in order
+mkdirSync(outDir, { recursive: true });
 
 function fail(msg) {
   console.error("RENDER FATAL: " + msg);
@@ -122,13 +123,16 @@ const metrics = await S("Runtime.evaluate", {
     const de = document.documentElement, b = document.body;
     const h = Math.max(de.scrollHeight, b.scrollHeight,
                        de.getBoundingClientRect().height, b.getBoundingClientRect().height);
-    const imgs = [...document.images];
+    // Panels are inlined SVGs inside figure.panel (zero <img> on the page);
+    // every figure must carry exactly one svg or the page is malformed.
+    const figs = [...document.querySelectorAll('figure.panel')];
     return { cssHeight: Math.ceil(h), cssWidth: Math.ceil(Math.max(
       de.scrollWidth, b.scrollWidth)),
-      imgs: imgs.length, complete: imgs.every(i => i.complete && i.naturalWidth > 0),
-      panels: imgs.map(i => { const r = i.getBoundingClientRect();
-        const pr = i.closest('section') || i.parentElement;
-        return { src: i.getAttribute('src'),
+      figs: figs.length,
+      complete: figs.every(f => f.querySelectorAll(':scope > svg').length === 1),
+      panels: figs.map(f => { const r = f.getBoundingClientRect();
+        const pr = f.closest('section') || f.parentElement;
+        return { src: f.getAttribute('data-svg'),
                  x: Math.round(r.left + window.scrollX), y: Math.round(r.top + window.scrollY),
                  w: Math.round(r.width), h: Math.round(r.height),
                  sectionY: Math.round(pr.getBoundingClientRect().top + window.scrollY) }; }) };
@@ -136,7 +140,8 @@ const metrics = await S("Runtime.evaluate", {
 });
 const m = metrics.result.value;
 if (!m || !m.cssHeight || m.cssHeight < 1000) fail("page height implausible: " + JSON.stringify(m));
-if (!m.complete) fail("one or more <img> panels did not decode");
+if (!m.figs || m.figs !== 9) fail(`expected 9 figure.panel blocks, got ${m.figs}`);
+if (!m.complete) fail("one or more figure.panel blocks lacks its inline svg");
 if (m.cssWidth !== PAGE_W) fail(`page css width ${m.cssWidth} != ${PAGE_W}`);
 
 // -- slices: full width, fixed height, y=0 in order --------------------------

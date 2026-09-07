@@ -18,7 +18,12 @@ export PYTHONDONTWRITEBYTECODE=1
 PINNED_HEAD="e52b1f9d17abc16f3898d8e8b2779b6bef5b74db"
 ENGINE_HEAD="$(git -C "$KG_EXTRACT_ROOT" rev-parse HEAD)"
 if [ "$ENGINE_HEAD" != "$PINNED_HEAD" ]; then
+  # "engine evolved" (this guard): the evidence itself did not drift —
+  # reproduce it from a frozen worktree instead of re-freezing at a new HEAD.
   echo "FATAL: engine HEAD $ENGINE_HEAD != pinned $PINNED_HEAD" >&2
+  echo "  engine evolved; reproduce the frozen evidence from a worktree:" >&2
+  echo "    git worktree add /tmp/kgx-frozen $PINNED_HEAD" >&2
+  echo "    KG_EXTRACT_ROOT=/tmp/kgx-frozen bash freeze_evidence.sh" >&2
   exit 3
 fi
 # Tracked files must be untouched; untracked delivery tree is expected.
@@ -107,7 +112,12 @@ echo '{"text": "OpenAI developed GPT-4.", "backend": "mock", "mock_response": "(
   | "$BIN" invoke extract.entities_relations --request - > "$WORK/invoke.json" 2>"$WORK/invoke.stderr"
 
 # Read-only repo censuses (no working-tree writes).
-git -C "$KG_EXTRACT_ROOT" ls-files > "$WORK/engine_files.txt"
+# The delivery tree's own path is excluded from the banned-file corpus: a live
+# ls-files at any HEAD after the delivery commit would swallow this tree's own
+# files into the corpus (post-commit self-bite). The frozen snapshot from the
+# pinned HEAD predates the tree; this exclusion keeps future re-freezes safe.
+TREE_REL="docs/infographics/kg-extract-explainer"
+git -C "$KG_EXTRACT_ROOT" ls-files | grep -v "^${TREE_REL}/" > "$WORK/engine_files.txt"
 python3 - "$KG_EXTRACT_ROOT" "$WORK" <<'PY'
 import json, os, re, sys
 root, work = sys.argv[1], sys.argv[2]
