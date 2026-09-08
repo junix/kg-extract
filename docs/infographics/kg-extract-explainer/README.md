@@ -39,6 +39,11 @@ python3 stitch.py render   # 全宽固定高切片自 y=0 顺序拼接；位图�
 
 # 5) 结构门禁：svg-linter 真二进制逐文件（rc==0 且 finding 行==0 才算过）
 for f in svg/*.svg; do "$HOME/sync/macos-arm64-bin/svg-linter" check --plain "$f"; done
+
+# 6) 审计电池（wave-2，树内只读/只写清单自身，可在本目录直跑）：
+python3 audit_pills.py        # 毒丸自证：12 枚全 BIT、3 组对照干净（记录在 data/audit/）
+python3 fingerprint.py        # 生成/刷新全树指纹清单 fingerprints.json（46 文件）
+python3 fingerprint.py --check   # 机器校验：逐文件对拍 + VERIFICATION §4 哈希对拍
 ```
 
 完成后把 `/tmp/ig-kgx-build/{index.html,svg/,render/}` 拷回本目录（`render/`
@@ -60,6 +65,8 @@ for f in svg/*.svg; do "$HOME/sync/macos-arm64-bin/svg-linter" check --plain "$f
 | `panels.py` | 9 张 SVG 面板生成器（数字全部来自 data/） |
 | `build.py` | 页面渲染 + 六禁项门禁 |
 | `render.mjs` / `stitch.py` | CDP 切片截图 / 拼接与三重断言 |
+| `audit_pills.py` | 毒丸电池：六禁项/字号/svg-linter 门禁阳性对照自证（只读树，副本全在 /tmp） |
+| `fingerprint.py` / `fingerprints.json` | 全树 sha256 清单 + 机器校验（`--check`，含 §4 哈希对拍；豁免恰两项：清单自身、`data/audit/`） |
 | `data/` | 冻结证据（13 个 JSON，含 provenance） |
 | `data/audit/post-commit.md` | 交付提交后的门禁重跑记录（指纹豁免，可追加不破坏 §4） |
 | `svg/` `index.html` `render/` | 交付物：面板、页面（面板已行内内嵌）、位图三件 + 目检裁片 |

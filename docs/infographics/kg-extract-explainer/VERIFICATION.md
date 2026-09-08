@@ -152,3 +152,78 @@ sidenote 侧注轨（no-sidenote-track，med）、全树指纹 + 机器校验
 （fingerprint-gaps，med，仅按规则刷新了被重建波及的 §4 指纹）、六禁项
 毒丸自证（no-poison，low）、contract.md（other，low）。
 
+## 7. 2026-09-07 refine（审计硬化，wave 2；实际运行 2026-09-08）
+
+本轮 AUDIT-HARDENING wave 2 指派两类：**no-poison** 与 **fingerprint-gaps**
+（no-claims-binding / no-reverse-sweep / no-vacuum 未指派，见本节末）。
+冻结证据 `data/*.json` 逐字节未动；交付产物（index.html / 9 svg / 3 位图）
+零变化（/tmp 平面拷贝全链重建 cmp 10/10 字节一致复核）。
+
+### 7.1 no-poison（毒丸自证）——已修
+
+新工具 `audit_pills.py`（树根）：对每个既有门禁注入阳性对照到 **抛弃式
+/tmp 副本**（整树拷贝 build.py+data+svg+index.html），门禁必须咬人；
+冻结层与交付物零触碰，副本用后即毁。实测 **15/15**（12 枚毒丸全 BIT、
+3 组对照全干净），rc=0。逐项：
+
+- **六禁项门禁 6/6**：每类一枚（文件基名/file:line/原文摘录/标识符/
+  内部路径/生成器名）注入 index.html 副本，各类只命中本类；另加
+  「第 N 行」变体、rust 签名子检（伴生 4 类命中已如实记录）、8 枚合注
+  一页（6 类全点名）、**svg 侧**注入（`[1-filename] pipeline.svg`，
+  证明逐文件扫描）。干净语料对照 = **0 hit**（范围复核 105 基名 /
+  698 标识符，与 §3 一致）。
+- **字号下限门禁**：kpi.svg 副本注入 9.5 px CJK run，整跑
+  `python3 build.py` → **rc=5**，stderr 点名 `FONT-FLOOR GATE FAILED`。
+- **svg-linter 门禁**：面板本无 defs id（生成器产出无 id SVG），故按
+  删除自测同构做法——副本先注入 defs id+引用（对照：rc=0 ∧ 0 finding，
+  干净通过有意义），再删除被引用 id → **rc=1**，1 条 `error/high/
+  svg/dangling-reference`。真二进制缺失即硬失败。
+- **claims 门禁：N/A**——本树为 present-on-page 变体（colophon +
+  §2 注册表），无机器门禁；待 no-claims-binding 轮次指派后随建随补毒丸。
+
+运行记录（命令 + 逐枚计数）：[`data/audit/2026-09-08-poison-pills.md`](data/audit/2026-09-08-poison-pills.md)
+（指纹豁免目录）。
+
+### 7.2 fingerprint-gaps（全树指纹 + 机器校验）——已修
+
+新工具 `fingerprint.py` + 清单 `fingerprints.json`（树根）：
+
+- **覆盖**：全树 **46 文件**（svg 9 · data 13 · render 14 · 根 10——
+  含工具、docs、index.html），sha256+字节数；对照 §4 旧表仅 13 件交付物
+  ——覆盖增量 13→46，工具/数据/文档不再豁免于指纹。
+- **豁免恰两项（具名）**：`fingerprints.json` 自身（自指无 fixpoint）、
+  `data/audit/`（2026-09-06 wave-1 既定：运行记录可追加不使指纹失效）。
+- **稳定字段**：清单只含排序相对路径 + sha256 + 字节数，无时间戳、无
+  live HEAD——重复生成字节一致（幂等实测通过），提交后重跑不改字节。
+- **`--check` 机器校验**：清单逐文件对拍（missing/modified/unmanifested
+  三向）+ **§4 表结构化对拍**——§4 每行必须为 `| 路径 | sha256 |` 且与
+  清单逐条相等（本轮实测 13/13 一致，产物零变化故无哈希迁移）；§4 行
+  被改成非 64-hex 形态或换成错误值均硬失败（两种篡改探针均 rc=1，修掉
+  了首版「行脱出正则即静默跳过」的 21b 类自关断缺陷）。`--check --root
+  <目录>` 支持 detached 校验（/tmp 拷贝实测 rc=0）。
+- **篡改探针 4/4 咬人**：冻结数据字节改动 / 未入册文件 / §4 行形态损坏 /
+  §4 哈希换错值——全部 rc=1 并点名。
+
+运行记录：`data/audit/2026-09-08-fingerprints.md`（指纹豁免目录）。
+
+### 7.3 门禁复跑（本轮改动后）
+
+| 门禁 | 结果 |
+|---|---|
+| build.py 六禁项 + 字号下限（/tmp 平面拷贝整链） | PASS：0 命中 · 384 run min 11.0/CJK 12.0 · 产物 cmp 10/10 一致 |
+| svg-linter 9 面板（真二进制逐文件） | PASS：9 × (rc=0 ∧ 0 finding) |
+| audit_pills.py 毒丸电池 | PASS：15/15（12 毒丸 BIT + 3 对照干净） |
+| fingerprint.py --check（本树 + /tmp detached） | PASS：46/46 文件 · §4 13/13 对拍 · 幂等 |
+| render.mjs/stitch.py 位图链 | NOT-RUN（页面零变化，位图不涉及；§3 记录仍有效） |
+| freeze_evidence.sh | NOT-RUN（一次性冻结，证据未变不重冻） |
+
+### 7.4 本轮未指派、明确不做（登记待后续）
+
+- **no-claims-binding**：colophon C01–C11+D01–D12 与 §2 注册表的双向
+  机器绑定未建（指派给后续轮次）。
+- **no-reverse-sweep**：页面数字反向清扫门禁未建。
+- **no-vacuum**：真空重建仍为「双跑 cmp」弱形态（同冻结输入两次全链
+  字节一致），未做删除-再生长快照对账。
+- 提交沿用 §5 偏差 6 惯例：本轮改动不自行 commit，由主会话统一提交；
+  提交后按 `data/audit/post-commit.md` 槽位补记。
+
