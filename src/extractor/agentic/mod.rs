@@ -665,7 +665,7 @@ impl AgenticExtractor {
                 let sf = f.apply(parsed.entities.clone(), parsed.triples.clone(), &tokens);
 
                 // Degenerate case: the slice produced records but every one fell
-                // outside the schema — re-do it once with a sterner reminder.
+                // outside the schema — redo it once with the schema restated.
                 if sf.all_dropped() && redo_left > 0 {
                     redo_left -= 1;
                     if !self.quiet {

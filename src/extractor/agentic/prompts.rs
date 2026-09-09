@@ -29,9 +29,9 @@ Relationship types: {relationship_types}"#;
 /// front. Out-of-schema records are still validated and dropped on our side —
 /// this just makes conformance the model's job, and the per-turn feedback
 /// re-anchors it whenever it drifts.
-pub const SCHEMA_STRICT: &str = r#"STRICT SCHEMA — you MUST use ONLY the types below. Any entity or relationship whose type is not in these lists is DISCARDED and wasted.
-Entity types (use EXACTLY one of these as entity_type): {entity_types}
-Relationship types (use EXACTLY one of these as relationship_type): {relationship_types}"#;
+pub const SCHEMA_STRICT: &str = r#"Closed schema: the validator keeps only records whose type is in these lists, so pick the closest listed type for every entity and relationship.
+Entity types: {entity_types}
+Relationship types: {relationship_types}"#;
 
 /// Open schema block (Evolving): the seed types are preferred, but the model
 /// may coin a new type when none fits — those proposals are recorded (nothing
@@ -44,9 +44,9 @@ Relationship types (seed): {relationship_types}"#;
 /// records, so the model self-corrects mid-conversation.
 pub const SCHEMA_FEEDBACK: &str = r#"NOTE: from your previous answer I discarded {dropped} record(s) because their types are NOT in the schema{dropped_types}. Stay strictly within — entity types: {entity_types}; relationship types: {relationship_types}. Do not emit any other type."#;
 
-/// Sent to RE-DO a slice when *every* record it produced was out-of-schema
-/// (the degenerate case): a single bounded retry with a sterner reminder.
-pub const SCHEMA_REDO_PROMPT: &str = r#"EVERY record in your last answer used a type outside the schema, so all of it was discarded. Redo THIS slice using ONLY — entity types: {entity_types}; relationship types: {relationship_types}. Map each thing you found onto the closest allowed type; if something truly fits no allowed type, omit it. Output the records, or just NO if this slice has nothing that fits the schema."#;
+/// Sent to redo a slice when *every* record it produced was out-of-schema
+/// (the degenerate case): a single bounded retry that restates the schema.
+pub const SCHEMA_REDO_PROMPT: &str = r#"Every record in your last answer used a type outside the schema, so none were kept. Redo this slice with the listed types — entity types: {entity_types}; relationship types: {relationship_types}. Map each thing you found onto the closest listed type; if something truly fits none, omit it. Output the records, or just NO if this slice has nothing that fits the schema."#;
 
 pub const SLICE_PROMPT: &str = r#"Slice {i}/{n}:
 <slice>

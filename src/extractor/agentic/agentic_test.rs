@@ -274,7 +274,7 @@ fn redo_prompt_carries_full_type_vocabulary() {
     assert!(p.contains("PRODUCT, ORG"), "{p:?}");
     assert!(p.contains("USES, FUNDS"), "{p:?}");
     // The redo template's sentinel phrase survives.
-    assert!(p.contains("Redo THIS slice"), "{p:?}");
+    assert!(p.contains("Redo this slice"), "{p:?}");
 }
 
 #[test]
