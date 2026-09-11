@@ -15,3 +15,6 @@
 /docs/infographics/kg-extract-explainer/render/crops/crop-06-vocab.svg.png
 /docs/infographics/kg-extract-explainer/render/crops/crop-07-presets.svg.png
 /docs/infographics/kg-extract-explainer/render/crops/crop-08-surfaces.svg.png
+
+# Generated caches, render slices, and numbered lint images (keep final PNG/PDF).
+/docs/infographics/kg-extract-explainer/render/crops/**/*.png
