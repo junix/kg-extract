@@ -4,3 +4,14 @@
 /e2e/
 # Real runtime config (example lives in config.example.json)
 /config.json
+
+# Generated caches, render slices, and numbered lint images (keep final PNG/PDF).
+/docs/infographics/kg-extract-explainer/render/crops/crop-00-kpi.svg.png
+/docs/infographics/kg-extract-explainer/render/crops/crop-01-pipeline.svg.png
+/docs/infographics/kg-extract-explainer/render/crops/crop-02-aurora_graph.svg.png
+/docs/infographics/kg-extract-explainer/render/crops/crop-03-mechanisms.svg.png
+/docs/infographics/kg-extract-explainer/render/crops/crop-04-schema_modes.svg.png
+/docs/infographics/kg-extract-explainer/render/crops/crop-05-citations.svg.png
+/docs/infographics/kg-extract-explainer/render/crops/crop-06-vocab.svg.png
+/docs/infographics/kg-extract-explainer/render/crops/crop-07-presets.svg.png
+/docs/infographics/kg-extract-explainer/render/crops/crop-08-surfaces.svg.png
