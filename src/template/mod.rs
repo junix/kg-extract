@@ -33,5 +33,5 @@ pub use model::{
 pub use prompt::render_prompt;
 
 #[cfg(test)]
-#[path = "tests.rs"]
+#[path = "template_tests.rs"]
 mod tests;

@@ -1213,5 +1213,5 @@ async fn main() -> anyhow::Result<()> {
 }
 
 #[cfg(test)]
-#[path = "kg-extract_test.rs"]
+#[path = "kg-extract/kg-extract_tests.rs"]
 mod tests;

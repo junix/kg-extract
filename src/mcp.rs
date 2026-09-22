@@ -878,5 +878,5 @@ fn contains_proposed_schema_value(kg: &KnowledgeGraph, kind: &str, value: &str) 
 }
 
 #[cfg(test)]
-#[path = "mcp_test.rs"]
+#[path = "mcp_tests.rs"]
 mod tests;

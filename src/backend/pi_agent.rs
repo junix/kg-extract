@@ -221,5 +221,5 @@ fn extract_assistant_text(stdout: &str) -> anyhow::Result<String> {
 }
 
 #[cfg(test)]
-#[path = "pi_agent_test.rs"]
+#[path = "pi_agent_tests.rs"]
 mod tests;

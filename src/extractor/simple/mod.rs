@@ -449,5 +449,5 @@ impl SimpleExtractor {
 }
 
 #[cfg(test)]
-#[path = "simple_test.rs"]
+#[path = "simple_tests.rs"]
 mod tests;

@@ -840,5 +840,5 @@ impl AgenticExtractor {
 }
 
 #[cfg(test)]
-#[path = "agentic_test.rs"]
+#[path = "agentic_tests.rs"]
 mod tests;
