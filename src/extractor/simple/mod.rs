@@ -375,8 +375,10 @@ impl SimpleExtractor {
             .map(|seg| async move {
                 let (prs, mut kg) = self.extract_chunk(&seg.content).await;
                 if let Some(range) = seg.evidence_range().cloned() {
-                    let cite =
-                        crate::citation::Citation::from_range(self.config.source_doc.clone(), range);
+                    let cite = crate::citation::Citation::from_range(
+                        self.config.source_doc.clone(),
+                        range,
+                    );
                     crate::citation::stamp_graph(&mut kg, &cite);
                 }
                 // Pre-chunked chunks may carry a title/metadata payload

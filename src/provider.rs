@@ -40,9 +40,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use crate::backend::{
-    LlmBackend, MockBackend, PiAgentBackend, SdkAgentBackend, ToolInvocation,
-};
+use crate::backend::{LlmBackend, MockBackend, PiAgentBackend, SdkAgentBackend, ToolInvocation};
 use crate::extractor::{
     AgenticExtractor, Extractor, SchemaJsonExtractor, SchemaMode, SimpleExtractor,
     ToolCallExtractor,
@@ -284,7 +282,13 @@ fn invoke_cli_spec(capability_id: &str, artifacts: bool) -> Value {
         1,
     )];
     if artifacts {
-        flags.push(cli_flag("artifacts_dir", "--artifacts-dir", "string", true, 2));
+        flags.push(cli_flag(
+            "artifacts_dir",
+            "--artifacts-dir",
+            "string",
+            true,
+            2,
+        ));
     }
     json!({
         "subcommand": ["invoke", capability_id],
@@ -897,8 +901,9 @@ fn load_document(
             ))
         }
     };
-    let doc: core_types_rs::KgDocument = serde_json::from_value(raw)
-        .map_err(|e| InvokeError::invalid(format!("document is not a kg.protocol.v1 document: {e}")))?;
+    let doc: core_types_rs::KgDocument = serde_json::from_value(raw).map_err(|e| {
+        InvokeError::invalid(format!("document is not a kg.protocol.v1 document: {e}"))
+    })?;
     let mut diagnostics = Vec::new();
     if doc.schema_version != core_types_rs::KG_PROTOCOL_VERSION {
         diagnostics.push(diagnostic(
@@ -988,19 +993,43 @@ async fn invoke_extract(
         "simple",
         &["simple", "schema-json", "toolcall", "agentic"],
     )?;
-    let backend_name = parse_choice("backend", req.backend.as_deref(), "llms", &["llms", "agent", "mock"])?;
+    let backend_name = parse_choice(
+        "backend",
+        req.backend.as_deref(),
+        "llms",
+        &["llms", "agent", "mock"],
+    )?;
     let agent = req.agent.clone().unwrap_or_else(|| "minimaxcc".to_string());
-    let chunker = match parse_choice("chunker", req.chunker.as_deref(), "recursive", &["char", "recursive", "token"])?.as_str() {
+    let chunker = match parse_choice(
+        "chunker",
+        req.chunker.as_deref(),
+        "recursive",
+        &["char", "recursive", "token"],
+    )?
+    .as_str()
+    {
         "char" => ChunkStrategy::Char,
         "token" => ChunkStrategy::Token,
         _ => ChunkStrategy::Recursive,
     };
-    let schema_mode = match parse_choice("schema_mode", req.schema_mode.as_deref(), "open", &["open", "fixed", "evolving"])?.as_str() {
+    let schema_mode = match parse_choice(
+        "schema_mode",
+        req.schema_mode.as_deref(),
+        "open",
+        &["open", "fixed", "evolving"],
+    )?
+    .as_str()
+    {
         "fixed" => SchemaMode::Fixed,
         "evolving" => SchemaMode::Evolving,
         _ => SchemaMode::Open,
     };
-    let input_format = parse_choice("input_format", req.input_format.as_deref(), "text", &["text", "chunks"])?;
+    let input_format = parse_choice(
+        "input_format",
+        req.input_format.as_deref(),
+        "text",
+        &["text", "chunks"],
+    )?;
     let merge_strategy = parse_merge_strategy(req.merge_strategy.as_deref())?;
     let coref = req.coref.unwrap_or(false);
     let canonical_direction = req.canonical_direction.unwrap_or(false);
@@ -1168,7 +1197,12 @@ async fn invoke_extract(
         .as_object_mut()
         .expect("stats merge above")
         .insert("document".into(), json!(artifact["path"]));
-    Ok(ok_envelope(CAP_EXTRACT, result, vec![artifact], diagnostics))
+    Ok(ok_envelope(
+        CAP_EXTRACT,
+        result,
+        vec![artifact],
+        diagnostics,
+    ))
 }
 
 fn invoke_detect_communities(request: &Value) -> Result<InvokeOutcome, InvokeError> {
@@ -1177,7 +1211,12 @@ fn invoke_detect_communities(request: &Value) -> Result<InvokeOutcome, InvokeErr
     #[cfg(feature = "community")]
     {
         let result = crate::community::communities_json(&kg);
-        Ok(ok_envelope(CAP_DETECT_COMMUNITIES, result, vec![], diagnostics))
+        Ok(ok_envelope(
+            CAP_DETECT_COMMUNITIES,
+            result,
+            vec![],
+            diagnostics,
+        ))
     }
     #[cfg(not(feature = "community"))]
     {
@@ -1194,7 +1233,12 @@ fn invoke_detect_hierarchy(request: &Value) -> Result<InvokeOutcome, InvokeError
     #[cfg(feature = "community-leiden")]
     {
         let result = crate::community::hierarchy_json(&kg);
-        Ok(ok_envelope(CAP_DETECT_HIERARCHY, result, vec![], diagnostics))
+        Ok(ok_envelope(
+            CAP_DETECT_HIERARCHY,
+            result,
+            vec![],
+            diagnostics,
+        ))
     }
     #[cfg(not(feature = "community-leiden"))]
     {
@@ -1297,7 +1341,12 @@ fn invoke_resolve_coref(
         ),
     ));
     let (result, artifact) = kg_document_artifact(&merged, artifacts_dir)?;
-    Ok(ok_envelope(CAP_RESOLVE_COREF, result, vec![artifact], diagnostics))
+    Ok(ok_envelope(
+        CAP_RESOLVE_COREF,
+        result,
+        vec![artifact],
+        diagnostics,
+    ))
 }
 
 fn invoke_resolve_direction(
@@ -1340,4 +1389,3 @@ fn invoke_resolve_direction(
 #[cfg(test)]
 #[path = "provider_tests.rs"]
 mod tests;
-

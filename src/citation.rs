@@ -179,7 +179,10 @@ pub fn stamp_graph(kg: &mut KnowledgeGraph, citation: &Citation) {
 /// producer metadata (kg-multimodal's `mm_*` keys, the chunk title) survives
 /// into protocol properties instead of being dropped at the input boundary.
 /// A no-op for segments that carry neither (plain-text chunking).
-pub fn attach_chunk_metadata(metadata: &mut HashMap<String, Value>, segment: &crate::chunking::Segment) {
+pub fn attach_chunk_metadata(
+    metadata: &mut HashMap<String, Value>,
+    segment: &crate::chunking::Segment,
+) {
     if let Some(title) = &segment.title {
         metadata.insert(CHUNK_TITLE_KEY.to_string(), json!(title));
     }
@@ -228,4 +231,3 @@ pub fn stamp_whole_document(kg: &mut KnowledgeGraph, source_doc: &Option<String>
 #[cfg(test)]
 #[path = "citation_tests.rs"]
 mod tests;
-

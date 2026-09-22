@@ -513,12 +513,7 @@ fn make_backend(
 ) -> anyhow::Result<Arc<dyn LlmBackend>> {
     // Construction lives in the provider module so `invoke` resolves backends
     // exactly the way the CLI does (single source of truth).
-    kg_extract::provider::make_backend(
-        backend_name(backend),
-        agent,
-        mock_response,
-        mock_tool_calls,
-    )
+    kg_extract::provider::make_backend(backend_name(backend), agent, mock_response, mock_tool_calls)
 }
 
 /// Resolve a rich template from `--preset-file` (a user YAML, takes precedence)
@@ -931,7 +926,10 @@ async fn run_provider_command(command: &ProviderCommand) -> anyhow::Result<()> {
                 println!("{} {}", doc["provider"]["id"], doc["provider"]["version"]);
                 println!("  {}", doc["provider"]["description"]);
                 println!();
-                println!("Protocol: {} (versions {:?})", doc["protocol"], doc["protocol_versions"]);
+                println!(
+                    "Protocol: {} (versions {:?})",
+                    doc["protocol"], doc["protocol_versions"]
+                );
                 println!("Capabilities:");
                 for cap in doc["capabilities"].as_array().into_iter().flatten() {
                     let side_effects = cap["side_effects"]
@@ -982,9 +980,8 @@ async fn run_provider_command(command: &ProviderCommand) -> anyhow::Result<()> {
                 }
                 path => {
                     let path = expand_tilde(path);
-                    std::fs::read_to_string(&path).with_context(|| {
-                        format!("reading --request file {}", path.display())
-                    })?
+                    std::fs::read_to_string(&path)
+                        .with_context(|| format!("reading --request file {}", path.display()))?
                 }
             };
             let outcome = kg_extract::provider::invoke(
@@ -1197,7 +1194,10 @@ async fn main() -> anyhow::Result<()> {
     // communities JSON. Only meaningful for the two community output formats.
     let mut precomputed_communities: Option<serde_json::Value> = None;
     if cfg.community_summaries {
-        if matches!(cfg.output, OutFmt::Communities | OutFmt::CommunitiesHierarchy) {
+        if matches!(
+            cfg.output,
+            OutFmt::Communities | OutFmt::CommunitiesHierarchy
+        ) {
             precomputed_communities =
                 summarize_for_output(&cfg, &args, extraction_backend.as_ref(), &response).await?;
         } else {

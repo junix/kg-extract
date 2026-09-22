@@ -117,7 +117,10 @@ fn token_set_similarity(a: &str, b: &str) -> Option<f64> {
         return None;
     }
     let inter = toks_a.intersection(&toks_b).count();
-    let (small, large) = (toks_a.len().min(toks_b.len()), toks_a.len().max(toks_b.len()));
+    let (small, large) = (
+        toks_a.len().min(toks_b.len()),
+        toks_a.len().max(toks_b.len()),
+    );
     if inter == small && small >= TOKEN_SET_MIN_SUBSET_TOKENS {
         // One label's tokens are fully contained in the other's.
         return Some(1.0);
@@ -205,14 +208,13 @@ impl DedupIndex {
             if !compatible {
                 continue;
             }
-            let edit = if n.chars().count() >= FUZZY_MIN_LEN
-                && cand.chars().count() >= FUZZY_MIN_LEN
-            {
-                let sim = similarity(&n, cand);
-                (sim >= FUZZY_SIMILARITY_THRESHOLD).then_some(sim)
-            } else {
-                None
-            };
+            let edit =
+                if n.chars().count() >= FUZZY_MIN_LEN && cand.chars().count() >= FUZZY_MIN_LEN {
+                    let sim = similarity(&n, cand);
+                    (sim >= FUZZY_SIMILARITY_THRESHOLD).then_some(sim)
+                } else {
+                    None
+                };
             let tokset = token_set_similarity(&n, cand);
             let score = match (edit, tokset) {
                 (Some(a), Some(b)) => Some(a.max(b)),
@@ -440,7 +442,11 @@ pub fn normalize_triple_directions(triples: &mut [Triple]) {
         }
         std::mem::swap(&mut t.subject, &mut t.object);
         t.predicate.predicate_type = canonical;
-        let surface = t.predicate.raw_type.take().or_else(|| t.predicate.label.take());
+        let surface = t
+            .predicate
+            .raw_type
+            .take()
+            .or_else(|| t.predicate.label.take());
         t.predicate.label = None;
         if let Some(token) = surface {
             t.predicate
@@ -687,4 +693,3 @@ pub fn find_similar_entities(entity: &Entity, entities: &[Entity]) -> Vec<String
 #[cfg(test)]
 #[path = "merger_tests.rs"]
 mod tests;
-

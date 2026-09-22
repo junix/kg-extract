@@ -69,9 +69,8 @@ fn canonical_direction_merges_direction_variant_multiplicity() {
     use crate::merger::{merge_with_deduplication, normalize_direction};
 
     let ent = |id: &str| Entity::new(id, id, EntityType::Other);
-    let directed = |s: &str, p: PredicateType, o: &str| {
-        Triple::new(ent(s), Predicate::new(p), ent(o))
-    };
+    let directed =
+        |s: &str, p: PredicateType, o: &str| Triple::new(ent(s), Predicate::new(p), ent(o));
 
     let mut g1 = KnowledgeGraph::new();
     g1.add_triple(directed("a", PredicateType::Uses, "b"));
@@ -82,7 +81,11 @@ fn canonical_direction_merges_direction_variant_multiplicity() {
     normalize_direction(&mut g2);
 
     let kg = merge_with_deduplication(g1, g2);
-    assert_eq!(kg.triples.len(), 2, "direction variants collapse to one edge");
+    assert_eq!(
+        kg.triples.len(),
+        2,
+        "direction variants collapse to one edge"
+    );
 
     let (ids, graph) = to_community_graph(&kg);
     let pos = |id: &str| ids.iter().position(|i| i == id).unwrap();

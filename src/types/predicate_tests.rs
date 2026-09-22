@@ -102,8 +102,14 @@ fn kg_vocab_v4_parse_semantics() {
         PredicateType::resolve("validated"),
         (PredicateType::ValidatedOn, TypeMatch::Aliased)
     );
-    assert_eq!(PredicateType::from_loose("invented"), PredicateType::InventedBy);
-    assert_eq!(PredicateType::from_loose("published"), PredicateType::PublishedIn);
+    assert_eq!(
+        PredicateType::from_loose("invented"),
+        PredicateType::InventedBy
+    );
+    assert_eq!(
+        PredicateType::from_loose("published"),
+        PredicateType::PublishedIn
+    );
     // v3: an equal-length tie among the longest substring matches is NOT
     // broken by declaration order — it falls back to RELATED_TO unless
     // the disambiguation table pins it ("tested by tested on" matches

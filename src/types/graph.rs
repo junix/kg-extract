@@ -353,7 +353,6 @@ impl KnowledgeGraph {
 #[path = "graph_tests.rs"]
 mod tests;
 
-
 /// Minimal insertion-ordered map (we avoid an `indexmap` dependency; entity
 /// order matters for stable mermaid / merge output).
 pub mod indexmap_lite {

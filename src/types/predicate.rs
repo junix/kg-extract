@@ -101,4 +101,3 @@ fn title_case(screaming: &str) -> String {
 #[cfg(test)]
 #[path = "predicate_tests.rs"]
 mod tests;
-

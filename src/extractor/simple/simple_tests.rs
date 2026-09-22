@@ -151,11 +151,27 @@ fn parse_attributes_string_coerces_value_types_and_handles_every_shape() {
         "on: true, off: FALSE, n: 42, f: 1.5, name: GPT-4, quoted: \"hi\"",
     );
     assert_eq!(kv["on"], serde_json::json!(true), "true -> bool");
-    assert_eq!(kv["off"], serde_json::json!(false), "FALSE -> bool (case-insensitive)");
-    assert_eq!(kv["n"], serde_json::json!(42), "integer -> i64 (before f64)");
+    assert_eq!(
+        kv["off"],
+        serde_json::json!(false),
+        "FALSE -> bool (case-insensitive)"
+    );
+    assert_eq!(
+        kv["n"],
+        serde_json::json!(42),
+        "integer -> i64 (before f64)"
+    );
     assert_eq!(kv["f"], serde_json::json!(1.5), "float -> f64");
-    assert_eq!(kv["name"], serde_json::json!("GPT-4"), "bare word -> string");
-    assert_eq!(kv["quoted"], serde_json::json!("hi"), "surrounding quotes are stripped");
+    assert_eq!(
+        kv["name"],
+        serde_json::json!("GPT-4"),
+        "bare word -> string"
+    );
+    assert_eq!(
+        kv["quoted"],
+        serde_json::json!("hi"),
+        "surrounding quotes are stripped"
+    );
 
     // A pair without a colon separator is dropped, not stored as null/empty.
     let dropped = parse::parse_attributes_string("lonely, kept: yes");
@@ -462,7 +478,10 @@ async fn prechunked_title_and_metadata_reach_protocol_properties() {
         extracted.relations[0].properties[CHUNK_TITLE_KEY],
         serde_json::json!("q4_revenue")
     );
-    assert_eq!(extracted.relations[0].properties[CHUNK_METADATA_KEY], expected_meta);
+    assert_eq!(
+        extracted.relations[0].properties[CHUNK_METADATA_KEY],
+        expected_meta
+    );
 }
 
 /// End-to-end provenance: chunked extraction stamps every record with the

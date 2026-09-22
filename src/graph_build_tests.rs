@@ -59,7 +59,11 @@ fn entity_id_is_entity_prefix_plus_first_eight_md5_hex() {
 #[test]
 fn parse_entity_type_empty_or_unknown_falls_back_to_other() {
     assert_eq!(parse_entity_type(""), EntityType::Other);
-    assert_eq!(parse_entity_type("   "), EntityType::Other, "input is trimmed first");
+    assert_eq!(
+        parse_entity_type("   "),
+        EntityType::Other,
+        "input is trimmed first"
+    );
     assert_eq!(
         parse_entity_type("totally unknown"),
         EntityType::Other,
@@ -71,7 +75,10 @@ fn parse_entity_type_empty_or_unknown_falls_back_to_other() {
 fn parse_entity_type_exact_parse_then_loose_alias() {
     // Exact SCREAMING_SNAKE parse wins first.
     assert_eq!(parse_entity_type("PERSON"), EntityType::Person);
-    assert_eq!(parse_entity_type("  ORGANIZATION  "), EntityType::Organization);
+    assert_eq!(
+        parse_entity_type("  ORGANIZATION  "),
+        EntityType::Organization
+    );
     // When the exact parse fails, from_loose aliasing resolves it.
     assert_eq!(parse_entity_type("Person"), EntityType::Person);
 }
@@ -83,7 +90,11 @@ fn build_predicate_normalises_separators_and_keeps_raw_label() {
     assert_eq!(p.predicate_type, PredicateType::DevelopedBy);
     assert_eq!(p.label.as_deref(), Some("developed by"));
     assert_eq!(p.raw_type.as_deref(), Some("developed by"));
-    assert_eq!(p.output_type(), "developed by", "raw label wins over the normalised value");
+    assert_eq!(
+        p.output_type(),
+        "developed by",
+        "raw label wins over the normalised value"
+    );
 
     // Already-canonical upper form parses directly.
     assert_eq!(
@@ -115,17 +126,15 @@ fn graph_builder_dedups_entities_case_insensitively_with_stable_id() {
     );
     // A name differing only by case collides and returns the SAME id; the
     // shared md5 scheme means the id is the one computed from the first name.
-    let id2 = b.add_entity_with_raw_type(
-        "openai",
-        EntityType::Company,
-        None,
-        None,
-        HashMap::new(),
-    );
+    let id2 = b.add_entity_with_raw_type("openai", EntityType::Company, None, None, HashMap::new());
     assert_eq!(id1, id2);
     assert_eq!(id1, entity_id("OpenAI"));
     let g = b.into_graph();
-    assert_eq!(g.entities.len(), 1, "case-variant names collapse to one entity");
+    assert_eq!(
+        g.entities.len(),
+        1,
+        "case-variant names collapse to one entity"
+    );
     // KeepExisting (the default): first occurrence wins, the later one is discarded.
     let e = g.entities.values().next().unwrap();
     assert_eq!(e.entity_type, EntityType::Organization);
@@ -137,20 +146,10 @@ fn graph_builder_add_relation_drops_dangling_and_resolves_case_insensitively() {
     let mut b = GraphBuilder::new();
     b.add_entity_with_raw_type("A", EntityType::Other, None, None, HashMap::new());
     // Dangling target -> nothing added, returns false.
-    let added = b.add_relation(
-        "A",
-        Predicate::new(PredicateType::Uses),
-        "Ghost",
-        |_| {},
-    );
+    let added = b.add_relation("A", Predicate::new(PredicateType::Uses), "Ghost", |_| {});
     assert!(!added, "a relation to an unknown endpoint must be dropped");
     // Case-insensitive name resolution: "a" resolves to the entity added as "A".
-    let added2 = b.add_relation(
-        "a",
-        Predicate::new(PredicateType::Uses),
-        "A",
-        |_| {},
-    );
+    let added2 = b.add_relation("a", Predicate::new(PredicateType::Uses), "A", |_| {});
     assert!(added2);
     let g = b.into_graph();
     assert_eq!(
@@ -180,7 +179,11 @@ fn graph_builder_field_union_keeps_richer_description_and_specific_type() {
     let g = b.into_graph();
     assert_eq!(g.entities.len(), 1);
     let e = g.entities.values().next().unwrap();
-    assert_eq!(e.entity_type, EntityType::Organization, "specific type beats Other");
+    assert_eq!(
+        e.entity_type,
+        EntityType::Organization,
+        "specific type beats Other"
+    );
     assert_eq!(
         e.description.as_deref(),
         Some("a much longer, richer description"),

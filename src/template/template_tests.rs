@@ -28,7 +28,12 @@ fn every_bundled_preset_parses() {
     // Understand-Anything ports — code/codebase_graph,
     // code/business_domain_flow, knowledge/wiki_graph). The exact count catches
     // a silent drop on a parse failure as well as an unexpected duplicate.
-    assert_eq!(presets.len(), 40, "expected the full preset set, got {}", presets.len());
+    assert_eq!(
+        presets.len(),
+        40,
+        "expected the full preset set, got {}",
+        presets.len()
+    );
     for p in presets {
         assert!(p.key.contains('/'), "key not domain-qualified: {}", p.key);
         // Each declares at least a target persona.

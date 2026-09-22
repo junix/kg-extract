@@ -129,12 +129,8 @@ fn coref_off_keeps_surface_variants_separate() {
     let mut g2 = KnowledgeGraph::new();
     g2.add_entity(Entity::new("e2", "Anthropic, PBC", EntityType::Company));
 
-    let merged = merge_with_deduplication_strategy_coref(
-        g1,
-        g2,
-        MergeStrategy::FieldUnion,
-        CorefMode::Off,
-    );
+    let merged =
+        merge_with_deduplication_strategy_coref(g1, g2, MergeStrategy::FieldUnion, CorefMode::Off);
     assert_eq!(merged.entities.len(), 2, "Off mode must not fuse variants");
 }
 
@@ -221,7 +217,10 @@ fn coref_fuzzy_merges_near_typo_but_respects_type_and_length() {
 #[test]
 fn token_set_similarity_subset_and_jaccard() {
     // Multi-token containment fuses.
-    assert_eq!(token_set_similarity("new york", "new york times"), Some(1.0));
+    assert_eq!(
+        token_set_similarity("new york", "new york times"),
+        Some(1.0)
+    );
     // Non-subset token overlap reaches the Jaccard threshold (3 of 5).
     let s = token_set_similarity("alpha beta gamma delta", "alpha beta gamma epsilon").unwrap();
     assert!((s - 0.6).abs() < 1e-9);
@@ -236,7 +235,11 @@ fn coref_fuzzy_token_set_merges_subset_and_jaccard_surfaces() {
     // Subset relation: "New York" ⊂ "New York Times" (the edit-distance
     // channel cannot fuse these: similarity is only 0.62).
     let mut g1 = KnowledgeGraph::new();
-    g1.add_entity(Entity::new("e1", "New York Times", EntityType::Organization));
+    g1.add_entity(Entity::new(
+        "e1",
+        "New York Times",
+        EntityType::Organization,
+    ));
     let mut g2 = KnowledgeGraph::new();
     g2.add_entity(Entity::new("e2", "New York", EntityType::Organization));
     let merged = merge_with_deduplication_strategy_coref(
@@ -268,7 +271,11 @@ fn coref_fuzzy_token_set_respects_type_gate_and_short_names() {
     // Same subset relation, but incompatible types (City vs Organization)
     // must not fuse.
     let mut g1 = KnowledgeGraph::new();
-    g1.add_entity(Entity::new("e1", "New York Times", EntityType::Organization));
+    g1.add_entity(Entity::new(
+        "e1",
+        "New York Times",
+        EntityType::Organization,
+    ));
     let mut g2 = KnowledgeGraph::new();
     g2.add_entity(Entity::new("e2", "New York", EntityType::City));
     let merged = merge_with_deduplication_strategy_coref(
@@ -300,16 +307,15 @@ fn coref_fuzzy_token_set_is_deterministic_earliest_wins() {
     // deterministically to the earliest-inserted entity, on every run.
     let build = || {
         let mut g1 = KnowledgeGraph::new();
-        g1.add_entity(Entity::new("e1", "New York Times", EntityType::Organization));
+        g1.add_entity(Entity::new(
+            "e1",
+            "New York Times",
+            EntityType::Organization,
+        ));
         g1.add_entity(Entity::new("e9", "New York Post", EntityType::Organization));
         let mut g2 = KnowledgeGraph::new();
         g2.add_entity(Entity::new("e2", "New York", EntityType::Organization));
-        merge_with_deduplication_strategy_coref(
-            g1,
-            g2,
-            MergeStrategy::FieldUnion,
-            CorefMode::Fuzzy,
-        )
+        merge_with_deduplication_strategy_coref(g1, g2, MergeStrategy::FieldUnion, CorefMode::Fuzzy)
     };
     let first = build();
     assert_eq!(first.entities.len(), 2);
@@ -332,7 +338,11 @@ fn coref_fuzzy_merges_abbreviation_with_suffixed_form() {
     // The motivating alias case: "ACME" and "Acme Corporation" normalize
     // to the same token string and must collapse under Fuzzy.
     let mut g1 = KnowledgeGraph::new();
-    g1.add_entity(Entity::new("e1", "Acme Corporation", EntityType::Organization));
+    g1.add_entity(Entity::new(
+        "e1",
+        "Acme Corporation",
+        EntityType::Organization,
+    ));
     let mut g2 = KnowledgeGraph::new();
     g2.add_entity(Entity::new("e2", "ACME", EntityType::Organization));
     let merged = merge_with_deduplication_strategy_coref(
@@ -424,7 +434,10 @@ fn normalize_direction_flips_noncanonical_member_only() {
         serde_json::json!("uses")
     );
     // An untouched triple keeps its fields.
-    assert_eq!(kg.triples[2].predicate.predicate_type, PredicateType::RelatedTo);
+    assert_eq!(
+        kg.triples[2].predicate.predicate_type,
+        PredicateType::RelatedTo
+    );
 }
 
 #[test]
@@ -513,10 +526,26 @@ fn normalize_direction_is_deterministic() {
         let b = Entity::new("e2", "Beta", EntityType::Technology);
         let c = Entity::new("e3", "Gamma", EntityType::Technology);
         let mut kg = KnowledgeGraph::new();
-        kg.add_triple(Triple::new(a.clone(), Predicate::new(PredicateType::Uses), b.clone()));
-        kg.add_triple(Triple::new(b.clone(), Predicate::new(PredicateType::IsUsedBy), a.clone()));
-        kg.add_triple(Triple::new(b, Predicate::new(PredicateType::ComposedOf), c.clone()));
-        kg.add_triple(Triple::new(c, Predicate::new(PredicateType::DerivesFrom), a));
+        kg.add_triple(Triple::new(
+            a.clone(),
+            Predicate::new(PredicateType::Uses),
+            b.clone(),
+        ));
+        kg.add_triple(Triple::new(
+            b.clone(),
+            Predicate::new(PredicateType::IsUsedBy),
+            a.clone(),
+        ));
+        kg.add_triple(Triple::new(
+            b,
+            Predicate::new(PredicateType::ComposedOf),
+            c.clone(),
+        ));
+        kg.add_triple(Triple::new(
+            c,
+            Predicate::new(PredicateType::DerivesFrom),
+            a,
+        ));
         normalize_direction(&mut kg);
         kg
     };
@@ -524,8 +553,16 @@ fn normalize_direction_is_deterministic() {
     for _ in 0..8 {
         let again = build();
         assert_eq!(
-            again.triples.iter().map(|t| t.to_tuple()).collect::<Vec<_>>(),
-            first.triples.iter().map(|t| t.to_tuple()).collect::<Vec<_>>(),
+            again
+                .triples
+                .iter()
+                .map(|t| t.to_tuple())
+                .collect::<Vec<_>>(),
+            first
+                .triples
+                .iter()
+                .map(|t| t.to_tuple())
+                .collect::<Vec<_>>(),
             "normalisation is a pure per-triple transform — same input, same output"
         );
     }

@@ -478,7 +478,6 @@ fn print_response_communities_hierarchy_accepts_precomputed_summaries() {
     assert!(print_response(OutFmt::CommunitiesHierarchy, &r, Some(&precomputed)).is_ok());
 }
 
-
 // ---- kg.provider/v1 subcommands + cli_spec render equivalence ----
 
 #[test]

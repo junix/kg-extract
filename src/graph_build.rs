@@ -249,4 +249,3 @@ impl GraphBuilder {
 #[cfg(test)]
 #[path = "graph_build_tests.rs"]
 mod tests;
-

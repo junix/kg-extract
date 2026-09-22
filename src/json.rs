@@ -32,4 +32,3 @@ pub fn extract_json_from_response(text: &str) -> Option<serde_json::Value> {
 #[cfg(test)]
 #[path = "json_tests.rs"]
 mod tests;
-

@@ -50,7 +50,15 @@ fn describe_manifest_is_self_consistent() {
     );
 
     for cap in caps {
-        for key in ["capability_id", "title", "description", "side_effects", "input_schema", "output", "cli_spec"] {
+        for key in [
+            "capability_id",
+            "title",
+            "description",
+            "side_effects",
+            "input_schema",
+            "output",
+            "cli_spec",
+        ] {
             assert!(cap.get(key).is_some(), "capability missing {key}");
         }
         // Every input_schema property must carry a description that
@@ -88,16 +96,43 @@ fn describe_side_effects_match_capability_nature() {
         .map(|c| (c["capability_id"].as_str().unwrap(), c))
         .collect();
     // LLM-calling capabilities declare egress; pure local ones declare none.
-    assert_eq!(by_id[CAP_EXTRACT]["side_effects"], json!(["network", "data_egress"]));
-    assert_eq!(by_id[CAP_SUMMARIZE]["side_effects"], json!(["network", "data_egress"]));
-    for id in [CAP_DETECT_COMMUNITIES, CAP_DETECT_HIERARCHY, CAP_RESOLVE_COREF, CAP_RESOLVE_DIRECTION] {
-        assert_eq!(by_id[id]["side_effects"], json!([]), "{id} must be side-effect free");
+    assert_eq!(
+        by_id[CAP_EXTRACT]["side_effects"],
+        json!(["network", "data_egress"])
+    );
+    assert_eq!(
+        by_id[CAP_SUMMARIZE]["side_effects"],
+        json!(["network", "data_egress"])
+    );
+    for id in [
+        CAP_DETECT_COMMUNITIES,
+        CAP_DETECT_HIERARCHY,
+        CAP_RESOLVE_COREF,
+        CAP_RESOLVE_DIRECTION,
+    ] {
+        assert_eq!(
+            by_id[id]["side_effects"],
+            json!([]),
+            "{id} must be side-effect free"
+        );
     }
     // Output contract per capability.
-    assert_eq!(by_id[CAP_EXTRACT]["output"], json!({"mode": "artifact", "kind": "kg-document"}));
-    assert_eq!(by_id[CAP_DETECT_COMMUNITIES]["output"], json!({"mode": "result-json", "kind": "communities"}));
-    assert_eq!(by_id[CAP_DETECT_HIERARCHY]["output"], json!({"mode": "result-json", "kind": "communities"}));
-    assert_eq!(by_id[CAP_RESOLVE_COREF]["output"], json!({"mode": "artifact", "kind": "kg-document"}));
+    assert_eq!(
+        by_id[CAP_EXTRACT]["output"],
+        json!({"mode": "artifact", "kind": "kg-document"})
+    );
+    assert_eq!(
+        by_id[CAP_DETECT_COMMUNITIES]["output"],
+        json!({"mode": "result-json", "kind": "communities"})
+    );
+    assert_eq!(
+        by_id[CAP_DETECT_HIERARCHY]["output"],
+        json!({"mode": "result-json", "kind": "communities"})
+    );
+    assert_eq!(
+        by_id[CAP_RESOLVE_COREF]["output"],
+        json!({"mode": "artifact", "kind": "kg-document"})
+    );
 }
 
 #[test]
@@ -120,7 +155,10 @@ fn extract_cli_spec_flags_align_with_input_schema() {
     // `text` is the only schema field without a flag — it rides stdin.
     let mut expected = props.clone();
     expected.remove("text");
-    assert_eq!(flags, expected, "cli_spec flags must cover every schema field except stdin-fed `text`");
+    assert_eq!(
+        flags, expected,
+        "cli_spec flags must cover every schema field except stdin-fed `text`"
+    );
     // The extraction artifact format is pinned via `always`.
     assert_eq!(cap["cli_spec"]["always"], json!(["-o", "kg-protocol"]));
     // Orders are unique so rendering is deterministic.
@@ -160,7 +198,10 @@ fn available_report_shape_and_semantics() {
     for key in ["available", "ready", "missing"] {
         assert!(report.get(key).is_some(), "missing key {key}");
     }
-    assert!(report.get("cache_dir").is_none(), "no cache to report: cache_dir is omitted, not null");
+    assert!(
+        report.get("cache_dir").is_none(),
+        "no cache to report: cache_dir is omitted, not null"
+    );
     assert_eq!(
         report["available"].as_bool().unwrap(),
         report["missing"].as_array().unwrap().is_empty(),
@@ -326,7 +367,9 @@ async fn invoke_detect_communities_warns_on_dangling_relation() {
         .filter_map(|d| d["message"].as_str())
         .collect();
     assert!(
-        warnings.iter().any(|m| m.contains("dangling") || m.contains("endpoint")),
+        warnings
+            .iter()
+            .any(|m| m.contains("dangling") || m.contains("endpoint")),
         "expected a dangling-relation warning, got: {warnings:?}"
     );
 }
@@ -337,7 +380,10 @@ async fn invoke_detect_hierarchy_from_document() {
     let request = json!({"document": smoke_document()});
     let outcome = invoke(CAP_DETECT_HIERARCHY, &request.to_string(), None).await;
     assert!(outcome.ok, "envelope: {}", outcome.envelope);
-    assert_eq!(outcome.envelope["result"]["detector"], "hierarchical-leiden");
+    assert_eq!(
+        outcome.envelope["result"]["detector"],
+        "hierarchical-leiden"
+    );
     let levels = outcome.envelope["result"]["levels"].as_array().unwrap();
     assert!(!levels.is_empty());
     assert!(levels[0]["quality"].is_number());
@@ -401,7 +447,8 @@ async fn invoke_resolve_canonical_direction_collapses_variants() {
     let outcome = invoke(CAP_RESOLVE_DIRECTION, &request.to_string(), Some(&dir)).await;
     assert!(outcome.ok, "envelope: {}", outcome.envelope);
     assert_eq!(outcome.envelope["result"]["num_relations"], 1);
-    let body = std::fs::read_to_string(outcome.envelope["artifacts"][0]["path"].as_str().unwrap()).unwrap();
+    let body = std::fs::read_to_string(outcome.envelope["artifacts"][0]["path"].as_str().unwrap())
+        .unwrap();
     let doc: core_types_rs::KgDocument = serde_json::from_str(&body).unwrap();
     assert_eq!(doc.relations.len(), 1);
     let _ = std::fs::remove_dir_all(&dir);

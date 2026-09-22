@@ -483,4 +483,3 @@ impl Extractor for ToolCallExtractor {
 #[cfg(test)]
 #[path = "toolcall_tests.rs"]
 mod tests;
-

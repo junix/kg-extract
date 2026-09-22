@@ -107,7 +107,10 @@ impl LlmBackend for OverlapBackend {
         use std::sync::atomic::Ordering;
         let n = self.in_flight.fetch_add(1, Ordering::SeqCst) + 1;
         self.max_seen.fetch_max(n, Ordering::SeqCst);
-        let prompt = messages.last().map(|m| m.content.clone()).unwrap_or_default();
+        let prompt = messages
+            .last()
+            .map(|m| m.content.clone())
+            .unwrap_or_default();
         // Out-of-order completion: the first-issued community ("a")
         // yields more, so it finishes after the later-issued one.
         let yields = if prompt.contains("- a (") { 6 } else { 1 };
@@ -133,7 +136,8 @@ async fn summaries_render_as_objects_with_name_and_summary() {
     let backend: Arc<dyn LlmBackend> = Arc::new(MockBackend::single(
         r#"{"name": "Triangle Report", "summary": "Three tightly linked nodes."}"#,
     ));
-    let value = communities_json_with_summaries(&kg, &backend, &CompletionOptions::default(), 8).await;
+    let value =
+        communities_json_with_summaries(&kg, &backend, &CompletionOptions::default(), 8).await;
     let communities = value["communities"].as_object().unwrap();
     assert_eq!(communities.len(), 2);
     for c in communities.values() {
@@ -148,20 +152,18 @@ async fn summary_prompts_and_output_are_deterministic() {
     let (kg, _) = two_triangles();
     let mock = || Arc::new(MockBackend::single(r#"{"name": "N", "summary": "S."}"#));
     let opts = CompletionOptions::default();
-    let first = communities_json_with_summaries(&kg, &(mock() as Arc<dyn LlmBackend>), &opts, 8).await;
-    let second = communities_json_with_summaries(&kg, &(mock() as Arc<dyn LlmBackend>), &opts, 8).await;
+    let first =
+        communities_json_with_summaries(&kg, &(mock() as Arc<dyn LlmBackend>), &opts, 8).await;
+    let second =
+        communities_json_with_summaries(&kg, &(mock() as Arc<dyn LlmBackend>), &opts, 8).await;
     assert_eq!(first, second, "same graph + same replies → identical JSON");
 
     // One call per community, issued in ascending community-label order:
     // the first prompt must list the members of community "0".
     let backend = mock();
-    let value = communities_json_with_summaries(
-        &kg,
-        &(backend.clone() as Arc<dyn LlmBackend>),
-        &opts,
-        8,
-    )
-    .await;
+    let value =
+        communities_json_with_summaries(&kg, &(backend.clone() as Arc<dyn LlmBackend>), &opts, 8)
+            .await;
     let prompts = backend.seen_prompts.lock().unwrap();
     assert_eq!(prompts.len(), 2, "one completion per community");
     let community_zero: Vec<&str> = value["communities"]["0"]["members"]
@@ -228,7 +230,8 @@ async fn concurrency_cap_bounds_in_flight_calls() {
 async fn concurrent_partial_failure_degrades_only_that_community() {
     let (kg, _) = two_triangles();
     let backend: Arc<dyn LlmBackend> = Arc::new(PartialFailBackend);
-    let value = communities_json_with_summaries(&kg, &backend, &CompletionOptions::default(), 8).await;
+    let value =
+        communities_json_with_summaries(&kg, &backend, &CompletionOptions::default(), 8).await;
     for c in value["communities"].as_object().unwrap().values() {
         let has_a = c["members"].as_array().unwrap().iter().any(|m| m == "a");
         if has_a {
@@ -245,7 +248,8 @@ async fn concurrent_partial_failure_degrades_only_that_community() {
 async fn failing_backend_degrades_to_null_fields() {
     let (kg, _) = two_triangles();
     let backend: Arc<dyn LlmBackend> = Arc::new(FailingBackend);
-    let value = communities_json_with_summaries(&kg, &backend, &CompletionOptions::default(), 8).await;
+    let value =
+        communities_json_with_summaries(&kg, &backend, &CompletionOptions::default(), 8).await;
     let communities = value["communities"].as_object().unwrap();
     assert_eq!(communities.len(), 2, "degradation keeps every community");
     for c in communities.values() {
@@ -259,7 +263,8 @@ async fn failing_backend_degrades_to_null_fields() {
 async fn unparseable_reply_degrades_to_null_fields() {
     let (kg, _) = two_triangles();
     let backend: Arc<dyn LlmBackend> = Arc::new(MockBackend::single("no json here"));
-    let value = communities_json_with_summaries(&kg, &backend, &CompletionOptions::default(), 8).await;
+    let value =
+        communities_json_with_summaries(&kg, &backend, &CompletionOptions::default(), 8).await;
     for c in value["communities"].as_object().unwrap().values() {
         assert!(c["name"].is_null());
         assert!(c["summary"].is_null());
@@ -270,14 +275,19 @@ async fn unparseable_reply_degrades_to_null_fields() {
 fn prompt_truncates_members_triples_and_descriptions() {
     // 40-node chain: 40 members (> 32) and 39 triples (> 24).
     let long_desc = "d".repeat(500);
-    let entities: Vec<Entity> = (0..40).map(|i| entity(&format!("n{i}"), &long_desc)).collect();
+    let entities: Vec<Entity> = (0..40)
+        .map(|i| entity(&format!("n{i}"), &long_desc))
+        .collect();
     let mut kg = KnowledgeGraph::new();
     for w in entities.windows(2) {
         kg.add_triple(triple_rich(&w[0], &w[1]));
     }
     let member_ids: Vec<String> = entities.iter().map(|e| e.id.clone()).collect();
     let prompt = community_prompt(&kg, &member_ids);
-    assert!(prompt.contains("(+8 more entities)"), "member overflow is noted");
+    assert!(
+        prompt.contains("(+8 more entities)"),
+        "member overflow is noted"
+    );
     assert!(
         prompt.contains("(+15 more relationships)"),
         "triple overflow is noted"

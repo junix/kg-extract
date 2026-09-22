@@ -80,7 +80,11 @@ fn stamp_chunk_metadata_is_noop_without_payload() {
     let mut kg = KnowledgeGraph::new();
     kg.add_entity(Entity::new("e1", "Alpha", EntityType::Organization));
     stamp_chunk_metadata(&mut kg, &seg);
-    assert!(!kg.get_entity("e1").unwrap().metadata.contains_key(CHUNK_TITLE_KEY));
+    assert!(!kg
+        .get_entity("e1")
+        .unwrap()
+        .metadata
+        .contains_key(CHUNK_TITLE_KEY));
     assert!(!kg
         .get_entity("e1")
         .unwrap()

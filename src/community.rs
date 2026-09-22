@@ -250,8 +250,7 @@ fn community_prompt(kg: &KnowledgeGraph, member_ids: &[String]) -> String {
         .triples
         .iter()
         .filter(|t| {
-            member_set.contains(t.subject.id.as_str())
-                && member_set.contains(t.object.id.as_str())
+            member_set.contains(t.subject.id.as_str()) && member_set.contains(t.object.id.as_str())
         })
         .map(|t| {
             format!(
@@ -426,13 +425,10 @@ pub async fn hierarchy_json_with_summaries(
 #[path = "community_tests.rs"]
 mod tests;
 
-
 #[cfg(test)]
 #[path = "community_summary_tests.rs"]
 mod summary_tests;
 
-
 #[cfg(all(test, feature = "community-leiden"))]
 #[path = "community_leiden_tests.rs"]
 mod leiden_tests;
-

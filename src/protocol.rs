@@ -310,4 +310,3 @@ fn import_properties(
 #[cfg(test)]
 #[path = "protocol_tests.rs"]
 mod tests;
-
