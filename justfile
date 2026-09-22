@@ -51,5 +51,5 @@ lint:
 # 安装到 ~/sync/<os>-<arch>-bin/（含 kg-extract 与 kg-extract-mcp）
 install: build
     mkdir -p {{ install_bin }}
-    cp {{ target_dir }}/release/kg-extract {{ install_bin }}/kg-extract
-    cp {{ target_dir }}/release/kg-extract-mcp {{ install_bin }}/kg-extract-mcp
+    @set -eu; dest="{{ install_bin }}/kg-extract"; mkdir -p "$(dirname "$dest")"; tmp="$(mktemp "{{ install_bin }}/.kg-extract.XXXXXX")"; trap 'rm -f "$tmp"' EXIT; cp "{{ target_dir }}/release/kg-extract" "$tmp"; chmod 755 "$tmp"; if [ "$(uname -s)" = "Darwin" ]; then xattr -c "$tmp" 2>/dev/null || true; codesign --force --sign - "$tmp"; fi; mv -f "$tmp" "$dest"
+    @set -eu; dest="{{ install_bin }}/kg-extract-mcp"; mkdir -p "$(dirname "$dest")"; tmp="$(mktemp "{{ install_bin }}/.kg-extract-mcp.XXXXXX")"; trap 'rm -f "$tmp"' EXIT; cp "{{ target_dir }}/release/kg-extract-mcp" "$tmp"; chmod 755 "$tmp"; if [ "$(uname -s)" = "Darwin" ]; then xattr -c "$tmp" 2>/dev/null || true; codesign --force --sign - "$tmp"; fi; mv -f "$tmp" "$dest"
