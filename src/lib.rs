@@ -33,6 +33,16 @@
 //! # Ok(()) }
 //! ```
 
+/// Version string for `--version` (ADR-1168 R2): bare semver, plus a build
+/// stamp `+g<sha>[.dirty]` when the justfile supplies `PM_BUILD_SHA` at build
+/// time so installed binaries can be compared against the source tree.
+pub fn version() -> String {
+    match option_env!("PM_BUILD_SHA") {
+        Some(s) => format!("{}+{}", env!("CARGO_PKG_VERSION"), s),
+        None => env!("CARGO_PKG_VERSION").into(),
+    }
+}
+
 pub mod backend;
 pub mod chunking;
 pub mod citation;

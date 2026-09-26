@@ -28,6 +28,7 @@ use serde_json::Value;
 
 use kg_extract::mcp::{KgStore, SchemaPolicy, SourceCitation};
 use kg_extract::types::{Schema, SchemaMode};
+use kg_extract::version;
 
 // ── Tool parameter types ─────────────────────────────────────────────────────
 
@@ -326,7 +327,7 @@ impl From<SchemaModeArg> for SchemaMode {
 
 /// stdio MCP server for incremental knowledge-graph building.
 #[derive(Parser, Debug)]
-#[command(name = "kg-extract-mcp", version, about, after_help = concat!("Source: ", env!("PROJECT_SOURCE_PATH")))]
+#[command(name = "kg-extract-mcp", version = version(), about, after_help = concat!("Source: ", env!("PROJECT_SOURCE_PATH")))]
 struct Args {
     /// Config file path, or inline JSON. Defaults to ~/.kg-extract/config.json when
     /// present. Accepted for parity with `kg-extract`; the store tools are

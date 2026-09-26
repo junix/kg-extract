@@ -25,6 +25,7 @@ use kg_extract::template::{gallery, TemplateCfg};
 use kg_extract::types::{
     ChunkStrategy, CommonEngineSettings, CorefMode, ExtractionResponse, MergeStrategy, Schema,
 };
+use kg_extract::version;
 
 #[derive(Copy, Clone, Debug, ValueEnum, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -174,7 +175,7 @@ struct FileConfig {
 
 /// Extract a knowledge graph from text.
 #[derive(Parser, Debug)]
-#[command(name = "kg-extract", version, about, after_help = concat!("Source: ", env!("PROJECT_SOURCE_PATH")))]
+#[command(name = "kg-extract", version = version(), about, after_help = concat!("Source: ", env!("PROJECT_SOURCE_PATH")))]
 struct Args {
     /// Config file path, or an inline JSON object (a value starting with '{').
     /// Defaults to ~/.kg-extract/config.json when present.

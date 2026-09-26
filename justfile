@@ -6,10 +6,12 @@ os_suffix := if os() == "macos" { "macos" } else { "linux" }
 arch_suffix := if arch() == "aarch64" { "arm64" } else { "x86" }
 install_bin := env("SYNC_BIN_DIR", home_directory() / "sync" / (os_suffix + "-" + arch_suffix + "-bin"))
 target_dir := `cargo metadata --format-version 1 --no-deps | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])'`
+# 构建印章（ADR-1168）：git 短 sha + 脏标记，经 PM_BUILD_SHA 嵌入 --version。
+stamp := `git rev-parse --short HEAD` + `(git diff --quiet && git diff --cached --quiet) >/dev/null 2>&1 || printf .dirty`
 
 # 构建（含 llms 后端 + mcp server + 社区检测）
 build:
-    cargo build --release --features "llms-backend mcp community community-leiden"
+    PM_BUILD_SHA=g{{stamp}} cargo build --release --features "llms-backend mcp community community-leiden"
 
 # 运行测试。feature 集必须与 build/lint 一致：否则 community.rs（ADR-987 Step 5
 # 适配器）、provider.rs 与 bin 测试全部不参与编译，静默跳过 25 个测试。

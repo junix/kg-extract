@@ -54,7 +54,9 @@ nanoid = "0.4"
 # sha256 checksums for invoke artifacts (kg.provider/v1 envelope).
 sha2 = "0.10"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "process", "io-util"] }
-clap = { version = "4", features = ["derive"] }
+# `string` (no extra deps): lets `#[command(version = version())]` pass an
+# owned String carrying the ADR-1168 build stamp.
+clap = { version = "4", features = ["derive", "string"] }
 
 chonkie = { git = "https://github.com/junix/chonkie.git", package = "chonkie", default-features = false, features = ["tokenizer"] }
 core-types-rs = { git = "https://github.com/junix/core-types-rs.git", package = "core-types-rs" }
