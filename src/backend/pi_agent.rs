@@ -103,6 +103,14 @@ impl LlmBackend for PiAgentBackend {
         cmd.stdin(std::process::Stdio::piped());
         cmd.stdout(std::process::Stdio::piped());
         cmd.stderr(std::process::Stdio::piped());
+        // This call owns the child for its whole lifetime: if the completion
+        // future is dropped (caller canceled) or the prompt write below fails,
+        // dropping the `Child` kills the agent instead of leaving it running
+        // against the provider (tokio's orphan queue then reaps it). A process-
+        // group kill is deliberately not used: the one-shot pi-agent runs no
+        // surviving helpers of its own, so terminating the owned child is
+        // enough to release the model resources.
+        cmd.kill_on_drop(true);
 
         let mut child = cmd
             .spawn()

@@ -75,4 +75,6 @@ schemars = { version = "1", optional = true }
 
 [dev-dependencies]
 pretty_assertions = "1"
-tokio = { version = "1", features = ["rt", "macros"] }
+# "time": the pi-agent cancellation tests poll with an async timer (a blocking
+# sleep would stall the current-thread runtime and its orphan reaper).
+tokio = { version = "1", features = ["rt", "macros", "time"] }

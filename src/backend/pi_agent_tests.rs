@@ -150,7 +150,8 @@ fn final_message_wins_over_earlier_error() {
 mod subprocess {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
+    use std::time::{Duration, Instant};
 
     /// A fresh temp dir holding an executable shell script that stands in for
     /// `pi-agent`. Cleaned up on drop (mirrors `mcp_test::TmpStore`).
@@ -161,8 +162,19 @@ mod subprocess {
 
     impl FakeAgent {
         fn new(body: &str) -> Self {
+            Self::in_dir(|_| body.to_string())
+        }
+
+        /// Like [`new`], but builds the script body with the fixture dir
+        /// already known, so the fake can reference files next to itself
+        /// (e.g. report its PID into `<dir>/pid` before blocking).
+        fn in_dir<F>(body: F) -> Self
+        where
+            F: FnOnce(&Path) -> String,
+        {
             let dir = std::env::temp_dir().join(format!("kg-pi-agent-test-{}", nanoid::nanoid!()));
             std::fs::create_dir_all(&dir).unwrap();
+            let body = body(&dir);
             let script = dir.join("pi-agent");
             std::fs::write(&script, body).unwrap();
             let mut perms = std::fs::metadata(&script).unwrap().permissions();
@@ -268,5 +280,96 @@ mod subprocess {
             .unwrap_err()
             .to_string();
         assert!(err.contains("failed to spawn"), "{err}");
+    }
+
+    // ---- cancellation owns the spawned child -------------------------------
+
+    /// A fake that reports its PID into `<dir>/pid` and then blocks for a long
+    /// time without ever answering — the stand-in for a pi-agent mid-run. It
+    /// `exec`s into `sleep` so the reported PID is the process being killed
+    /// (no sh/sleep descendant pair to leave behind).
+    fn blocking_agent() -> FakeAgent {
+        FakeAgent::in_dir(|dir| {
+            format!(
+                "#!/bin/sh\necho $$ > {}/pid\nexec sleep 60\n",
+                dir.display()
+            )
+        })
+    }
+
+    /// Poll `fut` (without consuming it) until the fake announced its PID,
+    /// panicking if `complete` returns first — the fake never answers.
+    async fn wait_until_spawned<F>(pidfile: &Path, fut: &mut F)
+    where
+        F: std::future::Future<Output = anyhow::Result<String>> + Unpin,
+    {
+        let deadline = Instant::now() + Duration::from_secs(15);
+        while !pidfile.exists() {
+            assert!(Instant::now() < deadline, "fake pi-agent never spawned");
+            tokio::select! {
+                res = &mut *fut => panic!("complete returned while fake blocks: {res:?}"),
+                _ = tokio::time::sleep(Duration::from_millis(10)) => {}
+            }
+        }
+    }
+
+    /// Wait until `kill -0 <pid>` fails: the child exited AND was reaped (an
+    /// unreaped zombie would still answer `kill -0`).
+    async fn assert_child_exited_and_reaped(pidfile: &Path) {
+        let pid: String = std::fs::read_to_string(pidfile).unwrap().trim().to_string();
+        let deadline = Instant::now() + Duration::from_secs(15);
+        loop {
+            let alive = std::process::Command::new("kill")
+                .args(["-0", &pid])
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            if !alive {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "canceled pi-agent (pid {pid}) still alive or unreaped"
+            );
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn cancel_while_waiting_for_output_kills_and_reaps_child() {
+        let fake = blocking_agent();
+        let pidfile = fake.dir.join("pid");
+        let backend = fake.backend();
+        // Small prompt fits the pipe buffer: stdin is delivered instantly, so
+        // the future parks waiting for the child's output.
+        let messages = [Message::user("hi")];
+        let options = CompletionOptions::default();
+        let mut fut = Box::pin(backend.complete(&messages, &options));
+        wait_until_spawned(&pidfile, &mut fut).await;
+        // Drop = the caller cancels the extraction.
+        drop(fut);
+        assert_child_exited_and_reaped(&pidfile).await;
+    }
+
+    #[tokio::test]
+    async fn cancel_during_stdin_write_kills_and_reaps_child() {
+        let fake = blocking_agent();
+        let pidfile = fake.dir.join("pid");
+        let backend = fake.backend();
+        // The fake never reads stdin; a prompt far larger than the pipe buffer
+        // (64 KiB on macOS) parks the future inside the stdin write_all.
+        let big_prompt = "x".repeat(256 * 1024);
+        let messages = [Message::user(big_prompt)];
+        let options = CompletionOptions::default();
+        let mut fut = Box::pin(backend.complete(&messages, &options));
+        wait_until_spawned(&pidfile, &mut fut).await;
+        // One more poll round so the write fills the pipe buffer and parks.
+        tokio::select! {
+            res = fut.as_mut() => panic!("complete returned while fake blocks: {res:?}"),
+            _ = tokio::time::sleep(Duration::from_millis(20)) => {}
+        }
+        // Drop = the caller cancels the extraction mid-write.
+        drop(fut);
+        assert_child_exited_and_reaped(&pidfile).await;
     }
 }
